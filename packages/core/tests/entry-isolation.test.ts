@@ -37,6 +37,14 @@ describe("subpath entry isolation", () => {
     },
   );
 
+  it("three/index.js only pulls in three, and no other entry reaches it (#795)", () => {
+    expect([...reachablePackages("three/index.js")].every((p) => p === "three" || p.startsWith("three/"))).toBe(true);
+    expect([...reachablePackages("three/index.js")]).toContain("three");
+    for (const entry of ["index.js", "agent/index.js", "tools/index.js", "chart/index.js", "canvas/index.js"]) {
+      expect([...reachablePackages(entry)].filter((p) => p === "three" || p.startsWith("three/")), entry).toEqual([]);
+    }
+  });
+
   it("canvas/index.js only pulls in dagre", () => {
     expect([...reachablePackages("canvas/index.js")]).toEqual(["@dagrejs/dagre"]);
   });

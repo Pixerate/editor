@@ -1,5 +1,6 @@
 export * from './types.js';
 export * from './spec.js';
+export * from './layout3d.js';
 export * from './tree.js';
 export * from './links.js';
 export * from './race.js';

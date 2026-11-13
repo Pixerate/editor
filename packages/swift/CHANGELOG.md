@@ -1,5 +1,32 @@
 # @pixerate/swift
 
+## 0.56.0
+
+### Minor Changes
+
+- 9c1ed71: Office export of 3-D charts (#795): a chart with a 3-D view is written as Office's `bar3DChart`, `line3DChart` (with its hidden series axis) or `area3DChart`, with `c:view3D` (`rotX`, `rotY`, `depthPercent` in whole numbers), so it opens in 3-D in Office and reads back with its view. Office draws one 3-D group on one value axis, so a chart that mixes series types or uses the secondary axis is still saved flat, and the writer says why. Swift writes the same XML.
+
+## 0.55.0
+
+### Minor Changes
+
+- a23396a: An isometric perspective grid for the vector editor (closes #799).
+
+  - `VectorPerspective.isometric: { angle }` (1–89°, 30 is true isometric) with no vanishing points: planes floor, left and right, mapped in parallel (affine maps), so art keeps its size anywhere on a plane and grid lines never clip at a horizon. Drawing on a plane, laying art onto it and the grid lines work as for the other grids.
+  - `vector.setPerspective` takes `isometric` (vanishing points are no longer required), and refuses vanishing points with it; `vectorIsometricPerspectivePreset(width, height, angle?)` starts one for a page.
+  - React and Svelte `VectorPerspectivePanel` have an Iso preset next to 1-pt, 2-pt and 3-pt.
+  - Swift: the same grid, sanitizing, plane maps and preset, with the isometric scenario extended.
+
+## 0.54.0
+
+### Minor Changes
+
+- d278a50: Charts: a 3-D view (part of #795).
+
+  - `ChartSpec.view3d?: { azimuth, elevation, depth }` (Office's `view3D`: turn 0–360°, eye height 0–90°, depth as a multiple of the bar width 0.2–20; defaults 20, 15 and 1 in `CHART_VIEW3D_DEFAULTS`). Absent means a flat chart, so existing documents are unchanged. `update_chart` (and `ChartController.update`) sets it, merges a partial view into the current one, and clears it with `null`; out-of-range values are refused with what is allowed.
+  - Office 3-D bar, line and area charts now import with their view (`rotY`, `rotX`, `depthPercent`) instead of being noted as drawn flat; a view from below the floor is drawn from floor level and noted. 3-D pie and surface charts are still drawn flat. Writing a chart with a 3-D view to Office XML saves it flat and says so.
+  - Swift: the same field, normalisation, update and Office import, with a new `view3d` conformance scenario and 3-D Office vectors.
+
 ## 0.53.0
 
 ### Minor Changes

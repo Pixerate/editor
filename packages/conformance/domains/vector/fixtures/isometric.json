@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "isometric",
-  "description": "Isometric blocks: faces shaded from one fill or given per face, flat tiles, grid lines, back-to-front order, and the refusals (#799).",
+  "description": "Isometric blocks: faces shaded from one fill or given per face, flat tiles, grid lines, back-to-front order, and the refusals; and an isometric perspective grid (#799).",
   "setup": {
     "width": 400,
     "height": 300
@@ -1144,6 +1144,617 @@
               }
             ],
             "message": "Invalid parameters for command \"vector.addIsoBoxes\": /boxes Must have at least 1 items."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setPerspective",
+        "params": {
+          "origin": {
+            "x": 200,
+            "y": 240
+          },
+          "isometric": {
+            "angle": 30
+          },
+          "gridSize": 10,
+          "extent": 4
+        }
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "id": "vector.setPerspective",
+          "ok": true,
+          "result": {
+            "drawingOn": null,
+            "perspective": {
+              "extent": 4,
+              "gridSize": 10,
+              "isometric": {
+                "angle": 30
+              },
+              "origin": {
+                "x": 200,
+                "y": 240
+              },
+              "vanishingPoints": []
+            },
+            "planes": [
+              "floor",
+              "left",
+              "right"
+            ]
+          }
+        },
+        "document": {
+          "document": {
+            "height": 300,
+            "nodes": [
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "fill": "#adb5bf",
+                        "id": "n3",
+                        "name": "Left",
+                        "stroke": "#82888f",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 165.35898384862247,
+                                "y": 115
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 125
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 165
+                              },
+                              {
+                                "x": 165.35898384862247,
+                                "y": 155
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#8e959e",
+                        "id": "n4",
+                        "name": "Right",
+                        "stroke": "#6b7077",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 200,
+                                "y": 115
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 125
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 165
+                              },
+                              {
+                                "x": 200,
+                                "y": 155
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#cbd5e1",
+                        "id": "n5",
+                        "name": "Top",
+                        "stroke": "#98a0a9",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 182.67949192431124,
+                                "y": 105
+                              },
+                              {
+                                "x": 200,
+                                "y": 115
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 125
+                              },
+                              {
+                                "x": 165.35898384862247,
+                                "y": 115
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": null,
+                        "id": "n6",
+                        "name": "Grid",
+                        "stroke": "#72777e",
+                        "strokeWidth": 0.5,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 165.35898384862247,
+                                "y": 135
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 145
+                              }
+                            ],
+                            "closed": false
+                          },
+                          {
+                            "anchors": [
+                              {
+                                "x": 200,
+                                "y": 135
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 145
+                              }
+                            ],
+                            "closed": false
+                          }
+                        ],
+                        "type": "path"
+                      }
+                    ],
+                    "id": "n2",
+                    "name": "Block 2",
+                    "type": "group"
+                  },
+                  {
+                    "children": [
+                      {
+                        "fill": "#e2e8f0",
+                        "id": "n8",
+                        "name": "Top",
+                        "stroke": "#aaaeb4",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 165.35898384862247,
+                                "y": 155
+                              },
+                              {
+                                "x": 217.3205080756888,
+                                "y": 185
+                              },
+                              {
+                                "x": 200,
+                                "y": 195
+                              },
+                              {
+                                "x": 148.03847577293368,
+                                "y": 165
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": null,
+                        "id": "n9",
+                        "name": "Grid",
+                        "stroke": "#7e8286",
+                        "strokeWidth": 0.5,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 182.67949192431124,
+                                "y": 165
+                              },
+                              {
+                                "x": 165.35898384862247,
+                                "y": 175
+                              }
+                            ],
+                            "closed": false
+                          },
+                          {
+                            "anchors": [
+                              {
+                                "x": 200,
+                                "y": 175
+                              },
+                              {
+                                "x": 182.67949192431124,
+                                "y": 185
+                              }
+                            ],
+                            "closed": false
+                          }
+                        ],
+                        "type": "path"
+                      }
+                    ],
+                    "id": "n7",
+                    "name": "Block 3",
+                    "type": "group"
+                  },
+                  {
+                    "children": [
+                      {
+                        "fill": "#326fd1",
+                        "id": "n11",
+                        "name": "Left",
+                        "stroke": "#26539d",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 200,
+                                "y": 155
+                              },
+                              {
+                                "x": 234.64101615137756,
+                                "y": 175
+                              },
+                              {
+                                "x": 234.64101615137756,
+                                "y": 195
+                              },
+                              {
+                                "x": 200,
+                                "y": 175
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#295bac",
+                        "id": "n12",
+                        "name": "Right",
+                        "stroke": "#1f4481",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 251.96152422706632,
+                                "y": 165
+                              },
+                              {
+                                "x": 234.64101615137756,
+                                "y": 175
+                              },
+                              {
+                                "x": 234.64101615137756,
+                                "y": 195
+                              },
+                              {
+                                "x": 251.96152422706632,
+                                "y": 185
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#3b82f6",
+                        "id": "n13",
+                        "name": "Top",
+                        "stroke": "#2c62b9",
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 217.3205080756888,
+                                "y": 145
+                              },
+                              {
+                                "x": 251.96152422706632,
+                                "y": 165
+                              },
+                              {
+                                "x": 234.64101615137756,
+                                "y": 175
+                              },
+                              {
+                                "x": 200,
+                                "y": 155
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": null,
+                        "id": "n14",
+                        "name": "Grid",
+                        "stroke": "#21498a",
+                        "strokeWidth": 0.5,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 217.3205080756888,
+                                "y": 185
+                              },
+                              {
+                                "x": 217.3205080756888,
+                                "y": 165
+                              }
+                            ],
+                            "closed": false
+                          },
+                          {
+                            "anchors": [
+                              {
+                                "x": 234.64101615137756,
+                                "y": 155
+                              },
+                              {
+                                "x": 217.3205080756888,
+                                "y": 165
+                              }
+                            ],
+                            "closed": false
+                          }
+                        ],
+                        "type": "path"
+                      }
+                    ],
+                    "id": "n10",
+                    "name": "Front",
+                    "type": "group"
+                  }
+                ],
+                "id": "n1",
+                "name": "Isometric",
+                "type": "group"
+              },
+              {
+                "children": [
+                  {
+                    "children": [
+                      {
+                        "fill": "#eeeeee",
+                        "id": "n17",
+                        "name": "Left",
+                        "stroke": null,
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 13.167172286363517,
+                                "y": 13.416383897693962
+                              },
+                              {
+                                "x": 53.41641385681824,
+                                "y": 33.54095974423491
+                              },
+                              {
+                                "x": 53.41641385681824,
+                                "y": 78.54095974423491
+                              },
+                              {
+                                "x": 13.167172286363517,
+                                "y": 58.41638389769396
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#dddddd",
+                        "id": "n18",
+                        "name": "Right",
+                        "stroke": null,
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 80.24924157045473,
+                                "y": 20.12457584654095
+                              },
+                              {
+                                "x": 53.41641385681824,
+                                "y": 33.54095974423491
+                              },
+                              {
+                                "x": 53.41641385681824,
+                                "y": 78.54095974423491
+                              },
+                              {
+                                "x": 80.24924157045473,
+                                "y": 65.12457584654095
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      },
+                      {
+                        "fill": "#ffffff",
+                        "id": "n19",
+                        "name": "Top",
+                        "stroke": null,
+                        "strokeWidth": 1,
+                        "subpaths": [
+                          {
+                            "anchors": [
+                              {
+                                "x": 40,
+                                "y": 0
+                              },
+                              {
+                                "x": 80.24924157045473,
+                                "y": 20.12457584654095
+                              },
+                              {
+                                "x": 53.41641385681824,
+                                "y": 33.54095974423491
+                              },
+                              {
+                                "x": 13.167172286363517,
+                                "y": 13.416383897693962
+                              }
+                            ],
+                            "closed": true
+                          }
+                        ],
+                        "type": "path"
+                      }
+                    ],
+                    "id": "n16",
+                    "name": "Block 1",
+                    "type": "group"
+                  }
+                ],
+                "id": "n15",
+                "name": "Stand",
+                "type": "group"
+              }
+            ],
+            "perspective": {
+              "extent": 4,
+              "gridSize": 10,
+              "isometric": {
+                "angle": 30
+              },
+              "origin": {
+                "x": 200,
+                "y": 240
+              },
+              "vanishingPoints": []
+            },
+            "width": 400
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "vector"
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.getPerspective",
+        "params": {}
+      },
+      "expect": {
+        "result": {
+          "id": "vector.getPerspective",
+          "ok": true,
+          "result": {
+            "drawingOn": null,
+            "perspective": {
+              "extent": 4,
+              "gridSize": 10,
+              "isometric": {
+                "angle": 30
+              },
+              "origin": {
+                "x": 200,
+                "y": 240
+              },
+              "vanishingPoints": []
+            },
+            "planes": [
+              "floor",
+              "left",
+              "right"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setPerspective",
+        "params": {
+          "origin": {
+            "x": 200,
+            "y": 240
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }, or isometric: { angle } (1 to 89 degrees) with an origin and no vanishing points."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.setPerspective",
+        "params": {
+          "origin": {
+            "x": 200,
+            "y": 240
+          },
+          "vanishingPoints": [
+            {
+              "x": 0,
+              "y": 10
+            }
+          ],
+          "isometric": {
+            "angle": 30
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "failed",
+            "message": "A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }, or isometric: { angle } (1 to 89 degrees) with an origin and no vanishing points."
           }
         },
         "isError": true

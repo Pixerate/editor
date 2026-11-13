@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { vectorPerspectivePlanes, vectorPerspectivePreset, type VectorEditorController, type VectorPerspectivePlane } from '@pixerate/editor/vector';
+  import { vectorIsometricPerspectivePreset, vectorPerspectivePlanes, vectorPerspectivePreset, type VectorEditorController, type VectorPerspectivePlane } from '@pixerate/editor/vector';
   import { vectorStateOf } from './subscribe.svelte.js';
 
   /**
@@ -32,8 +32,9 @@
   <div class="flex flex-wrap items-center gap-1">
     <span class="w-16 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Perspective</span>
     {#each [1, 2, 3] as const as n (n)}
-      <button type="button" class={buttonClass} aria-pressed={grid?.vanishingPoints.length === n} data-vector-perspective-preset={n} title={`A ${n}-point perspective grid for the page`} onclick={() => add(n)}>{n}-pt</button>
+      <button type="button" class={buttonClass} aria-pressed={!grid?.isometric && grid?.vanishingPoints.length === n} data-vector-perspective-preset={n} title={`A ${n}-point perspective grid for the page`} onclick={() => add(n)}>{n}-pt</button>
     {/each}
+    <button type="button" class={buttonClass} aria-pressed={!!grid?.isometric} data-vector-perspective-preset="isometric" title="An isometric grid for the page: parallel lines stay parallel" onclick={() => controller.setPerspective(vectorIsometricPerspectivePreset(view.document.width, view.document.height))}>Iso</button>
   </div>
   {#if grid}
     <div class="flex flex-wrap items-center gap-1">

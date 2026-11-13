@@ -483,6 +483,9 @@ async function officeVector(c: OfficeCase) {
 const SPECS: unknown[] = [
   { type: "bar", title: "Revenue", categories: ["Q1", "Q2"], series: [{ name: "North", values: [3, 5] }] },
   { type: "bar", title: "3-D", categories: ["Q1", "Q2"], series: [{ name: "North", values: [3, 5] }], view3d: { azimuth: 30, elevation: 20, depth: 2 } },
+  { type: "line", categories: ["a", "b", "c"], series: [{ name: "S", values: [1, 3, 2] }], view3d: { azimuth: 359.6, elevation: 40.5, depth: 0.3 } },
+  { type: "area", stacking: "percent", categories: ["a", "b"], series: [{ name: "S", values: [1, 3] }, { name: "T", values: [2, 2] }], view3d: { depth: 25 } },
+  { type: "bar", categories: ["a"], series: [{ name: "A", values: [1] }, { name: "B", type: "line", values: [2] }], view3d: {} },
   {
     type: "bar",
     title: "R&\u0301D <costs> \"quoted\"",

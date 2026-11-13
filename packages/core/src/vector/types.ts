@@ -891,8 +891,15 @@ export interface VectorDocument {
  * where the walls' verticals meet (a bird's or worm's eye view).
  */
 export interface VectorPerspective {
+	/** 1 to 3 vanishing points; `[]` for an isometric grid. */
 	vanishingPoints: Vec2[];
 	origin: Vec2;
+	/**
+	 * An isometric (parallel) grid (#799): no vanishing points, the floor's axes at `angle` degrees
+	 * above the horizontal (30 is true isometric), walls left and right. Nothing recedes, so art
+	 * keeps its size anywhere on a plane.
+	 */
+	isometric?: { angle: number };
 	/** Grid cell size at the origin, in document units (default 20). */
 	gridSize?: number;
 	/** Cells drawn out from the origin along each axis (default 12). */

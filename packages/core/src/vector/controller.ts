@@ -4821,7 +4821,7 @@ export class VectorEditorController {
 		let next: VectorPerspective | null = null;
 		if (grid) {
 			next = sanitizeVectorPerspective(grid);
-			if (!next) return { ok: false, message: 'A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }.' };
+			if (!next) return { ok: false, message: 'A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }, or isometric: { angle } (1 to 89 degrees) with an origin and no vanishing points.' };
 		}
 		this.change(next ? 'Perspective Grid' : 'Remove Perspective Grid', () => {
 			const { perspective: _p, ...rest } = this.doc;

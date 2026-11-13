@@ -1252,11 +1252,11 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`)"
       },
       {
-        "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor)",
-        "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `mermaidToSvg` `projection`",
-        "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection)",
-        "svelte": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection)",
-        "swift": "✅ (`IsoProjector` in PixerateGeometry, `vector.addIsoBoxes`); the isometric diagram export: Planned (#533)"
+        "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor; an isometric perspective grid (`isometric: { angle }`, planes floor / left / right, nothing recedes) with an Iso preset)",
+        "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `vectorIsometricPerspectivePreset`, `vector.setPerspective` `isometric`, `mermaidToSvg` `projection`",
+        "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`)",
+        "svelte": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`)",
+        "swift": "✅ (`IsoProjector` in PixerateGeometry, `vector.addIsoBoxes`, the isometric perspective grid); the isometric diagram export: Planned (#533)"
       }
     ]
   },
@@ -1736,11 +1736,18 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable`"
       },
       {
-        "feature": "3-D View (`view3d`: azimuth, elevation and depth as Office's view3D; set, merged and cleared through `update_chart`; Office 3-D bar, line and area charts import with their view instead of being drawn flat, and are written back flat with a note; drawing in 3-D comes with `@pixerate/editor/three`)",
+        "feature": "3-D View (`view3d`: azimuth, elevation and depth as Office's view3D; set, merged and cleared through `update_chart`; Office 3-D bar, line and area charts import with their view and are written back as `bar3DChart` / `line3DChart` / `area3DChart` with `view3D` (one group on one value axis; others are saved flat with a note); drawing in 3-D comes with `@pixerate/editor/three`)",
         "core": "`ChartView3d`, `CHART_VIEW3D_DEFAULTS` (`/chart`), `update_chart` `view3d`",
         "react": "✅ (`update_chart` and `ChartController.update`)",
         "svelte": "✅ (`update_chart` and `ChartController.update`)",
         "swift": "✅ (`ChartView3d`, `update_chart`, Office import); drawing in 3-D: Planned (#533)"
+      },
+      {
+        "feature": "3-D Charts with three.js (optional `@pixerate/editor/three` entry, three.js an optional peer: `layoutChart3d` lays out bars as boxes and lines / areas as ribbons in world units, pure and testable; `createChart3dScene` builds the scene and a camera fitted to the chart's `view3d`, without WebGL; `renderChart3d` draws it on demand with overlay labels in CSS px; `renderChart3dImage` makes a PNG with labels; `render_chart` png draws 3-D through the host's `render3d` hook)",
+        "core": "`layoutChart3d`, `CHART_3D_TYPES` (`/chart`), `createChart3dScene`, `renderChart3d`, `renderChart3dImage` (`/three`), `render3d` tool option",
+        "react": "✅ (`useChartToolProvider` `render3d`; draw with `renderChart3d`)",
+        "svelte": "✅ (`createChartToolProvider` `render3d`; draw with `renderChart3d`)",
+        "swift": "Planned (#533)"
       }
     ]
   },

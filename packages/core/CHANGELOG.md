@@ -1,5 +1,44 @@
 # @pixerate/editor
 
+## 0.313.0
+
+### Minor Changes
+
+- 9c1ed71: Office export of 3-D charts (#795): a chart with a 3-D view is written as Office's `bar3DChart`, `line3DChart` (with its hidden series axis) or `area3DChart`, with `c:view3D` (`rotX`, `rotY`, `depthPercent` in whole numbers), so it opens in 3-D in Office and reads back with its view. Office draws one 3-D group on one value axis, so a chart that mixes series types or uses the secondary axis is still saved flat, and the writer says why. Swift writes the same XML.
+
+## 0.312.0
+
+### Minor Changes
+
+- a23396a: An isometric perspective grid for the vector editor (closes #799).
+
+  - `VectorPerspective.isometric: { angle }` (1–89°, 30 is true isometric) with no vanishing points: planes floor, left and right, mapped in parallel (affine maps), so art keeps its size anywhere on a plane and grid lines never clip at a horizon. Drawing on a plane, laying art onto it and the grid lines work as for the other grids.
+  - `vector.setPerspective` takes `isometric` (vanishing points are no longer required), and refuses vanishing points with it; `vectorIsometricPerspectivePreset(width, height, angle?)` starts one for a page.
+  - React and Svelte `VectorPerspectivePanel` have an Iso preset next to 1-pt, 2-pt and 3-pt.
+  - Swift: the same grid, sanitizing, plane maps and preset, with the isometric scenario extended.
+
+## 0.311.0
+
+### Minor Changes
+
+- ddc9833: Charts in 3-D with three.js (part of #795).
+
+  - New optional entry `@pixerate/editor/three`, with three.js as an optional peer dependency (`>=0.184.0`); no other entry reaches it.
+  - `layoutChart3d(spec)` (`/chart`, no three.js) lays out a bar, line or area chart in world units: bars side by side or stacked as boxes (percent stacks to 100), lines and areas as ribbons in rows behind them, value ticks and category positions, and warnings for what is drawn differently (other types flat, horizontal bars as columns, a log axis linear, secondary series on the main axis).
+  - `createChart3dScene(spec, { width, height })` builds the scene (a floor, a back wall with the value gridlines, a soft key light and a sky / ground fill) and a camera fitted to the chart from its `view3d`, without WebGL. `renderChart3d(canvas, spec, options)` draws it on demand (no animation loop), and `labels()` gives category, tick and title positions in CSS px for an HTML or SVG overlay. `renderChart3dImage` makes a PNG with the labels.
+  - Chart tools take a `render3d` hook: `render_chart` with format png draws a chart that has a 3-D view in 3-D (the React and Svelte `useChartToolProvider` pass it through).
+  - `ChartSpecPatch.view3d` accepts `null` in TypeScript, as `update` already did at runtime.
+
+## 0.310.0
+
+### Minor Changes
+
+- d278a50: Charts: a 3-D view (part of #795).
+
+  - `ChartSpec.view3d?: { azimuth, elevation, depth }` (Office's `view3D`: turn 0–360°, eye height 0–90°, depth as a multiple of the bar width 0.2–20; defaults 20, 15 and 1 in `CHART_VIEW3D_DEFAULTS`). Absent means a flat chart, so existing documents are unchanged. `update_chart` (and `ChartController.update`) sets it, merges a partial view into the current one, and clears it with `null`; out-of-range values are refused with what is allowed.
+  - Office 3-D bar, line and area charts now import with their view (`rotY`, `rotX`, `depthPercent`) instead of being noted as drawn flat; a view from below the floor is drawn from floor level and noted. 3-D pie and surface charts are still drawn flat. Writing a chart with a 3-D view to Office XML saves it flat and says so.
+  - Swift: the same field, normalisation, update and Office import, with a new `view3d` conformance scenario and 3-D Office vectors.
+
 ## 0.309.0
 
 ### Minor Changes

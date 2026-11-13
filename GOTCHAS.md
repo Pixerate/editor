@@ -4630,3 +4630,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Adding `view3d` to the chart's update properties dropped `search_tools` top-1 below the eval's floor: "Load chart data from this CSV: … Mar,15" ranked `update_chart` above `import_chart_csv`, and "Where does the document mention …" ranked the rich-text `update_chart_in_document` first.
 - **Root Cause**: `search_tools` scores every word of a tool's description and argument descriptions. "(default 15)" matched the `15` in the pasted CSV, and "where the host renders it" matched "Where"; the chart update properties are shared by several toolsets, so one description lands in each of them.
 - **Solution / Workaround**: Keep argument descriptions to what the argument is, without default numbers or filler words ("Turn around the vertical axis, in degrees."), and put defaults in the parent description in words. When the eval fails, run it with `EVAL_REPORT` and diff the misses with and without the change to find the task that moved.
+
+### [core/three] A Camera Looking Along +z Sees +x on Its Left, Which Mirrors a Chart
+
+- **Issue / Symptom**: The first 3-D chart drew its categories right to left (Q4 … Q1) with the value labels on the right.
+- **Root Cause**: The chart layout's z runs back into the picture (the back wall at the largest z), so the camera sat at negative z looking along +z. three.js is right-handed: looking along +z, +x points to the camera's left.
+- **Solution / Workaround**: `createChart3dScene` puts the chart in a group with `scale.z = -1` and looks along -z from the +z side; positions taken from the layout (camera fit, overlay labels) go through `world(x, y, z)`, which negates z. three.js flips the face winding of a negatively scaled object itself, so lighting is unaffected. `tests/chart-3d.test.ts` checks the categories run left to right.

@@ -628,7 +628,7 @@ extension VectorEditorController {
         var next: JSONObject?
         if let grid, truthy(grid) {
             next = sanitizeVectorPerspective(grid)
-            if next == nil { return (.failure("A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }."), nil) }
+            if next == nil { return (.failure("A perspective grid needs 1 to 3 vanishing points { x, y } away from an origin { x, y }, or isometric: { angle } (1 to 89 degrees) with an origin and no vanishing points."), nil) }
         }
         change(next != nil ? "Perspective Grid" : "Remove Perspective Grid") {
             doc["perspective"] = nil
