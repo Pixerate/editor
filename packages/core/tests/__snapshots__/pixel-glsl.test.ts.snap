@@ -1,0 +1,36 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`pixel expressions as GLSL ES 3.0 > generates straight-line shaders with the uniform layout of the MSL kernel 1`] = `
+"
+    vec2 b_size = vec2(px_u[0].x, px_u[0].y);
+    vec2 b_pos = gl_FragCoord.xy;
+    vec2 b_uv = b_pos / b_size;
+    float b_time = px_u[0].z;
+    float b_PI = 3.1415927410125732;
+    float b_TAU = 6.2831854820251465;
+    vec3 c0 = vec3(px_u[1].x, px_u[1].y, px_u[1].z); // ink
+    float c1 = px_u[1].w; // count
+    vec2 c2 = vec2(px_u[2].x, px_u[2].y); // center
+    float t0 = b_uv.x - c2.x;
+    float t1 = b_uv.y - c2.y;
+    float t2 = sqrt(t0 * t0 + t1 * t1);
+    float l0 = t2; // d
+    float t3 = 0.5;
+    float t4 = 0.5;
+    float t5 = (l0 * c1);
+    float t6 = 2.0;
+    float t7 = (b_time / t6);
+    float t8 = (t5 - t7);
+    float t9 = (t8 * b_TAU);
+    float t10 = px_sin(t9);
+    float t11 = (t4 * t10);
+    float t12 = (t3 + t11);
+    float l1 = t12; // wave
+    float t13 = 0.4000000059604645;
+    float t14 = 0.6000000238418579;
+    float t15 = px_smoothstep(t13, t14, l1);
+    vec4 t16 = vec4(c0.x, c0.y, c0.z, t15);
+    px_out = vec4(px_byte(t16.x), px_byte(t16.y), px_byte(t16.z), px_byte(t16.w)) / 255.0;
+}
+"
+`;

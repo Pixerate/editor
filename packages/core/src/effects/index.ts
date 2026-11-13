@@ -19,4 +19,6 @@ export * from './authoring-session.js';
 export * from './authoring-tools.js';
 export * from './pixel-language.js';
 export * from './pixel-provider.js';
+export * from './pixel-glsl.js';
+export * from './pixel-webgl.js';
 export * from './authoring-style.js';

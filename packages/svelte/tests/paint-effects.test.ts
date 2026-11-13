@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import { createFakeEffectProvider } from '@pixerate/editor/effects';
+import { createFakeEffectProvider, PixelWebGL, type EffectRenderer } from '@pixerate/editor/effects';
 import { PaintEditorController, type PaintPixelLayer } from '@pixerate/editor/paint-editor';
 import { readPixel } from '@pixerate/editor/raster';
-import { ColorPanel, PaintEditor, PaintEffectsPanel } from '../src/paint-editor';
+import { ColorPanel, PaintCanvas, PaintEditor, PaintEffectsPanel, createReactivePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
@@ -40,7 +40,52 @@ const click = async (el: Element | null) => {
 };
 const pickEffect = (id: string) => click(target.querySelector(`[data-effect-id="${id}"]`));
 
+
+/** A stand-in WebGL2 that draws every live frame pure green (no WebGL in jsdom). */
+class GreenGPU extends PixelWebGL {
+  override get available() {
+    return true;
+  }
+  override async createRenderer(_p: unknown, d: { id: string }, o: { width: number; height: number }): Promise<EffectRenderer> {
+    const draw = () => {
+      const data = new Uint8ClampedArray(o.width * o.height * 4);
+      for (let i = 0; i < data.length; i += 4) data.set([0, 255, 0, 255], i);
+      return { width: o.width, height: o.height, data };
+    };
+    return { effectId: d.id, width: o.width, height: o.height, depth: 8, render: async () => draw(), renderSync: draw, dispose: () => {} };
+  }
+}
+const HARD = { tip: { size: 8, hardness: 1, opacity: 1, flow: 1, spacing: 0.05, pressureOpacity: false, pressureSize: false, smoothing: 0 }, grain: 0 };
+/** Saves a pulsing red effect and paints a live stroke with it. */
+async function paintLive(c: PaintEditorController) {
+  const session = await c.openEffectAuthoring('pixel.blank');
+  await session.setSource!('out = vec3(fract(time), 0, 0)');
+  const saved = await c.saveAuthoredEffect({ name: 'Pulse' });
+  c.closeEffectAuthoring();
+  c.addLayer({ type: 'strokes' });
+  await c.setEffectPaint({ effect: saved.id, live: true });
+  c.paintStroke({ brushId: 'ink-pen', brush: HARD, points: [{ x: 2, y: 8 }, { x: 30, y: 8 }] });
+}
+
 describe('Svelte paint effects', () => {
+  it('plays live frames of authored effects with WebGL2 when there is one (authoredEffectsGPU)', async () => {
+    const editor = createReactivePaintEditor({ width: 32, height: 16, paper: 'smooth', authoredEffects: 'author', authoredEffectsGPU: new GreenGPU() });
+    const c = editor.controller;
+    show(PaintCanvas, { controller: c, fitOnMount: false });
+    await paintLive(c);
+    for (let i = 0; i < 50 && c.authoredEffectsGPUStatus.renderer !== 'webgl2'; i++) await new Promise((r) => setTimeout(r, 20));
+    flushSync();
+    expect(c.authoredEffectsGPUStatus).toEqual({ gpu: true, renderer: 'webgl2', reason: null });
+    // The view shows the GPU's frame; an export at the same moment renders on the CPU.
+    const at = (8 * 32 + 16) * 4;
+    expect(c.compositePixels().data[at + 1]).toBe(255);
+    expect((await c.renderAnimationFrame(c.getState().effectPlayback.time)).data[at + 1]).toBeLessThan(50);
+    const off = createReactivePaintEditor({ authoredEffectsGPU: false });
+    expect(off.controller.authoredEffectsGPU).toBe(false);
+    off.destroy();
+    editor.destroy();
+  });
+
   it('sets the effect paper, adds an effect layer and bakes light onto paint', async () => {
     const c = new PaintEditorController({ width: 16, height: 8 });
     c.setEffectsProvider(createFakeEffectProvider());

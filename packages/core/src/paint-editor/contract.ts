@@ -359,7 +359,8 @@ export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'sticke
   const { effectPaintHints: _hints, style, brushStyle, brand, readOnly, ...setup } = raw;
   const stickers = setup.stickers === 'fake' ? combineStickerProviders([editorStickers(), createFakeStickerProvider()]) : setup.stickers;
   // The TypeScript wet kernel on one thread is the reference; WebAssembly and the GPU load late.
-  const controller = new PaintEditorController({ ...setup, stickers, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet } });
+  // Authored effects' live frames stay on the CPU too (no WebGL2 frames in recorded results).
+  const controller = new PaintEditorController({ ...setup, stickers, wet: { kernel: 'typescript', threads: 0, gpu: 'off', ...setup.wet }, authoredEffectsGPU: false });
   controller.setEffectsProvider(options.effects);
   const registry = new ToolRegistry({ validateArguments: true });
   registry.register(createPaintEditorToolProvider(controller));

@@ -252,8 +252,8 @@ document carries its source, so it renders anywhere without the author's provide
 Pixel expressions exist so that hosts which must not run downloaded or generated code (Apple's App
 Store guideline 2.5.2) can still let agents write effects. A program has no loops, no functions of
 its own, no memory and no access to anything but the pixel's position, the time and its controls;
-it is data that this package's own code evaluates (on the CPU, or as Metal Shading Language that
-the Swift package generates from it). Its cost per pixel is fixed and capped, so it can't hang the
+it is data that this package's own code evaluates (on the CPU, or as GLSL ES 3.0 for WebGL2 and
+Metal Shading Language for Swift, both generated from it). Its cost per pixel is fixed and capped, so it can't hang the
 GPU. Whether a host may ship it is still the host's call: this describes what the code does, not a
 review outcome.
 
@@ -288,7 +288,11 @@ that provider only with `rawShaders: true` (default false, in TypeScript and Swi
 **Budgets** (`authoredEffectLimits`): 64 KB of source and 1024 steps per pixel (`noise` counts 4);
 a 64×64 trial render within 100 ms before an effect is saved; and live effect paint stops playing
 an authored effect (each stroke keeps the frame it was painted with) after two frames over 50 ms.
-In Swift, compiling the generated Metal source has a 2 s budget.
+Live view frames of pixel expression effects render on the GPU where there is one (WebGL2 in
+TypeScript, Metal in Swift; the `authoredEffectsGPU` option, default on), and compiling the
+generated shader has a 2 s budget. Everything that ends in the document, an export or a replay
+renders on the CPU, so recorded pixels never depend on a GPU (see
+[pixel expressions on the GPU](./pixel-expressions.md#on-the-gpu)).
 
 ## Writing a provider
 

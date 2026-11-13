@@ -4,9 +4,10 @@ A small language for effects written at run time, by a person or an agent. A pro
 for every pixel and says what colour that pixel is. It has no loops, no functions of its own, no
 memory and no access to anything but the pixel's position, the time, the effect's controls and
 (for a filter) the input picture, so every program finishes in a fixed number of steps. The TypeScript core
-(`packages/core/src/effects/pixel-language.ts`) is the specification. The Swift package ports the
-CPU evaluator and also generates Metal Shading Language from the same program
-(`PixelLanguage.swift`, `PixelMSL.swift`).
+(`packages/core/src/effects/pixel-language.ts`) is the specification. The TypeScript core also
+generates GLSL ES 3.0 for WebGL2 from a program (`pixel-glsl.ts`, drawn by `pixel-webgl.ts`), and
+the Swift package ports the CPU evaluator and generates Metal Shading Language from the same
+program (`PixelLanguage.swift`, `PixelMSL.swift`). See [On the GPU](#on-the-gpu).
 
 ```
 // Rings that spread from a point.
@@ -101,6 +102,29 @@ out = vec4(mix(c.rgb * 0.6, mix(c.rgb, light, 0.5), edge), c.a)
 
 Each part of `out` is clamped to 0..1 and stored as a byte (`round(v × 255)`); a value that is not
 a number (`log(-1)`, `0 / 0`) becomes 0. Colours are sRGB values, not linear light.
+
+## On the GPU
+
+The CPU evaluator is the reference: documents, exports, replays, saved pixels and conformance
+always use it. Live view frames (effect paint that plays in the view) may render on the GPU, from
+a shader generated from the same program: GLSL ES 3.0 on WebGL2 in TypeScript (`pixelGLSL`,
+`PixelWebGL`), Metal in Swift (`pixelMSL`, `PixelMetalRenderer`). Each GPU frame is dropped once
+it is shown, so an export at the same moment renders again on the CPU.
+
+- The shader is straight-line code with explicit scalar broadcasting, the same helpers as the CPU
+  (`mod`, `sqrt` of a negative is 0, `select` on > 0.5, `min` / `max` keep NaN, `pow`, `log`,
+  `asin` / `acos` and `atan(y, x)` where GLSL leaves the result undefined), the same 32-bit
+  `hash`, and the same byte rounding (NaN → 0). `uv` is at pixel centres with y running down.
+- `sample` reads an integer texture (RGBA8UI, WebGL2) or buffer (Metal) with four reads and the
+  CPU's arithmetic, never a hardware sampler.
+- The GPU computes in 32-bit floats, so frames are within 2/255 of the CPU's, not bit for bit.
+  GPU compilers may also fold arithmetic the CPU keeps (`x * 0` is 0 there even when `x` is
+  infinite), so a program that relies on NaN from `inf * 0` can differ in live frames only.
+- The paint editor's `authoredEffectsGPU` option (default on, in TypeScript and Swift) turns this
+  off. Without a GPU (Node, a worker without `OffscreenCanvas`, jsdom), when a shader doesn't
+  compile or takes longer than 2 s to compile, or after the WebGL2 context is lost, frames render on
+  the CPU; in TypeScript `authoredEffectsGPUStatus` says which renderer drew the last live frame
+  and why it fell back. The live frame budget applies either way.
 
 ## Limits
 

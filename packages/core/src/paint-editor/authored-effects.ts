@@ -34,6 +34,7 @@ import {
   PIXEL_DEFAULT_LIMITS,
   type PixelLimits,
 } from "../effects/pixel-language.js";
+import type { PixelWebGL } from "../effects/pixel-webgl.js";
 import type {
   EffectDescription,
   EffectProvider,
@@ -244,7 +245,14 @@ export interface AuthoredEffectsProviderOptions {
 export function createAuthoredEffectsProvider(
   effects: Readonly<Record<string, PaintAuthoredEffect>>,
   options: AuthoredEffectsProviderOptions,
-): EffectProvider & { dispose(): void } {
+): EffectProvider & {
+  dispose(): void;
+  createGPURenderer(
+    id: string,
+    opts: EffectRendererOptions,
+    gpu: PixelWebGL,
+  ): Promise<EffectRenderer | null>;
+} {
   const sessions = new Map<string, Promise<EffectAuthoringSession>>();
   const entryOf = (id: string): PaintAuthoredEffect => {
     const e = effects[id];
@@ -322,6 +330,44 @@ export function createAuthoredEffectsProvider(
     }
     return out;
   };
+  /** `inner` with the document's keyframed controls following its tracks at the render's time. */
+  const withTracks = (
+    id: string,
+    doc: EffectAuthoringDocument,
+    d: EffectDescription,
+    inner: EffectRenderer,
+  ): EffectRenderer => {
+    const valuesAt = (time: number, given: EffectValues | undefined) => ({
+      ...authoringValuesAt(doc, time),
+      ...d.defaults,
+      ...(given ?? {}),
+    });
+    const animated = animatedControls(doc);
+    const values = (time: number, given: EffectValues | undefined) => {
+      const v = valuesAt(time, given);
+      const at = authoringValuesAt(doc, time);
+      for (const name of animated) v[name] = at[name];
+      return v;
+    };
+    return {
+      effectId: id,
+      width: inner.width,
+      height: inner.height,
+      depth: inner.depth,
+      render: (req) =>
+        inner.render({ ...req, values: values(req.time ?? 0, req.values) }),
+      ...(inner.renderSync
+        ? {
+            renderSync: (req) =>
+              inner.renderSync!({
+                ...req,
+                values: values(req.time ?? 0, req.values),
+              }),
+          }
+        : {}),
+      dispose: () => inner.dispose(),
+    };
+  };
   const createRenderer = async (
     id: string,
     opts: EffectRendererOptions,
@@ -340,37 +386,28 @@ export function createAuthoredEffectsProvider(
     } else {
       inner = await (await rawSession(e)).createPreview(opts);
     }
-    // Keyframed controls follow the document's tracks at the render's time.
-    const valuesAt = (time: number, given: EffectValues | undefined) => ({
-      ...authoringValuesAt(doc, time),
-      ...d.defaults,
-      ...(given ?? {}),
-    });
-    const animated = animatedControls(doc);
-    const withTracks = (time: number, given: EffectValues | undefined) => {
-      const v = valuesAt(time, given);
-      const at = authoringValuesAt(doc, time);
-      for (const name of animated) v[name] = at[name];
-      return v;
-    };
-    return {
-      effectId: id,
-      width: inner.width,
-      height: inner.height,
-      depth: inner.depth,
-      render: (req) =>
-        inner.render({ ...req, values: withTracks(req.time ?? 0, req.values) }),
-      ...(inner.renderSync
-        ? {
-            renderSync: (req) =>
-              inner.renderSync!({
-                ...req,
-                values: withTracks(req.time ?? 0, req.values),
-              }),
-          }
-        : {}),
-      dispose: () => inner.dispose(),
-    };
+    return withTracks(id, doc, d, inner);
+  };
+  /**
+   * A renderer that draws a pixel expression effect with WebGL2 (`gpu`), for live view frames
+   * only. Resolves null for an effect that is not written in pixel expressions; throws
+   * `EffectUnsupportedError` with the reason when the GPU can't draw it (render on the CPU then).
+   */
+  const createGPURenderer = async (
+    id: string,
+    opts: EffectRendererOptions,
+    gpu: PixelWebGL,
+  ): Promise<EffectRenderer | null> => {
+    const e = entryOf(id);
+    if (!isPixelDocument(e.document)) return null;
+    const d = await describe(id);
+    const r = describePixelSource(
+      e.document.source,
+      { id, name: e.name },
+      options.limits,
+    );
+    const inner = await gpu.createRenderer(r.program!, r.description!, opts);
+    return withTracks(id, e.document, d, inner);
   };
   return {
     id: AUTHORED_PROVIDER_ID,
@@ -382,6 +419,7 @@ export function createAuthoredEffectsProvider(
       searchEffectSummaries(await summaries(), q, o),
     describe,
     createRenderer,
+    createGPURenderer,
     dispose: () => {
       for (const s of sessions.values())
         s.then(

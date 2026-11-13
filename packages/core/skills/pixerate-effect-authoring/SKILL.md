@@ -196,6 +196,11 @@ machine with no session or provider. Authoring needs the editor's `authoredEffec
   the effect is used (`describe_effect` leaves them out); unkeyframe a control to make it settable.
 - Live effect paint with an authored effect stops playing (each stroke keeps its own frame) after
   two frames over the 50 ms budget; `list_authored_effects` reports it. Make the effect cheaper.
+- Live view frames may be drawn on the GPU (WebGL2 in browsers, Metal in the Swift editors, the
+  host's `authoredEffectsGPU` option) and are within 2/255 of the CPU; strokes, layers, exports,
+  replays and `effect_authoring_view` captures always come from the CPU evaluator, so judge an
+  effect by what the tools return. A program that relies on NaN from `inf * 0` may look different
+  while it plays (GPU compilers fold `x * 0` to 0); guard divisions instead.
 - `save_authored_effect` refuses a source that doesn't compile now, even when an earlier version
   did; fix the errors first.
 
