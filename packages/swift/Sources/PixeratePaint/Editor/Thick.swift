@@ -866,11 +866,6 @@ func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, widt
     let T = Double(TILE)
     let tx0 = JS.floor(x / T), ty0 = JS.floor(y / T)
     let tx1 = JS.floor((xEnd - 1) / T), ty1 = JS.floor((yEnd - 1) / T)
-    // Tile keys are exact in doubles up to here (`tileKey`); TS goes on past it with rounded keys.
-    let limit = 1e10
-    if Swift.abs(tx0) > limit || Swift.abs(tx1) > limit || Swift.abs(ty0) > limit || Swift.abs(ty1) > limit {
-        throw PaintEditorError("the channel lies too far off the canvas to read")
-    }
     let draft = SurfaceDraft(surface)
     let tilePixels = TILE * TILE
     var ty = ty0
@@ -881,7 +876,9 @@ func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, widt
             let x0 = JS.max(x, ox), y0 = JS.max(y, oy)
             let x1 = JS.min(xEnd, ox + T), y1 = JS.min(yEnd, oy + T)
             let full = x0 == ox && y0 == oy && x1 == ox + T && y1 == oy + T
-            let buf = full ? TileBuffer([UInt8](repeating: 0, count: tilePixels * ch)) : draft.tile(Int(tx), Int(ty))
+            // Far off the canvas the key rounds as TS's does (`jsTileKey`): tiles can share one.
+            let key = jsTileKey(tx, ty)
+            let buf = full ? TileBuffer([UInt8](repeating: 0, count: tilePixels * ch)) : draft.tile(key: key)
             let span = (x1 - x0) * Double(ch)
             var yy = y0
             while yy < y1 {
@@ -896,7 +893,7 @@ func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, widt
                 for k in 0 ..< count { buf.data[o + k] = data[begin + k] }
                 yy += 1
             }
-            if full { draft.replace(Int(tx), Int(ty), buf.data) }
+            if full { draft.replace(key: key, buf.data) }
             tx += 1
         }
         ty += 1

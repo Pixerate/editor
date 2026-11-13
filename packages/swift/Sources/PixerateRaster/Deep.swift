@@ -323,6 +323,88 @@ public func writeDeepRegion(_ surface: TiledSurface, _ rect: RasterRect, _ sampl
     return TiledSurface(channels: ch, tiles: tiles, defaultValue: surface.defaultValue)
 }
 
+/// Thrown by `writeDeepRegionUnchecked` where the TS core's typed arrays throw.
+public struct DeepRegionError: Error, CustomStringConvertible {
+    public let description: String
+}
+
+/// `subarray`'s relative index: truncated toward zero (NaN 0), counted from the end when negative, clamped to `count`.
+private func subarrayIndex(_ v: Double, _ count: Int) -> Int {
+    let t: Double = v.isNaN ? 0 : v.rounded(.towardZero)
+    if t < 0 { return Int(Swift.max(Double(count) + t, 0)) }
+    return Int(Swift.min(t, Double(count)))
+}
+
+/// `t.set(src.subarray(begin, end), d)` (throws "offset is out of bounds" where `set` does).
+private func setSubarray<T>(_ t: inout [T], _ src: [T], _ s: Double, _ span: Double, _ d: Double) throws {
+    let begin = subarrayIndex(s, src.count)
+    let end = subarrayIndex(s + span, src.count)
+    let count = Swift.max(end - begin, 0)
+    let offset: Double = d.isNaN ? 0 : d.rounded(.towardZero)
+    if offset < 0 || Double(count) + offset > Double(t.count) { throw DeepRegionError(description: "offset is out of bounds") }
+    let o = Int(offset)
+    for k in 0 ..< count { t[o + k] = src[begin + k] }
+}
+
+/**
+ * `writeDeepRegion` with a rect read unchecked from a saved document, in JavaScript arithmetic:
+ * `width` / `height` are the numbers the multiplications see, `xEnd` / `yEnd` are what
+ * `rect.x + rect.width` / `rect.y + rect.height` give (a text width concatenates), a fractional
+ * size copies the rows typed-array `subarray` truncates to, and far-off tiles share the keys TS
+ * rounds them to (`jsTileKey`). Throws where `writeDeepRegion` would.
+ */
+public func writeDeepRegionUnchecked(_ surface: TiledSurface, x: Double, y: Double, width w: Double, height h: Double, xEnd: Double, yEnd: Double, _ samples: DeepSamples) throws -> TiledSurface {
+    let ch = surface.channels
+    let c = Double(ch)
+    if w <= 0 || h <= 0 { return surface }
+    let need: Double = w * h * c
+    if Double(samples.count) < need { throw DeepRegionError(description: "writeDeepRegion: expected \(need) samples, got \(samples.count)") }
+    var tiles = surface.tiles
+    let T = Double(TILE)
+    let tx0 = JS.floor(x / T), ty0 = JS.floor(y / T)
+    let tx1 = JS.floor((xEnd - 1) / T), ty1 = JS.floor((yEnd - 1) / T)
+    var ty = ty0
+    while ty <= ty1 {
+        var tx = tx0
+        while tx <= tx1 {
+            let key = jsTileKey(tx, ty)
+            let ox: Double = tx * T
+            let oy: Double = ty * T
+            let x0 = JS.max(x, ox), y0 = JS.max(y, oy)
+            let x1 = JS.min(xEnd, ox + T), y1 = JS.min(yEnd, oy + T)
+            let full: Bool = x0 == ox && y0 == oy && x1 == ox + T && y1 == oy + T
+            let span: Double = (x1 - x0) * c
+            let next: DeepSamples
+            switch samples {
+            case .u16(let src):
+                var t = full ? [UInt16](repeating: 0, count: TILE_PIXELS * ch) : tileSamples16(surface.tiles.get(key), ch, surface.defaultValue)
+                var yy = y0
+                while yy < y1 {
+                    let s: Double = ((yy - y) * w + (x0 - x)) * c
+                    let d: Double = ((yy - oy) * T + (x0 - ox)) * c
+                    try setSubarray(&t, src, s, span, d)
+                    yy += 1
+                }
+                next = .u16(t)
+            case .f32(let src):
+                var t = full ? [Float](repeating: 0, count: TILE_PIXELS * ch) : tileSamples32(surface.tiles.get(key), ch, surface.defaultValue)
+                var yy = y0
+                while yy < y1 {
+                    let s: Double = ((yy - y) * w + (x0 - x)) * c
+                    let d: Double = ((yy - oy) * T + (x0 - ox)) * c
+                    try setSubarray(&t, src, s, span, d)
+                    yy += 1
+                }
+                next = .f32(t)
+            }
+            if let tile = deepTile(next, ch, surface.defaultValue) { tiles.set(key, tile) } else { tiles.delete(key) }
+            tx += 1
+        }
+        ty += 1
+    }
+    return TiledSurface(channels: ch, tiles: tiles, defaultValue: surface.defaultValue)
+}
+
 /// A surface holding `width × height` deep samples placed at (`x`, `y`).
 public func surfaceFromDeepPixels(width: Int, height: Int, data: DeepSamples, channels: Int = 4, x: Int = 0, y: Int = 0, defaultValue: Int = 0) -> TiledSurface {
     writeDeepRegion(emptySurface(channels, defaultValue), RasterRect(x: x, y: y, width: width, height: height), data)

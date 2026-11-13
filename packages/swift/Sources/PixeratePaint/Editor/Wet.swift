@@ -491,6 +491,16 @@ public struct WetEvent: Equatable {
     /// Equal when they save the same (a saved event equals one built with the same fields and nothing else).
     public static func == (a: WetEvent, b: WetEvent) -> Bool { a.json == b.json }
 
+    /// Where a replay puts it among the strokes (`event.at ?? 0`, used as a number): a saved `at`
+    /// that is not an integer (1.5, `"2"`) keeps its own value, as the TS replay reads it.
+    var replayAt: Double {
+        if let saved, let base = WetEvent(json: .object(saved)), base.at == at {
+            guard let raw = saved["at"], raw != .null else { return 0 }
+            return jsToNumber(raw)
+        }
+        return Double(at ?? 0)
+    }
+
     public var json: JSONValue {
         if let saved, let base = WetEvent(json: .object(saved)) {
             var o = saved

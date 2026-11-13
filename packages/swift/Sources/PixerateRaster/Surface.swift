@@ -42,7 +42,27 @@ private let KEY_SPAN = 1 << 16
 public typealias TileKey = Int
 
 public func tileKey(_ tx: Int, _ ty: Int) -> TileKey {
-    (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET)
+    // Exact in doubles here, as in TS (|key| < 2^53); past it TS rounds (`jsTileKey`).
+    if tx > -(1 << 30) && tx < (1 << 30) && ty > -(1 << 30) && ty < (1 << 30) {
+        return (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET)
+    }
+    return jsTileKey(Double(tx), Double(ty))
+}
+
+/**
+ * `tileKey(tx, ty)` as the TS core computes it, in doubles: `(ty + 32768) * 65536 + (tx + 32768)`,
+ * rounded once the key passes 2^53, so far-off tiles that differ only in their last bits share a
+ * key (and `tileCoord` reads it back as another tile). A rounded key is a whole number, held exactly
+ * in `Int`. Keys past what `Int` holds (tiles beyond about 3.6 × 10^16 px) saturate: TS writes no
+ * pixels that far out (`x + 1` rounds back to `x`), so only empty tiles get such keys.
+ */
+public func jsTileKey(_ tx: Double, _ ty: Double) -> TileKey {
+    let row: Double = (ty + Double(KEY_OFFSET)) * Double(KEY_SPAN)
+    let key: Double = row + (tx + Double(KEY_OFFSET))
+    if key.isNaN { return 0 }
+    if key >= 9.223372036854775807e18 { return Int.max }
+    if key <= -9.223372036854775807e18 { return Int.min }
+    return Int(key)
 }
 
 public func tileCoord(_ key: TileKey) -> (tx: Int, ty: Int) {
@@ -414,7 +434,11 @@ public final class SurfaceDraft {
 
     /// The writable data of tile (tx, ty), copied from the base on first use.
     public func tile(_ tx: Int, _ ty: Int) -> TileBuffer {
-        let key = tileKey(tx, ty)
+        tile(key: tileKey(tx, ty))
+    }
+
+    /// The writable data of the tile stored under `key` (`tileKey` / `jsTileKey`), copied from the base on first use.
+    public func tile(key: TileKey) -> TileBuffer {
         if let d = copies.get(key) { return d }
         let data: [UInt8]
         if let src = base.tiles.get(key) {
@@ -430,6 +454,11 @@ public final class SurfaceDraft {
     /// Replaces a whole tile with `data` (owned by the draft from now on).
     public func replace(_ tx: Int, _ ty: Int, _ data: [UInt8]) {
         copies.set(tileKey(tx, ty), TileBuffer(data))
+    }
+
+    /// Replaces the tile stored under `key` with `data`.
+    public func replace(key: TileKey, _ data: [UInt8]) {
+        copies.set(key, TileBuffer(data))
     }
 
     /// The current data of a tile without copying it (base tile, draft copy or `nil` for default).

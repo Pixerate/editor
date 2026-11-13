@@ -1,0 +1,1642 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "document-load-edge-cases",
+  "description": "Edge cases of opening a saved paint document, read as the TS core reads them: saved channels whose tiles lie so far off the canvas (past ±10¹⁰ tiles, and past 2^53 in tile keys, where neighbouring tiles share a rounded key) are placed with the same keys, and saved where tileCoord reads those keys back (a channel whose rounded key is negative is saved blank at another tile, so that layer is removed before the reload); deep 16- and 32-bit samples with a fractional, text, boolean or array width or height are written where JavaScript arithmetic puts them (a fractional row copies what typed-array subarray truncates to, a text size concatenates), and those whose sample count is not whole are reported; and wet events with a non-integer at (fractional, text, boolean) replay at that value among the strokes (X-ray and high-res export repaint the painting). The rest saves and reopens the same.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "load": {
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 48,
+        "height": 32,
+        "paper": {
+          "color": "#ffffff"
+        },
+        "layers": [
+          {
+            "id": "paint",
+            "name": "Paint",
+            "type": "pixel"
+          },
+          {
+            "id": "frac",
+            "name": "Fractional",
+            "type": "pixel",
+            "asset": "a",
+            "x": 2,
+            "y": 2,
+            "deep": {
+              "depth": 16,
+              "x": 2,
+              "y": 2,
+              "width": 1.5,
+              "height": 2,
+              "data": "eJx7L/dJ76vdD7/fcf/yGOtZ+tnnc63n3S9wHgCfFAuJ"
+            }
+          },
+          {
+            "id": "text",
+            "name": "Text size",
+            "type": "pixel",
+            "asset": "a",
+            "x": 10,
+            "y": 4,
+            "deep": {
+              "depth": 16,
+              "x": 10,
+              "y": 4,
+              "width": "2",
+              "height": "2",
+              "data": "eJwBIADf/9494U3kXedt6n3tjfCd8632vfnN/N3/7QL+BQ4IHgsuaY8TnQ=="
+            }
+          },
+          {
+            "id": "bool",
+            "name": "Boolean size",
+            "type": "pixel",
+            "asset": "a",
+            "x": 20,
+            "y": 2,
+            "deep": {
+              "depth": 32,
+              "x": 20,
+              "y": 2,
+              "width": true,
+              "height": [
+                1
+              ],
+              "data": "eJxjYDhgx8DAYM/AoGDPwOBgDwASpwIc"
+            }
+          },
+          {
+            "id": "fmask",
+            "name": "Fractional mask",
+            "type": "pixel",
+            "asset": "a",
+            "x": 26,
+            "y": 2,
+            "deep": {
+              "depth": 16,
+              "x": 26,
+              "y": 2,
+              "width": 2,
+              "height": 2,
+              "data": "eJwBIADf/7x7v4vCm8WryLvLy87b0evU+9cL2hvdK+A740vmW+lrb18VWQ=="
+            },
+            "mask": {
+              "defaultValue": 0,
+              "asset": "m",
+              "x": 26,
+              "y": 2,
+              "deep": {
+                "depth": 16,
+                "x": 26,
+                "y": 2,
+                "width": 1.5,
+                "height": 2,
+                "data": "eJxbPWvdqo27AA3cBAk="
+              }
+            }
+          },
+          {
+            "id": "badfrac",
+            "name": "Quarter mask",
+            "type": "pixel",
+            "asset": "a",
+            "x": 32,
+            "y": 2,
+            "deep": {
+              "depth": 16,
+              "x": 32,
+              "y": 2,
+              "width": 2,
+              "height": 2,
+              "data": "eJwBIADf/5q5ncmg2aPppvmpCawZrymyObVJuFm7ab55wYnEmcepQT8TGQ=="
+            },
+            "mask": {
+              "defaultValue": 255,
+              "asset": "m",
+              "x": 32,
+              "y": 2,
+              "deep": {
+                "depth": 16,
+                "x": 32,
+                "y": 2,
+                "width": 1.25,
+                "height": 1,
+                "data": "eJzrvAEAAewBYg=="
+              }
+            }
+          },
+          {
+            "id": "arr",
+            "name": "Array deep",
+            "type": "pixel",
+            "asset": "a",
+            "x": 38,
+            "y": 2,
+            "deep": [
+              16
+            ]
+          },
+          {
+            "id": "aside",
+            "name": "Aside",
+            "type": "pixel"
+          }
+        ],
+        "assets": {
+          "a": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC",
+          "m": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+        },
+        "activeLayerId": "paint",
+        "strokes": [
+          {
+            "brush": {
+              "behaviour": {
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "surface": "wet",
+                "wet": {
+                  "rewet": 0.2,
+                  "water": 0.55
+                }
+              },
+              "dynamics": {
+                "minSize": 0.35,
+                "pressureOpacity": true,
+                "smoothing": 0.25
+              },
+              "id": "watercolor-round",
+              "kind": "mark",
+              "medium": "paint",
+              "name": "Watercolour round",
+              "tip": {
+                "hardness": 0.6,
+                "shape": "round",
+                "size": 28,
+                "spacing": 0.12
+              },
+              "variety": "watercolor"
+            },
+            "color": "#2255aa",
+            "id": "s1",
+            "layerId": "paint",
+            "load": {
+              "amount": 1,
+              "pickup": null,
+              "reservoir": [
+                0.13333333333333333,
+                0.3333333333333333,
+                0.6666666666666666
+              ]
+            },
+            "points": [
+              {
+                "pressure": 0.8,
+                "x": 6,
+                "y": 10
+              },
+              {
+                "pressure": 0.8,
+                "x": 40,
+                "y": 14
+              }
+            ],
+            "seed": 71,
+            "steps": [
+              0,
+              0
+            ]
+          },
+          {
+            "brush": {
+              "behaviour": {
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "surface": "wet",
+                "wet": {
+                  "rewet": 0.2,
+                  "water": 0.55
+                }
+              },
+              "dynamics": {
+                "minSize": 0.35,
+                "pressureOpacity": true,
+                "smoothing": 0.25
+              },
+              "id": "watercolor-round",
+              "kind": "mark",
+              "medium": "paint",
+              "name": "Watercolour round",
+              "tip": {
+                "hardness": 0.6,
+                "shape": "round",
+                "size": 28,
+                "spacing": 0.12
+              },
+              "variety": "watercolor"
+            },
+            "color": "#cc3311",
+            "id": "s2",
+            "layerId": "paint",
+            "load": {
+              "amount": 1,
+              "pickup": null,
+              "reservoir": [
+                0.8,
+                0.2,
+                0.06666666666666667
+              ]
+            },
+            "points": [
+              {
+                "pressure": 0.8,
+                "x": 20,
+                "y": 2
+              },
+              {
+                "pressure": 0.8,
+                "x": 24,
+                "y": 30
+              }
+            ],
+            "seed": 72,
+            "steps": [
+              0,
+              0
+            ]
+          }
+        ],
+        "wet": {
+          "layers": {
+            "@1": {
+              "flow": {
+                "angle": 0,
+                "clockwise": true,
+                "kind": "none",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.5
+              },
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.5,
+                "evaporation": 0.45,
+                "fixture": 0.2,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.3
+              }
+            }
+          },
+          "tilt": {
+            "angle": 0,
+            "direction": 0
+          }
+        },
+        "wetEvents": [
+          {
+            "clock": 0,
+            "kind": "tilt",
+            "at": "0.25",
+            "data": {
+              "angle": 30,
+              "direction": 0
+            }
+          },
+          {
+            "clock": 0,
+            "kind": "dry",
+            "at": 0.75
+          },
+          {
+            "clock": 0,
+            "kind": "tilt",
+            "at": true,
+            "data": {
+              "angle": 10,
+              "direction": 90
+            }
+          }
+        ],
+        "light": {
+          "paint": {
+            "rect": {
+              "x": 255,
+              "y": 70368744177664
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          },
+          "frac": {
+            "rect": {
+              "x": -3000000000000,
+              "y": 5000000000000
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          }
+        },
+        "fluor": {
+          "aside": {
+            "rect": {
+              "x": 70368744177920,
+              "y": -70368744177920
+            },
+            "fluor": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          }
+        }
+      },
+      "document": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "paint",
+          "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": -16777216,
+                "y": -70367670436096
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "aside",
+              "locks": {},
+              "name": "Aside",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 38,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "arr",
+              "locks": {},
+              "name": "Array deep",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 32,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "badfrac",
+              "locks": {},
+              "name": "Quarter mask",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 26,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "fmask",
+              "locks": {},
+              "name": "Fractional mask",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 20,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "bool",
+              "locks": {},
+              "name": "Boolean size",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 4,
+                "x": 10,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "text",
+              "locks": {},
+              "name": "Text size",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 2,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "frac",
+              "locks": {},
+              "name": "Fractional",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "paint",
+              "locks": {},
+              "name": "Paint",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [
+          "Layer \"Quarter mask\" mask: its 16-bit samples could not be read, so it was opened at 8 bits",
+          "Layer \"Array deep\": its undefined-bit samples could not be read, so it was opened at 8 bits"
+        ],
+        "document": {
+          "document": {
+            "activeLayerId": "paint",
+            "assets": {
+              "arr": "<binary>",
+              "badfrac": "<binary>",
+              "badfrac-mask": "<binary>",
+              "bool": "<binary>",
+              "fmask": "<binary>",
+              "fmask-mask": "<binary>",
+              "frac": "<binary>",
+              "text": "<binary>"
+            },
+            "dpi": 300,
+            "fluor": {
+              "aside": {
+                "fluor": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": -16777216,
+                  "y": -70367670436096
+                }
+              }
+            },
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "paint",
+                "name": "Paint",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "frac",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwNEJABAUBVBKKaVM4Pt9GcEIRjCCFYxgBCMYwQhGUUop5TrTLrf9CTe+RATwLIqsquluBsDYBxrlD9U=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 2,
+                  "y": 2
+                },
+                "id": "frac",
+                "name": "Fractional",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 2,
+                "y": 2
+              },
+              {
+                "asset": "text",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFdx9EJABEAANDr6upKGcEINjCCEYxgBCMYwQhGMIIRKKWUUkopJfx7f8+TQCNLPIsiq2q6m2Gn2+VdH/wRwPefywHKlBxN",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 4,
+                  "x": 10,
+                  "y": 4
+                },
+                "id": "text",
+                "name": "Text size",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 10,
+                "y": 4
+              },
+              {
+                "asset": "bool",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFViDENACAMwOoBAwghDAkYIsEQHvDAixjYkh07mqaFXQGB/Gkyzir9JjNMsz/tCDxTYhG3",
+                  "depth": 32,
+                  "height": 2,
+                  "width": 2,
+                  "x": 20,
+                  "y": 2
+                },
+                "id": "bool",
+                "name": "Boolean size",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 20,
+                "y": 2
+              },
+              {
+                "asset": "fmask",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwMEJABAAAMABjGAEIxjBCEYwghGMYAQjUEoppZRSipRSSkbwcYZb4aRXQceYer7lVdDgQBMvsulhH29fFVk=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 26,
+                  "y": 2
+                },
+                "id": "fmask",
+                "mask": {
+                  "asset": "fmask-mask",
+                  "deep": {
+                    "data": "eAEFwEENAAAAAcDqcojAZvOVzplA1B0V6AUJ",
+                    "depth": 16,
+                    "height": 2,
+                    "width": 2,
+                    "x": 26,
+                    "y": 2
+                  },
+                  "defaultValue": 0,
+                  "x": 26,
+                  "y": 2
+                },
+                "name": "Fractional mask",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 26,
+                "y": 2
+              },
+              {
+                "asset": "badfrac",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwMEJABAAAMC3EYxgBCMYwQhGMIIRKKWUUkopRUopJSMYwQh+TlW9zbHXPQ8CjCjhTAptrPMhplz+A0E/Exk=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 32,
+                  "y": 2
+                },
+                "id": "badfrac",
+                "mask": {
+                  "asset": "badfrac-mask",
+                  "defaultValue": 255,
+                  "x": 32,
+                  "y": 2
+                },
+                "name": "Quarter mask",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 32,
+                "y": 2
+              },
+              {
+                "asset": "arr",
+                "blend": "normal",
+                "id": "arr",
+                "name": "Array deep",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 38,
+                "y": 2
+              },
+              {
+                "blend": "normal",
+                "id": "aside",
+                "name": "Aside",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              }
+            ],
+            "light": {
+              "frac": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 1101824,
+                  "y": 4999954223616
+                }
+              },
+              "paint": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 70368744177664
+                }
+              }
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#2255aa",
+                "id": "s1",
+                "layerId": "paint",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.13333333333333333,
+                    0.3333333333333333,
+                    0.6666666666666666
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 6,
+                    "y": 10
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 40,
+                    "y": 14
+                  }
+                ],
+                "seed": 71,
+                "steps": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#cc3311",
+                "id": "s2",
+                "layerId": "paint",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.8,
+                    0.2,
+                    0.06666666666666667
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 2
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 30
+                  }
+                ],
+                "seed": 72,
+                "steps": [
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wetEvents": [
+              {
+                "at": "0.25",
+                "clock": 0,
+                "data": {
+                  "angle": 30,
+                  "direction": 0
+                },
+                "kind": "tilt"
+              },
+              {
+                "at": 0.75,
+                "clock": 0,
+                "kind": "dry"
+              },
+              {
+                "at": true,
+                "clock": 0,
+                "data": {
+                  "angle": 10,
+                  "direction": 90
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "set_wet_engine",
+      "arguments": {
+        "gpu": "off"
+      },
+      "ignore": [
+        "/engine"
+      ],
+      "expect": {
+        "result": {}
+      }
+    },
+    {
+      "tool": "render_xray",
+      "arguments": {
+        "maxSide": 48
+      },
+      "expect": {
+        "result": {
+          "height": 32,
+          "hiddenLayerCount": 0,
+          "layerCount": 8,
+          "maxDensity": 0.781,
+          "meanDensity": 0.006,
+          "strokes": 2,
+          "totalStrokes": 2,
+          "width": 48
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 1,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 3293,
+          "data": "<binary>",
+          "height": 32,
+          "mimeType": "image/png",
+          "width": 48
+        }
+      }
+    },
+    {
+      "tool": "export_high_res",
+      "arguments": {
+        "scale": 2,
+        "paper": false
+      },
+      "expect": {
+        "result": {
+          "bytes": 10255,
+          "data": "<binary>",
+          "height": 64,
+          "mimeType": "image/png",
+          "width": 96
+        }
+      }
+    },
+    {
+      "tool": "remove_layer",
+      "arguments": {
+        "layerId": "aside"
+      },
+      "expect": {
+        "result": {
+          "activeLayerId": "paint",
+          "removed": "aside"
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "paint",
+          "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 38,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "arr",
+              "locks": {},
+              "name": "Array deep",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 32,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "badfrac",
+              "locks": {},
+              "name": "Quarter mask",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 26,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "fmask",
+              "locks": {},
+              "name": "Fractional mask",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 20,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "bool",
+              "locks": {},
+              "name": "Boolean size",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 4,
+                "x": 10,
+                "y": 4
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "text",
+              "locks": {},
+              "name": "Text size",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 2,
+                "width": 2,
+                "x": 2,
+                "y": 2
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "frac",
+              "locks": {},
+              "name": "Fractional",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "paint",
+              "locks": {},
+              "name": "Paint",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "paint",
+            "assets": {
+              "arr": "<binary>",
+              "badfrac": "<binary>",
+              "badfrac-mask": "<binary>",
+              "bool": "<binary>",
+              "fmask": "<binary>",
+              "fmask-mask": "<binary>",
+              "frac": "<binary>",
+              "text": "<binary>"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "paint",
+                "name": "Paint",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
+              },
+              {
+                "asset": "frac",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwNEJABAUBVBKKaVM4Pt9GcEIRjCCFYxgBCMYwQhGUUop5TrTLrf9CTe+RATwLIqsquluBsDYBxrlD9U=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 2,
+                  "y": 2
+                },
+                "id": "frac",
+                "name": "Fractional",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 2,
+                "y": 2
+              },
+              {
+                "asset": "text",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFdx9EJABEAANDr6upKGcEINjCCEYxgBCMYwQhGMIIRKKWUUkopJfx7f8+TQCNLPIsiq2q6m2Gn2+VdH/wRwPefywHKlBxN",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 4,
+                  "x": 10,
+                  "y": 4
+                },
+                "id": "text",
+                "name": "Text size",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 10,
+                "y": 4
+              },
+              {
+                "asset": "bool",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAFViDENACAMwOoBAwghDAkYIsEQHvDAixjYkh07mqaFXQGB/Gkyzir9JjNMsz/tCDxTYhG3",
+                  "depth": 32,
+                  "height": 2,
+                  "width": 2,
+                  "x": 20,
+                  "y": 2
+                },
+                "id": "bool",
+                "name": "Boolean size",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 20,
+                "y": 2
+              },
+              {
+                "asset": "fmask",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwMEJABAAAMABjGAEIxjBCEYwghGMYAQjUEoppZRSipRSSkbwcYZb4aRXQceYer7lVdDgQBMvsulhH29fFVk=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 26,
+                  "y": 2
+                },
+                "id": "fmask",
+                "mask": {
+                  "asset": "fmask-mask",
+                  "deep": {
+                    "data": "eAEFwEENAAAAAcDqcojAZvOVzplA1B0V6AUJ",
+                    "depth": 16,
+                    "height": 2,
+                    "width": 2,
+                    "x": 26,
+                    "y": 2
+                  },
+                  "defaultValue": 0,
+                  "x": 26,
+                  "y": 2
+                },
+                "name": "Fractional mask",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 26,
+                "y": 2
+              },
+              {
+                "asset": "badfrac",
+                "blend": "normal",
+                "deep": {
+                  "data": "eAEFwMEJABAAAMC3EYxgBCMYwQhGMIIRKKWUUkopRUopJSMYwQh+TlW9zbHXPQ8CjCjhTAptrPMhplz+A0E/Exk=",
+                  "depth": 16,
+                  "height": 2,
+                  "width": 2,
+                  "x": 32,
+                  "y": 2
+                },
+                "id": "badfrac",
+                "mask": {
+                  "asset": "badfrac-mask",
+                  "defaultValue": 255,
+                  "x": 32,
+                  "y": 2
+                },
+                "name": "Quarter mask",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 32,
+                "y": 2
+              },
+              {
+                "asset": "arr",
+                "blend": "normal",
+                "id": "arr",
+                "name": "Array deep",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 38,
+                "y": 2
+              }
+            ],
+            "light": {
+              "frac": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 1101824,
+                  "y": 4999954223616
+                }
+              },
+              "paint": {
+                "light": "<binary>",
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 0,
+                  "y": 70368744177664
+                }
+              }
+            },
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#2255aa",
+                "id": "s1",
+                "layerId": "paint",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.13333333333333333,
+                    0.3333333333333333,
+                    0.6666666666666666
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 6,
+                    "y": 10
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 40,
+                    "y": 14
+                  }
+                ],
+                "seed": 71,
+                "steps": [
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#cc3311",
+                "id": "s2",
+                "layerId": "paint",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.8,
+                    0.2,
+                    0.06666666666666667
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 2
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 30
+                  }
+                ],
+                "seed": 72,
+                "steps": [
+                  0,
+                  0
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "wetEvents": [
+              {
+                "at": "0.25",
+                "clock": 0,
+                "data": {
+                  "angle": 30,
+                  "direction": 0
+                },
+                "kind": "tilt"
+              },
+              {
+                "at": 0.75,
+                "clock": 0,
+                "kind": "dry"
+              },
+              {
+                "at": true,
+                "clock": 0,
+                "data": {
+                  "angle": 10,
+                  "direction": 90
+                },
+                "kind": "tilt"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-load-edge-cases.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "6d3b9cd9101f92d074b9b1cbf450057ac30115d18fc735262a82ad36b04b6620",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

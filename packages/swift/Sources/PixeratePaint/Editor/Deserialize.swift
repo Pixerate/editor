@@ -218,28 +218,43 @@ func readGenerator(_ raw: JSONValue?) -> JSONObject? {
  * and base64-encoded. Data that cannot be read leaves the surface 8-bit and is reported.
  */
 func decodeDeepSurface(_ surface: TiledSurface, _ raw: JSONValue?, _ problems: inout [String], _ label: String) -> TiledSurface {
-    guard let d = raw?.objectValue else { return surface }
+    // `!d || typeof d !== 'object'`: an array is an object too (and has no depth).
+    let d: JSONObject
+    switch raw {
+    case .object(let o)?: d = o
+    case .array?: d = [:]
+    default: return surface
+    }
     do {
+        // `d.width > 0 && d.height > 0` compare numbers, so a text, boolean or one-element-array size passes.
         guard case .number(let depthValue)? = d["depth"], depthValue == 16 || depthValue == 32,
-              case .number(let width)? = d["width"], case .number(let height)? = d["height"], width > 0, height > 0,
-              // A fractional or text size could only match a crafted sample count; TS would write it at fractional offsets.
-              width.rounded(.towardZero) == width, height.rounded(.towardZero) == height, width * height <= 1e9,
-              let x = savedInteger(d["x"]), let y = savedInteger(d["y"]), case .string(let text)? = d["data"]
+              let rawWidth = d["width"], let rawHeight = d["height"],
+              jsToNumber(rawWidth) > 0, jsToNumber(rawHeight) > 0,
+              case .number(let x)? = d["x"], x.isFinite, x.rounded(.towardZero) == x,
+              case .number(let y)? = d["y"], y.isFinite, y.rounded(.towardZero) == y,
+              case .string(let text)? = d["data"]
         else { throw PaintEditorError("malformed") }
-        let n = Int(width) * Int(height) * surface.channels
+        let width = jsToNumber(rawWidth), height = jsToNumber(rawHeight)
+        let channels = Double(surface.channels)
+        let n: Double = width * height * channels
         let size = depthValue == 16 ? 2 : 4
-        let bytes = try inflate(try base64ToBytes(text), maxOutput: n * size)
-        if bytes.count != n * size { throw PaintEditorError("wrong length") }
+        let byteCount: Double = n * Double(size)
+        // Only a whole sample count can match the inflated length and read every sample (`getUint16` /
+        // `getFloat32` past the end throws for a fractional one).
+        guard n.rounded(.towardZero) == n, byteCount <= 9_007_199_254_740_992 else { throw PaintEditorError("wrong length") }
+        let bytes = try inflate(try base64ToBytes(text), maxOutput: Int(byteCount))
+        if Double(bytes.count) != byteCount { throw PaintEditorError("wrong length") }
+        let count = Int(n)
         let samples: DeepSamples
         if size == 2 {
-            samples = .u16((0 ..< n).map { (i: Int) -> UInt16 in
+            samples = .u16((0 ..< count).map { (i: Int) -> UInt16 in
                 let lo: UInt16 = UInt16(bytes[2 * i])
                 let hi: UInt16 = UInt16(bytes[2 * i + 1])
                 return lo | (hi << 8)
             })
         } else {
             // Typed steps: one long `|`/`<<` chain hits the type-checker time limit on CI.
-            samples = .f32((0 ..< n).map { (i: Int) -> Float in
+            samples = .f32((0 ..< count).map { (i: Int) -> Float in
                 let b0: UInt32 = UInt32(bytes[4 * i])
                 let b1: UInt32 = UInt32(bytes[4 * i + 1]) << 8
                 let b2: UInt32 = UInt32(bytes[4 * i + 2]) << 16
@@ -247,10 +262,21 @@ func decodeDeepSurface(_ surface: TiledSurface, _ raw: JSONValue?, _ problems: i
                 return Float(bitPattern: b0 | b1 | b2 | b3)
             })
         }
-        return writeDeepRegion(surface, RasterRect(x: x, y: y, width: Int(width), height: Int(height)), samples)
+        // `{ x: d.x, y: d.y, width: d.width, height: d.height }` as `writeDeepRegion` reads it.
+        let xEnd = jsPlus(x, rawWidth)
+        let yEnd = jsPlus(y, rawHeight)
+        return try writeDeepRegionUnchecked(surface, x: x, y: y, width: width, height: height, xEnd: xEnd, yEnd: yEnd, samples)
     } catch {
         problems.append("\(label): its \(jsTemplate(d["depth"]))-bit samples could not be read, so it was opened at 8 bits")
         return surface
+    }
+}
+
+/// `x + v` for a number `x` and a saved value: a string or array concatenates (`6 + "2"` is `"62"`), read back as `Number()`.
+private func jsPlus(_ x: Double, _ v: JSONValue) -> Double {
+    switch v {
+    case .string, .array, .object: return (jsText(x) + jsTemplate(v)).jsToNumber
+    default: return x + jsToNumber(v)
     }
 }
 
