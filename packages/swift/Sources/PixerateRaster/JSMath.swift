@@ -487,6 +487,76 @@ public enum JS {
         }
     }
 
+    /// `Math.tan` (fdlibm `s_tan.c` as V8 ports it; the platform's `tan` differs in the last bit).
+    public static func tan(_ x: Double) -> Double {
+        let ix = hi(x) & 0x7FFF_FFFF
+        if ix <= 0x3FE9_21FB { return kernelTan(x, 0, 1) }
+        if ix >= 0x7FF0_0000 { return x - x }
+        var y0 = 0.0, y1 = 0.0
+        let n = remPio2(x, &y0, &y1)
+        return kernelTan(y0, y1, 1 - Int((n & 1) << 1))
+    }
+
+    private static let tanT: [Double] = [
+        3.33333333333334091986e-01, 1.33333333333201242699e-01, 5.39682539762260521377e-02, 2.18694882948595424599e-02,
+        8.86323982359930005737e-03, 3.59207910759131235356e-03, 1.45620945432529025516e-03, 5.88041240820264096874e-04,
+        2.46463134818469906812e-04, 7.81794442939557092300e-05, 7.14072491382608190305e-05, -1.85586374855275456654e-05,
+        2.59073051863633712884e-05,
+    ]
+
+    /// fdlibm `__kernel_tan`: tan(x + y) for |x| ≤ π/4, or -1/tan(x + y) when `iy` is -1.
+    private static func kernelTan(_ xIn: Double, _ yIn: Double, _ iy: Int) -> Double {
+        let pio4 = 7.85398163397448278999e-01
+        let pio4lo = 3.06161699786838301793e-17
+        let T = tanT
+        var x = xIn
+        var y = yIn
+        let hx = hi(x)
+        let ix = hx & 0x7FFF_FFFF
+        if ix < 0x3E30_0000 && Int(x.rounded(.towardZero)) == 0 {
+            if (UInt32(bitPattern: ix) | lo(x)) == 0 && iy == -1 { return 1 / Swift.abs(x) }
+            if iy == 1 { return x }
+            let w = x + y
+            let z = withLow(w, 0)
+            let v = y - (z - x)
+            let a = -1 / w
+            let t = withLow(a, 0)
+            let s = fma(t, z, 1)
+            return fma(a, fma(t, v, s), t)
+        }
+        if ix >= 0x3FE5_9428 {
+            if hx < 0 {
+                x = -x
+                y = -y
+            }
+            let z = pio4 - x
+            let w = pio4lo - y
+            x = z + w
+            y = 0
+        }
+        let z = x * x
+        let w = z * z
+        var r = fma(w, fma(w, fma(w, fma(w, fma(w, T[11], T[9]), T[7]), T[5]), T[3]), T[1])
+        let v0 = z * fma(w, fma(w, fma(w, fma(w, fma(w, T[12], T[10]), T[8]), T[6]), T[4]), T[2])
+        let s = z * x
+        r = fma(z, fma(s, r + v0, y), y)
+        r = fma(T[0], s, r)
+        let sum = x + r
+        if ix >= 0x3FE5_9428 {
+            let v = Double(iy)
+            let sign = Double(1 - ((hx >> 30) & 2))
+            let q: Double = sum * sum / (sum + v) - r
+            return sign * (v - 2.0 * (x - q))
+        }
+        if iy == 1 { return sum }
+        let zz = withLow(sum, 0)
+        let v = r - (zz - x)
+        let a = -1.0 / sum
+        let t = withLow(a, 0)
+        let s2 = fma(t, zz, 1.0)
+        return fma(a, fma(t, v, s2), t)
+    }
+
     private static func kernelSin(_ x: Double, _ y: Double, _ iy: Int) -> Double {
         let half = 5.00000000000000000000e-01
         let S1 = -1.66666666666666324348e-01

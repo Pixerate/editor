@@ -41,7 +41,7 @@ let package = Package(
         .target(name: "PixerateRaster", dependencies: ["PixerateCore"], path: "packages/swift/Sources/PixerateRaster", swiftSettings: settings),
         // The paint editor (`paint-editor`, `paint` and `brushes` in the TS core) on the raster module.
         // `Generated/` is written by scripts/gen-swift.mjs from the paint contracts.
-        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateConformance", "PixerateWetKernel"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
+        .target(name: "PixeratePaint", dependencies: ["PixerateCore", "PixerateContracts", "PixerateRaster", "PixerateGeometry", "PixerateConformance", "PixerateWetKernel"], path: "packages/swift/Sources/PixeratePaint", swiftSettings: settings),
         // The wet-media step on four cells at a time, in C with clang vector extensions (the Swift
         // compiler made the same SIMD code lane by lane). Bit-exact with `wetStepSlot`; used by
         // `PixeratePaint` only.

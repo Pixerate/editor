@@ -103,6 +103,7 @@ private func serializeLayer(_ layer: RasterLayer, _ ctx: inout SerializeContext,
     var out: JSONObject = ["id": .string(layer.id), "name": .string(layer.name), "visible": .bool(layer.visible), "opacity": .number(layer.opacity), "blend": .string(layer.blend.rawValue)]
     if layer.clipped { out["clipped"] = true }
     if let mask = layer.mask { out["mask"] = .object(serializeMask(mask, "\(layer.id)-mask", &ctx)) }
+    if let vm = layer.vectorMask { out["vectorMask"] = .object(serializeVectorMask(vm)) }
     let locks = locksJSON(layer.locks)
     if locks.contains(where: { $0.value == .bool(true) }) { out["locks"] = .object(locks) }
     if let e = layer.effects { out["effects"] = serializeEffects(e) } else if let e = effects(layer) { out["effects"] = e }

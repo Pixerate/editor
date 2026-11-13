@@ -178,7 +178,7 @@ private func deserializeEffects(_ raw: JSONValue?) -> LayerEffects? {
 }
 
 /// The image editor's layer kinds the paint editor does not have.
-private let IMAGE_ONLY_TYPES: Set<String> = ["adjustment", "annotation", "shape", "type", "smart"]
+private let IMAGE_ONLY_TYPES: Set<String> = ["adjustment", "smart"]
 
 /// The adjustment layer kinds the image editor reads (`ADJUSTMENT_KINDS`).
 private let ADJUSTMENT_KINDS: Set<String> = ["curves", "levels", "hueSaturation", "vibrance", "colorBalance", "blackWhite", "photoFilter", "invert", "posterize", "threshold"]
@@ -255,13 +255,22 @@ func decodeDeepSurface(_ surface: TiledSurface, _ raw: JSONValue?, _ problems: i
 }
 
 /// A stored layer (`deserializeLayer`), keeping the paint editor's kinds (`paintLayersOnly`).
-private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -> PaintLayer? {
+/// Throws where the TS core's reading throws (an annotation the image editor cannot migrate).
+private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) throws -> PaintLayer? {
     guard let r = raw.objectValue else { return nil }
     let id: String = { if case .string(let s)? = r["id"], !s.isEmpty { return s }; return newPaintLayerId() }()
     let name = r["name"]?.stringValue ?? ""
     let label = "Layer \"\(name.isEmpty ? id : name)\""
     let edge = readEdgeColor(r["edge"])
     let mask = readMask(r["mask"], &ctx, label)
+    var vectorMask: JSONObject?
+    if let vm = r["vectorMask"], vm.objectValue != nil || vm.arrayValue != nil, r["type"] != .string("shape") {
+        do {
+            vectorMask = try readVectorMask(vm)
+        } catch {
+            ctx.problems.append("The vector mask of layer \"\(name.isEmpty ? id : name)\" could not be read (\(errorMessage(error))); it was left out.")
+        }
+    }
     var locks: LayerLocks?
     if let l = r["locks"]?.objectValue {
         var out = LayerLocks()
@@ -293,23 +302,45 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
         if isDocumentSource { ctx.paintOnly.append("Layer \"\(name)\" refers to an image editor source image; it loads empty.") }
         return RasterLayer(
             id: id, name: name, visible: visible, opacity: opacity, blend: .mode(normalizeBlendMode(r["blend"]?.stringValue)), clipped: clipped,
-            mask: mask, locks: locks, effects: effects, edge: edge, generator: readGenerator(r["generator"]),
+            mask: mask, locks: locks, effects: effects, edge: edge, generator: readGenerator(r["generator"]), vectorMask: vectorMask,
             content: .pixel(surface: surface, offset: LayerOffset(x: Int(JS.round(num(offset?["x"], -1e7, 1e7, 0))), y: Int(JS.round(num(offset?["y"], -1e7, 1e7, 0)))), fillOpacity: fill)
         )
     case "group":
-        let children = (r["children"]?.arrayValue ?? []).compactMap { deserializeLayer($0, &ctx) }
+        let children = try (r["children"]?.arrayValue ?? []).compactMap { try deserializeLayer($0, &ctx) }
         let b = r["blend"]?.stringValue
         let blend: GroupBlendMode = b == "pass-through" ? .passThrough : isBlendMode(b) ? .mode(normalizeBlendMode(b)) : .passThrough
         return RasterLayer(
-            id: id, name: name, visible: visible, opacity: opacity, blend: blend, clipped: clipped, mask: mask, locks: locks, effects: effects, edge: edge,
+            id: id, name: name, visible: visible, opacity: opacity, blend: blend, clipped: clipped, mask: mask, locks: locks, effects: effects, edge: edge, vectorMask: vectorMask,
             content: .group(children: children, collapsed: r["collapsed"] == .bool(true) ? true : nil)
         )
     case "adjustment" where !(r["kind"]?.stringValue.map(ADJUSTMENT_KINDS.contains) ?? false):
         // `normalizeAdjustmentLayer` refuses a kind it does not know before `paintLayersOnly` sees the layer.
         ctx.problems.append("\(label): unknown adjustment kind \"\(jsTemplate(r["kind"]))\"")
         return nil
-    case "annotation" where r["annotation"]?.objectValue?["type"]?.stringValue == nil:
-        ctx.problems.append("\(label): annotation is missing")
+    case "annotation":
+        guard let a = r["annotation"]?.objectValue, case .string? = a["type"] else {
+            ctx.problems.append("\(label): annotation is missing")
+            return nil
+        }
+        // Pen, rectangle, ellipse, line, arrow and text annotations load as shape and type layers (`annotationLayerFor`).
+        let migrated = try migratedAnnotationType(a)
+        ctx.paintOnly.append("Layer \"\(name)\" is an image editor \(migrated) layer, which the paint editor does not have; it was left out.")
+        return nil
+    case "shape":
+        if let problem = shapeLayerProblem(r) {
+            ctx.problems.append("\(label): the shape could not be read (\(problem))")
+            return nil
+        }
+        ctx.paintOnly.append("Layer \"\(name)\" is an image editor shape layer, which the paint editor does not have; it was left out.")
+        return nil
+    case "type":
+        if let problem = typeLayerProblem(r) {
+            ctx.problems.append("\(label): the text could not be read (\(problem))")
+            return nil
+        }
+        // Its stored pixels are read (and reported) before the paint editor leaves it out.
+        if case .string? = r["asset"] { _ = readSurface(r["asset"], r["x"], r["y"], channels: 4, defaultValue: 0, &ctx, label) }
+        ctx.paintOnly.append("Layer \"\(name)\" is an image editor type layer, which the paint editor does not have; it was left out.")
         return nil
     case "smart":
         // A paint document has no smart object contents table, so `readContents` finds none.
@@ -327,21 +358,21 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) -
 }
 
 /// A stored layer tree (`deserializeLayers` + `paintLayersOnly`); repeated ids get new ones.
-func deserializePaintLayers(_ raw: JSONValue?, _ ctx: inout LayerReadContext) -> [PaintLayer] {
+func deserializePaintLayers(_ raw: JSONValue?, _ ctx: inout LayerReadContext) throws -> [PaintLayer] {
     guard let list = raw?.arrayValue else { return [] }
     var seen = Set<String>()
     func dedupe(_ layers: [PaintLayer]) -> [PaintLayer] {
         layers.map { l in
             var next = l
             if seen.contains(l.id) {
-                next = RasterLayer(id: newPaintLayerId(), name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, clipped: l.clipped, mask: l.mask, locks: l.locks, effects: l.effects, edge: l.edge, temporary: l.temporary, generator: l.generator, content: l.content)
+                next = RasterLayer(id: newPaintLayerId(), name: l.name, visible: l.visible, opacity: l.opacity, blend: l.blend, clipped: l.clipped, mask: l.mask, locks: l.locks, effects: l.effects, edge: l.edge, temporary: l.temporary, generator: l.generator, vectorMask: l.vectorMask, content: l.content)
             }
             seen.insert(next.id)
             if let children = next.children { next = next.withChildren(dedupe(children)) }
             return next
         }
     }
-    let out = dedupe(list.compactMap { deserializeLayer($0, &ctx) })
+    let out = dedupe(try list.compactMap { try deserializeLayer($0, &ctx) })
     ctx.problems += ctx.paintOnly
     ctx.paintOnly = []
     return out
@@ -391,7 +422,7 @@ private func readDocument(_ r: JSONObject, _ assets: JSONObject, _ problemsIn: [
     var ctx = LayerReadContext(assets: assets, problems: problemsIn)
     let canvas = try normalizeCanvas(width: r["width"]?.numberValue, height: r["height"]?.numberValue, dpi: r["dpi"]?.numberValue)
     let paper = normalizePaper(r["paper"]?.objectValue ?? JSONObject())
-    let layers = deserializePaintLayers(r["layers"], &ctx)
+    let layers = try deserializePaintLayers(r["layers"], &ctx)
     var problems = ctx.problems
     let pixelIds = flattenLayers(layers).filter(\.isPixel).map(\.id)
     let activeLayerId: String? = {

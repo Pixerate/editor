@@ -21,6 +21,42 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core] The TS "Reopens What It Saved Unchanged" Check Cannot Fail
+
+- **Issue / Symptom**: In `tests/paint-conformance.test.ts`, the `… reopens what it saved unchanged` tests pass even when the save after reopening differs, while Swift's `RoundTripHost` (in `PaintConformanceTests`) fails on the same scenario.
+- **Root Cause**: The test runs its `expect`s inside the wrapped `host.load`, and `runConformanceScenario` catches whatever `host.load` throws as a refused document (`{ error }`). The assertion error is swallowed, and that test never compares `loaded`. Not fixed yet.
+- **Solution / Workaround**: Trust Swift's round-trip check, or move the TS comparison out of `host.load` (record the mismatch, assert after `runConformanceScenario`). Until then, check new reload steps in Swift.
+
+### [core|swift/paint] SVG Path Data in a Vector Mask Loses Its Anchor Types After Reopening
+
+- **Issue / Symptom**: A vector mask stored as SVG path data saves anchors with an inferred `type` (`symmetric`, `smooth`), and a merged closing anchor with `out` before `in`. Reopening that save and saving again drops the types, and writes `in` before `out`.
+- **Root Cause**: `normalizeSubpaths` builds anchors from `{ x, y, in?, out?, corner? }` only; `bezierToSubpaths` adds `type`, and the closing merge sets `first.in` after `first.out`. A TS core quirk that the Swift port matches.
+- **Solution / Workaround**: `document-load-vector-layers` opens the SVG-path masks in a step that is not reloaded. Keep any curved, path-based vector mask out of scenarios with a `reload` step, or Swift's round-trip check fails.
+
+### [core|swift/paint] One Malformed Pen or Text Annotation Layer Refuses the Whole Paint Document
+
+- **Issue / Symptom**: Opening a paint document (or an image editor one) with an annotation layer that is a pen without `points`, or a text annotation whose `text` is not a string, throws a bare `TypeError` (`Cannot read properties of undefined (reading 'length')`, `a.points.map is not a function`, `t.text.replace is not a function`) and nothing loads, while every other damaged layer is left out and reported. Inside a shape layer the same pen annotation is reported as `the shape could not be read (…)`.
+- **Root Cause**: `deserializeLayer` migrates annotation layers with `annotationLayerFor` outside any `try`; `shapeFromAnnotation` reads `a.points.length` / `a.points.map` and `typeFromAnnotation` calls `t.text.replace` without checking types. `readShape` calls `shapeFromAnnotation` inside its `try`. A TS core bug, not fixed yet.
+- **Solution / Workaround**: The Swift port matches it (`checkPenPoints`, `typeFromAnnotationReadable` in `ImageLayers.swift` throw V8's messages, which name the TS source's variables as the unminified build keeps them). If the TS core starts checking these, change both and re-record `document-load-vector-layers`.
+
+### [core|swift/paint] The Image Editor Reads `constructor` and `__proto__` as Colours
+
+- **Issue / Symptom**: A shape layer filled with `"constructor"` or a type layer style with `color: "Constructor"` passes the image editor's checks (its hex becomes `#function Object() { [native code] }`); annotations with those colours stay annotations only because `parseEffectColor` then refuses the hex.
+- **Root Cause**: `parseCssColor` in `image-editor/layers/css-color.ts` looks the lowercased text up in a plain object (`NAMED[text]`), which also finds inherited `Object.prototype` members. Only the all-lowercase ones can match. A TS core bug (see the `Object.prototype` entry below), not fixed yet.
+- **Solution / Workaround**: Swift's `imageCssColor` matches it. Fix it in TS with `Object.hasOwn(NAMED, text)`, then drop the two special cases in Swift and re-record.
+
+### [swift] `Foundation.tan` Differs From V8's `Math.tan` in the Last Bit
+
+- **Issue / Symptom**: A transformed rectangle with radii in a vector mask saved handles one ulp away from the TS core (`6.895430500338413` against `6.8954305003384135`).
+- **Root Cause**: V8 computes `Math.tan` with fdlibm's `__kernel_tan` (with fused multiply-adds, as clang builds it on arm64); the platform's `tan` rounds differently, for example at π/8, which every 90° live corner uses.
+- **Solution / Workaround**: Use `JS.tan` (`PixerateRaster/JSMath.swift`, bit-exact with Node on 20 000 random arguments). `PixerateVector`'s `Corners.swift` still calls `Foundation.tan` for smoothed and round corners; switch it when a vector scenario needs exact corner handles.
+
+### [swift/paint] The Paint Module Keeps Its Own Copy of the Live-Shape Geometry
+
+- **Issue / Symptom**: Reading vector masks needs `liveShapeSubpaths`, live corners and SVG path data → anchors, which `PixerateVector` already ports, but `PixeratePaint` cannot import it.
+- **Root Cause**: `PixerateVector` depends on `PixeratePaint` (brushstrokes, effects, conformance), so the reverse import is a cycle.
+- **Solution / Workaround**: `ImageLayers.swift` ports the parts a vector mask needs on JSON (rectangles with radii, ellipses, polygons, stars, lines with arrowheads, round corners on straight sides, `bezierToSubpaths` over `PixerateGeometry.toBezierPath`). A change to `vector/geometry.ts`, `vector/corners.ts` or `layers/shape.ts` `liveShapeSubpaths` needs both ports; `document-load-vector-layers` checks this one.
+
 ### [swift/paint] The Paint Document's `revision` Counts Emits, and Swift's `doc` Emits on Every Assignment
 
 - **Issue / Symptom**: `get_paint_document` / `load_paint_document` return a `revision` that must match the TS recording. Bumping the Swift controller's `documentRevision` after `doc = next` (where the TS core writes `this.docRevision++`) leaves every change one revision late.

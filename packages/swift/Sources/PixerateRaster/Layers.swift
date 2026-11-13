@@ -162,9 +162,13 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
     /// An image editor pixel layer's effect generator (`{ effect, provider?, name?, values, time?, animate? }`):
     /// carried and saved, not drawn by the paint editor.
     public let generator: JSONObject?
+    /// An image editor vector mask (`VectorMask`: `{ components, fillRule?, inverted?, enabled?,
+    /// linked?, density?, feather?, edges? }`, normalised when read): carried and saved, not drawn by
+    /// the paint editor.
+    public let vectorMask: JSONObject?
     public let content: Content
 
-    public init(id: String, name: String = "", visible: Bool = true, opacity: Double = 1, blend: GroupBlendMode = .mode(.normal), clipped: Bool = false, mask: RasterMask? = nil, locks: LayerLocks? = nil, effects: LayerEffects? = nil, edge: LayerEdgeColor? = nil, temporary: Bool? = nil, generator: JSONObject? = nil, content: Content) {
+    public init(id: String, name: String = "", visible: Bool = true, opacity: Double = 1, blend: GroupBlendMode = .mode(.normal), clipped: Bool = false, mask: RasterMask? = nil, locks: LayerLocks? = nil, effects: LayerEffects? = nil, edge: LayerEdgeColor? = nil, temporary: Bool? = nil, generator: JSONObject? = nil, vectorMask: JSONObject? = nil, content: Content) {
         self.id = id
         self.name = name
         self.visible = visible
@@ -177,6 +181,7 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
         self.edge = edge
         self.temporary = temporary
         self.generator = generator
+        self.vectorMask = vectorMask
         self.content = content
     }
 
@@ -195,7 +200,7 @@ public final class RasterLayer: RasterNode, @unchecked Sendable {
         RasterLayer(
             id: id, name: name, visible: visible ?? self.visible, opacity: opacity ?? self.opacity, blend: blend ?? self.blend,
             clipped: clipped ?? self.clipped, mask: mask ?? self.mask, locks: locks, effects: effects ?? self.effects,
-            edge: edge ?? self.edge, temporary: temporary, generator: generator, content: content ?? self.content
+            edge: edge ?? self.edge, temporary: temporary, generator: generator, vectorMask: vectorMask, content: content ?? self.content
         )
     }
 
