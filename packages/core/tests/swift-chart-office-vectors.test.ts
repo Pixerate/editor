@@ -482,6 +482,7 @@ async function officeVector(c: OfficeCase) {
 
 const SPECS: unknown[] = [
   { type: "bar", title: "Revenue", categories: ["Q1", "Q2"], series: [{ name: "North", values: [3, 5] }] },
+  { type: "bar", title: "3-D", categories: ["Q1", "Q2"], series: [{ name: "North", values: [3, 5] }], view3d: { azimuth: 30, elevation: 20, depth: 2 } },
   {
     type: "bar",
     title: "R&\u0301D <costs> \"quoted\"",
@@ -514,6 +515,11 @@ const XMLS: { name: string; xml: string }[] = [
   { name: "waterfall chartex", xml: waterfallXml },
   { name: "bom and declaration", xml: `${BOM}<?xml version="1.0"?><!-- c --><!DOCTYPE x><c:chartSpace xmlns:c="${C}"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>x</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>` },
   { name: "malformed", xml: `<c:chartSpace xmlns:c="${C}"><c:chart></c:chartSpace>` },
+  // 3-D charts (#795): bar, line and area keep their view; pie is drawn flat; below the floor is noted.
+  { name: "3-D bar default view", xml: `<c:chartSpace xmlns:c="${C}"><c:chart><c:plotArea><c:bar3DChart><c:barDir val="bar"/><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>3</c:v></c:pt></c:numLit></c:val></c:ser></c:bar3DChart></c:plotArea></c:chart></c:chartSpace>` },
+  { name: "3-D line turned", xml: `<c:chartSpace xmlns:c="${C}"><c:chart><c:view3D><c:rotX val="30"/><c:rotY val="-40"/><c:depthPercent val="250"/></c:view3D><c:plotArea><c:line3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>3</c:v></c:pt></c:numLit></c:val></c:ser></c:line3DChart></c:plotArea></c:chart></c:chartSpace>` },
+  { name: "3-D area below the floor", xml: `<c:chartSpace xmlns:c="${C}"><c:chart><c:view3D><c:rotX val="-20"/><c:rotY val="725"/><c:depthPercent val="5"/></c:view3D><c:plotArea><c:area3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>3</c:v></c:pt></c:numLit></c:val></c:ser></c:area3DChart></c:plotArea></c:chart></c:chartSpace>` },
+  { name: "3-D pie", xml: `<c:chartSpace xmlns:c="${C}"><c:chart><c:plotArea><c:pie3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numLit><c:ptCount val="2"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>3</c:v></c:pt></c:numLit></c:val></c:ser></c:pie3DChart></c:plotArea></c:chart></c:chartSpace>` },
   { name: "not a chart", xml: `<worksheet/>` },
   { name: "empty", xml: "" },
   { name: "text only", xml: "just text" },

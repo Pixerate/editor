@@ -740,6 +740,34 @@
           "maximum": 30,
           "description": "Bar race: how many bars each moment shows (default 10)."
         },
+        "view3d": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "azimuth": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 360,
+              "description": "Turn around the vertical axis, in degrees."
+            },
+            "elevation": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 90,
+              "description": "Height of the eye above the floor, in degrees."
+            },
+            "depth": {
+              "type": "number",
+              "minimum": 0.2,
+              "maximum": 20,
+              "description": "Depth of the bars and ribbons, in bar widths."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Bar, line and area drawn in 3-D, seen at these angles; missing fields keep their value or take Office's defaults. null goes back to flat. Rendered in 3-D by hosts using @pixerate/editor/three, else flat."
+        },
         "sankeyNodes": {
           "type": "array",
           "items": {

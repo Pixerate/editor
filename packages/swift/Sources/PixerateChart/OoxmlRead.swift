@@ -630,14 +630,20 @@ public func chartFromOoxml(_ xml: String) -> ChartOoxmlReadResult {
     var orientation: ChartOrientation = .vertical
     var dataLabels = false
     var points = false
+    var view3d = false
 
     for g in groups {
         let name = g.localName
         let grouping = val(g, "grouping") ?? "clustered"
         let type: ChartType
+        // Bar, line and area charts keep their 3-D view (#795); other 3-D charts are drawn flat.
         if name.contains("3D") {
-            let flatName = name.replacingOccurrences(of: "3DChart", with: "")
-            unsupported.append("3-D \(flatName) chart (drawn flat)")
+            if ["bar3DChart", "line3DChart", "area3DChart"].contains(name) {
+                view3d = true
+            } else {
+                let flatName = name.replacingOccurrences(of: "3DChart", with: "")
+                unsupported.append("3-D \(flatName) chart (drawn flat)")
+            }
         }
         switch name {
         case "barChart", "bar3DChart":
@@ -840,6 +846,23 @@ public func chartFromOoxml(_ xml: String) -> ChartOoxmlReadResult {
     input["categories"] = .array(finalCats.map(JSONValue.string))
     input["stacking"] = .string(stacking.rawValue)
     input["orientation"] = .string(orientation.rawValue)
+    if view3d {
+        // Office's view: rotY (turn, 0–360), rotX (eye height; negative is below the floor), depthPercent.
+        let v = kid(chart, "view3D")
+        func num(_ name: String) -> Double? {
+            guard let n = val(v, name).map({ $0.jsToNumber }), n.isFinite else { return nil }
+            return n
+        }
+        let rotY = num("rotY")
+        let rotX = num("rotX")
+        let depthPercent = num("depthPercent")
+        input["view3d"] = .object(JSONObject([
+            ("azimuth", .number(rotY.map { ($0.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360) } ?? 20)),
+            ("elevation", .number(rotX.map { JS.max(0, JS.min(90, $0)) } ?? 15)),
+            ("depth", .number(depthPercent.map { JS.max(0.2, JS.min(20, $0 / 100)) } ?? 1))
+        ]))
+        if let rotX, rotX < 0 { unsupported.append("a 3-D view from below the floor (drawn from floor level)") }
+    }
     input["dataLabels"] = .bool(dataLabels)
     input["points"] = .bool(points || first != .line)
     if bool(val(groups[0], "varyColors")) && !combo && isCartesianChart(first) && series.count == 1 {

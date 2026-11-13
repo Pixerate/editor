@@ -145,7 +145,8 @@ export const CHART_DOCUMENT_JSON_SCHEMA: JsonSchema = {
 			type: 'object',
 			description: 'The chart (`ChartSpec`, as get_chart returns it in `spec`).',
 			properties: CHART_SPEC_PROPERTIES,
-			required: Object.keys(CHART_SPEC_PROPERTIES),
+			// `view3d` is left out of a flat chart's document (#795).
+			required: Object.keys(CHART_SPEC_PROPERTIES).filter((k) => k !== 'view3d'),
 			additionalProperties: false
 		}
 	},

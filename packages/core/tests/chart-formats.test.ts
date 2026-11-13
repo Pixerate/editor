@@ -202,12 +202,26 @@ describe("Office (OOXML) charts", () => {
   });
 
   it("names what it cannot hold and refuses what is not a chart", () => {
-    const threeD = chartFromOoxml(c(`<c:plotArea><c:bar3DChart><c:barDir val="col"/><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1])}</c:numRef></c:val></c:ser></c:bar3DChart></c:plotArea>`));
+    const threeD = chartFromOoxml(c(`<c:plotArea><c:pie3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1])}</c:numRef></c:val></c:ser></c:pie3DChart></c:plotArea>`));
     expect(threeD.lossless).toBe(false);
-    expect(threeD.unsupported).toEqual(["3-D bar chart (drawn flat)"]);
+    expect(threeD.unsupported).toEqual(["3-D pie chart (drawn flat)"]);
+    expect(threeD.spec.view3d).toBeUndefined();
     const stock = chartFromOoxml(c(`<c:plotArea><c:stockChart/></c:plotArea>`));
     expect(stock.issues[0].message).toBe("The chart type is not supported: stock chart.");
     expect(chartFromOoxml("<not-a-chart/>").issues[0].message).toMatch(/not a chart part/);
+  });
+
+  it("keeps the 3-D view of bar, line and area charts (#795)", () => {
+    const bar = chartFromOoxml(c(`<c:plotArea><c:bar3DChart><c:barDir val="col"/><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1])}</c:numRef></c:val></c:ser></c:bar3DChart></c:plotArea>`));
+    expect(bar).toMatchObject({ lossless: true, unsupported: [] });
+    expect(bar.spec.view3d).toEqual({ azimuth: 20, elevation: 15, depth: 1 });
+    const turned = chartFromOoxml(c(`<c:view3D><c:rotX val="30"/><c:rotY val="-40"/><c:depthPercent val="250"/></c:view3D><c:plotArea><c:line3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1, 2])}</c:numRef></c:val></c:ser></c:line3DChart></c:plotArea>`));
+    expect(turned.spec).toMatchObject({ type: "line", view3d: { azimuth: 320, elevation: 30, depth: 2.5 } });
+    const below = chartFromOoxml(c(`<c:view3D><c:rotX val="-20"/></c:view3D><c:plotArea><c:area3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1, 2])}</c:numRef></c:val></c:ser></c:area3DChart></c:plotArea>`));
+    expect(below.spec.view3d?.elevation).toBe(0);
+    expect(below.unsupported).toEqual(["a 3-D view from below the floor (drawn from floor level)"]);
+    // Writing it back is flat, and says so.
+    expect(chartToOoxml(bar.spec).issues).toContain("The 3-D view is not written: the chart is saved flat.");
   });
 
   it("says what it could not write", () => {
