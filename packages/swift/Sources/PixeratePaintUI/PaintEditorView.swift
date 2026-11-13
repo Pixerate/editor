@@ -8,7 +8,9 @@ import SwiftUI
  * view tilt), layers (with light spill and the stroke layer's
  * strokes), layer styles and wet paint on the right. Wet paint keeps flowing: the view ticks the
  * simulation every frame (`runWetClock`), living biopaint grows live (`runCultureClock`), and
- * live effect paint plays (`runEffectClock`). With an effects provider registered, an Effects tab
+ * live effect paint plays (`runEffectClock`). Light / dark paint follows the system appearance
+ * (`followsColorScheme`), pixel layers repainted for it in the background (`runSchemeReplayClock`).
+ * With an effects provider registered, an Effects tab
  * puts provider effects on the paper, layers and brush (`PaintProviderEffectsPanel`); with the
  * `author` policy it also writes effects in the effect authoring editor, shown as a sheet.
  * Agents drive the same editor through `model.registry`.
@@ -19,11 +21,15 @@ public struct PaintEditorView: View {
     private let sideWidth: CGFloat
     /// Follow device tilt (gyroscope on iPhone / iPad) to shift `viewTilt` for thin-film iridescence.
     private let deviceTilt: Bool
+    /// Show light / dark paint in the system appearance (`model.setColorScheme`); false leaves the scheme to the host.
+    private let followsColorScheme: Bool
+    @Environment(\.colorScheme) private var appearance
 
-    public init(model: PaintEditorModel, sideWidth: CGFloat = 250, deviceTilt: Bool = false) {
+    public init(model: PaintEditorModel, sideWidth: CGFloat = 250, deviceTilt: Bool = false, followsColorScheme: Bool = true) {
         self.model = model
         self.sideWidth = sideWidth
         self.deviceTilt = deviceTilt
+        self.followsColorScheme = followsColorScheme
     }
 
     public var body: some View {
@@ -86,5 +92,10 @@ public struct PaintEditorView: View {
         }
         .task { await model.runCultureClock() }
         .task { await model.runEffectClock() }
+        // Light / dark paint on pixel layers is replayed for the scheme in the background.
+        .task { await model.runSchemeReplayClock() }
+        .onChange(of: appearance, initial: true) { (_: ColorScheme, next: ColorScheme) in
+            if followsColorScheme { model.setColorScheme(next == .dark ? "dark" : "light") }
+        }
     }
 }

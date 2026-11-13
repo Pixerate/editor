@@ -189,7 +189,7 @@ extension PaintEditorController {
             }
         }
         // Thick paint lit, light paint glowing, and each layer's spill as a Linear Dodge (Add) layer above it.
-        let driedBase = driedLayers(doc.layers)
+        let driedBase = driedLayers(schemeLayers(doc.layers), scheme: true)
         let backlight = backlightLayer(driedBase, baseIsCommitted: wet.wetLayerIds().isEmpty, liveThick: nil)
         let layers = toStandard(lightLayers(litLayers(driedBase)) + (backlight.map { [$0] } ?? []))
         var result = try PixerateRaster.exportPsd(width: w, height: h, layers: [paperLayer] + layers, merged: merged, resolution: doc.canvas.dpi)

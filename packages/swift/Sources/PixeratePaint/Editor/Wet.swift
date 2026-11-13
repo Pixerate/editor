@@ -487,6 +487,8 @@ public struct WetEvent: Equatable {
     /// does not model, an `at` that is not an integer), so it is written back with only the fields
     /// changed since (a canvas resize moving `data`) set over it, as `{ ...e, data }` does.
     var saved: JSONObject?
+    /// Which event object this is (the TS core tells logged events apart by object identity: a scheme replay's log).
+    var key = newStrokeKey()
 
     /// Equal when they save the same (a saved event equals one built with the same fields and nothing else).
     public static func == (a: WetEvent, b: WetEvent) -> Bool { a.json == b.json }

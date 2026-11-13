@@ -196,6 +196,29 @@ public final class PaintEditorModel {
     /// The layer stack, top first, as `list_layers` reports it.
     public var layers: [PaintLayerInfo] { track(); return controller.listLayers() }
     public var activeLayer: PaintLayerInfo? { layers.first(where: \.active) }
+    /// The colour scheme light / dark paint shows in (`setColorScheme`; `PaintEditorView` follows the system appearance).
+    public var colorScheme: String { track(); return controller.currentColorScheme }
+    /// How layers with light / dark paint show it in the colour scheme (`colorSchemeView()`; the layers panel marks kept and updating layers).
+    public var colorSchemeView: PaintColorSchemeView { track(); return controller.colorSchemeView() }
+
+    /// Shows light / dark paint in `scheme` ("light" or "dark"). View only: the document, history and saved file don't change.
+    public func setColorScheme(_ scheme: String) { controller.setColorScheme(scheme) }
+
+    /**
+     * Runs the colour scheme's replay (light / dark paint on pixel layers, rebuilt from the stroke
+     * log) whenever it has work, about 8 ms at a time and then a frame for the view, until the task is
+     * cancelled (the editor view runs it).
+     */
+    public func runSchemeReplayClock() async {
+        controller.schemeReplayFrameMs = 8
+        while !Task.isCancelled {
+            if controller.schemeReplayPending {
+                await controller.runSchemeReplay()
+            } else {
+                try? await Task.sleep(nanoseconds: 16_000_000)
+            }
+        }
+    }
     /// The active layer's strokes when it is a stroke layer, else nil.
     public var liveStrokes: [RecordedStroke]? {
         track()

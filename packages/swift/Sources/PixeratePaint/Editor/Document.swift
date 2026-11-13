@@ -37,6 +37,8 @@ public struct PaintEvent: Equatable {
     /// The object a saved event was read from: TS keeps saved events verbatim (other fields, a
     /// `data` that is not an object), so it is written back with only the fields changed since set over it.
     var saved: JSONObject?
+    /// Which event object this is (the TS core tells logged events apart by object identity: a scheme replay's log).
+    var key = newStrokeKey()
 
     public static func == (a: PaintEvent, b: PaintEvent) -> Bool { a.at == b.at && a.kind == b.kind && a.layerId == b.layerId && a.data == b.data }
 
@@ -120,6 +122,14 @@ public final class PaintDocumentState {
     public var wetEvents: [WetEvent]?
     /// Time-machine ageing setting persisted with the document.
     public var age: PaintAgeSettings?
+    /**
+     * Pixel layers holding pixels the stroke log doesn't have (imported, merged, moved or transformed
+     * pixels…), each with the change that put them there. A replay can't rebuild these layers, so
+     * they keep the side of a dual colour they were painted in whatever the colour scheme (#720).
+     * Kept by the editor on every commit; saved (extension `unlogged`) with documents that hold
+     * dual-colour strokes.
+     */
+    public var unlogged: OrderedMap<String, String>?
 
     public init(canvas: PaintCanvas, paper: PaperSettings, layers: [PaintLayer], activeLayerId: String?, strokes: [RecordedStroke]) {
         self.canvas = canvas
@@ -152,6 +162,7 @@ public final class PaintDocumentState {
         d.thick = thick
         d.wetEvents = wetEvents
         d.age = age
+        d.unlogged = unlogged
         change(d)
         return d
     }

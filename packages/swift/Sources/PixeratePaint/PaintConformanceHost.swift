@@ -7,7 +7,7 @@ import PixerateCore
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
  * envelope) and the composited pixels. Wet paint runs with the GPU engine off, as in the TS host. `setup` is the scenario's editor options (`width`,
- * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`), and the house style
+ * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`, `colorScheme`), and the house style
  * (`style`, `brushStyle`, `brand` and `readOnly`, as `PaintStyleSetup`). Provider effects come from `FakeEffectProvider` (with paint hints for `effectPaintHints: true`),
  * as the TS host uses the fake provider.
  */
@@ -25,7 +25,8 @@ public final class PaintConformanceHost: ConformanceHost {
             wet: PaintWetOptions(gpu: "off"),
             authoredEffects: try setup["authoredEffects"]?.stringValue.map(AuthoredEffectsPolicy.parse) ?? .replay,
             rawShaders: setup["rawShaders"]?.boolValue ?? false,
-            authoredEffectLimits: Self.limits(setup["authoredEffectLimits"]?.objectValue)
+            authoredEffectLimits: Self.limits(setup["authoredEffectLimits"]?.objectValue),
+            colorScheme: setup["colorScheme"]?.stringValue
         )
         // Authored effects render on the CPU, as the TS evaluator does.
         controller.authoredEffectsGPU = false
