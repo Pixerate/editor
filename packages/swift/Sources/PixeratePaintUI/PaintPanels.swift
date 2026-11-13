@@ -102,21 +102,42 @@ struct PanelHeading: View {
     }
 }
 
-/// A menu picker with its label on the left: a bare `Picker` drops its label on iPadOS and wraps in a narrow row.
-struct PaintPickerRow<Content: View>: View {
+/// One choice of a `PaintPickerRow`.
+struct PaintPickerOption: Hashable {
+    let value: String
     let label: String
+}
+
+/**
+ * A menu of choices with its label on the left and the picked choice on the right, in the row's
+ * font. A bare menu `Picker` drops its label on iPadOS, draws its value in body text whatever the
+ * font, and wraps when squeezed into a row.
+ */
+struct PaintPickerRow: View {
+    let label: String
+    let options: [PaintPickerOption]
     let selection: Binding<String>
-    @ViewBuilder let content: Content
 
     var body: some View {
+        let current = options.first { $0.value == selection.wrappedValue }?.label ?? selection.wrappedValue
         HStack(spacing: 8) {
             Text(label).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             Spacer(minLength: 0)
-            Picker(label, selection: selection) { content }
+            Menu {
+                Picker(label, selection: selection) {
+                    ForEach(options, id: \.value) { o in Text(o.label).tag(o.value) }
+                }
+                .pickerStyle(.inline)
                 .labelsHidden()
-                .pickerStyle(.menu)
-                .lineLimit(1)
-                .fixedSize()
+            } label: {
+                HStack(spacing: 4) {
+                    Text(current).lineLimit(1)
+                    Image(systemName: "chevron.up.chevron.down").imageScale(.small)
+                }
+            }
+            .fixedSize()
+            .accessibilityLabel(label)
+            .accessibilityValue(current)
         }
     }
 }
@@ -945,6 +966,7 @@ public struct PaintEffectsPanel: View {
                 } label: {
                     Label("Add style", systemImage: "plus")
                 }
+                .font(.subheadline)
                 .disabled(!styled)
             }
         }
@@ -967,9 +989,7 @@ struct EffectControlsView: View {
                 case let .checkbox(key, label, value):
                     Toggle(label, isOn: Binding(get: { value }, set: { model.setEffectControl(effect, key, .bool($0)) }))
                 case let .select(key, label, value, options):
-                    PaintPickerRow(label: label, selection: Binding(get: { value }, set: { model.setEffectControl(effect, key, .string($0)) })) {
-                        ForEach(options, id: \.value) { o in Text(o.label).tag(o.value) }
-                    }
+                    PaintPickerRow(label: label, options: options.map { PaintPickerOption(value: $0.value, label: $0.label) }, selection: Binding(get: { value }, set: { model.setEffectControl(effect, key, .string($0)) }))
                 }
             }
         }

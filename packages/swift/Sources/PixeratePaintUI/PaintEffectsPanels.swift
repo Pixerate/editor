@@ -142,9 +142,7 @@ struct EffectValuesView: View {
         let value = values[name] ?? d.defaults[name]
         let label = effectControlLabel(name, schema)
         if let options = schema["enum"]?.arrayValue?.compactMap(\.stringValue), !options.isEmpty {
-            PaintPickerRow(label: label, selection: Binding(get: { value?.stringValue ?? options[0] }, set: { apply([name: .string($0)]) })) {
-                ForEach(options, id: \.self) { Text(humanizeParameterId($0)).tag($0) }
-            }
+            PaintPickerRow(label: label, options: options.map { PaintPickerOption(value: $0, label: humanizeParameterId($0)) }, selection: Binding(get: { value?.stringValue ?? options[0] }, set: { apply([name: .string($0)]) }))
         } else if schema["type"]?.stringValue == "number" || schema["type"]?.stringValue == "integer", let min = schema["minimum"]?.numberValue, let max = schema["maximum"]?.numberValue, max > min {
             let step = schema["type"]?.stringValue == "integer" ? 1 : (max - min) / 100
             PaintSliderRow(label: label, value: value?.numberValue ?? min, range: min...max, step: step, onCommit: { apply([name: .number($0)]) })
@@ -171,10 +169,8 @@ private struct PaperEffectSection: View {
                     .accessibilityLabel("Remove the effect paper")
             }
             PaintSliderRow(label: "Opacity", value: paper.opacity, range: 0...1, step: 0.01, displayScale: 100, unit: "%", onCommit: { o in Task { await model.updatePaperEffect(opacity: o) } })
-            PaintPickerRow(label: "Blend", selection: Binding(get: { paper.blend }, set: { b in Task { await model.updatePaperEffect(blend: b) } })) {
-                ForEach(PAPER_EFFECT_BLENDS, id: \.self) { Text(humanizeParameterId($0)).tag($0) }
-            }
-            .font(.caption)
+            PaintPickerRow(label: "Blend", options: PAPER_EFFECT_BLENDS.map { PaintPickerOption(value: $0, label: humanizeParameterId($0)) }, selection: Binding(get: { paper.blend }, set: { b in Task { await model.updatePaperEffect(blend: b) } }))
+                .font(.caption)
             EffectValuesView(model: model, effect: paper.source.effect, values: paper.source.values) { v in Task { await model.updatePaperEffect(values: v) } }
         }
     }
@@ -227,13 +223,9 @@ private struct EffectPaintSection: View {
                 }
                 .onAppear { length = String(map.length) }
                 .onChange(of: map.length) { _, n in length = String(n) }
-                PaintPickerRow(label: "At the end", selection: Binding(get: { map.repeatMode }, set: { r in
+                PaintPickerRow(label: "At the end", options: [PaintPickerOption(value: "repeat", label: "Repeat"), PaintPickerOption(value: "mirror", label: "Mirror"), PaintPickerOption(value: "clamp", label: "Clamp")], selection: Binding(get: { map.repeatMode }, set: { r in
                     Task { await model.repaintEffect(map: PaintEffectStrokeMap(length: map.length, repeatMode: r, width: map.width).json) }
-                })) {
-                    Text("Repeat").tag("repeat")
-                    Text("Mirror").tag("mirror")
-                    Text("Clamp").tag("clamp")
-                }
+                }))
             }
             Toggle("Live", isOn: Binding(get: { paint.live }, set: { on in Task { await model.repaintEffect(live: on) } }))
                 .help("Strokes on a stroke layer keep playing the effect")
