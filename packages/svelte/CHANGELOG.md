@@ -1,5 +1,13 @@
 # @pixerate/editor-svelte
 
+## 0.220.3
+
+### Patch Changes
+
+- Updated dependencies [1fd7b26]
+- Updated dependencies [1fd7b26]
+  - @pixerate/editor@0.313.2
+
 ## 0.220.2
 
 ### Patch Changes
