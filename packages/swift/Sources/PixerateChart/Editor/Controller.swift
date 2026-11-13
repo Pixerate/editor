@@ -411,6 +411,10 @@ extension ChartController {
                     }
                 }
                 merged[k] = .object(existingSub)
+            } else if k == "view3d", case .object(let subPatch) = v, case .object(var existingSub) = merged[k] {
+                // `{ ...s.view3d, ...patch.view3d }` in TS.
+                for (sk, sv) in subPatch { existingSub[sk] = sv }
+                merged[k] = .object(existingSub)
             } else {
                 merged[k] = v
             }
@@ -574,6 +578,7 @@ private let UPDATE_LABELS: [String: String] = [
     "raceTopN": "Change bars shown",
     "map": "Change map",
     "mapSteps": "Change colour classes",
+    "view3d": "Change 3-D view",
     "mapThresholds": "Change class breaks",
     "sunburstLabel": "Edit centre caption",
     "tree": "Replace grouped data",

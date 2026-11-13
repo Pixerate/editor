@@ -183,11 +183,16 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 	let orientation: ChartSpec['orientation'] = 'vertical';
 	let dataLabels = false;
 	let points = false;
+	let view3d = false;
 	for (const g of groups) {
 		const name = g.localName;
 		const grouping = val(g, 'grouping') ?? 'clustered';
 		let type: ChartType;
-		if (/3D/.test(name)) unsupported.push(`3-D ${name.replace(/3DChart$/, '')} chart (drawn flat)`);
+		// Bar, line and area charts keep their 3-D view (#795); other 3-D charts are drawn flat.
+		if (/3D/.test(name)) {
+			if (['bar3DChart', 'line3DChart', 'area3DChart'].includes(name)) view3d = true;
+			else unsupported.push(`3-D ${name.replace(/3DChart$/, '')} chart (drawn flat)`);
+		}
 		switch (name) {
 			case 'barChart':
 			case 'bar3DChart':
@@ -336,6 +341,24 @@ export function chartFromOoxml(xml: string, options: ChartOoxmlReadOptions = {})
 	input.categories = categories.length ? categories : Array.from({ length: Math.max(0, ...series.map((s) => s.values.length)) }, (_, i) => `${i + 1}`);
 	input.stacking = stacking;
 	input.orientation = orientation;
+	if (view3d) {
+		// Office's view: rotY (turn, 0–360), rotX (eye height; negative is below the floor), depthPercent.
+		const v = kid(chart, 'view3D');
+		const num = (name: string) => {
+			const raw = val(v, name);
+			const n = raw === undefined || raw === null ? NaN : Number(raw);
+			return Number.isFinite(n) ? n : undefined;
+		};
+		const rotY = num('rotY');
+		const rotX = num('rotX');
+		const depthPercent = num('depthPercent');
+		input.view3d = {
+			azimuth: rotY !== undefined ? ((rotY % 360) + 360) % 360 : 20,
+			elevation: rotX !== undefined ? Math.max(0, Math.min(90, rotX)) : 15,
+			depth: depthPercent !== undefined ? Math.max(0.2, Math.min(20, depthPercent / 100)) : 1
+		};
+		if (rotX !== undefined && rotX < 0) unsupported.push('a 3-D view from below the floor (drawn from floor level)');
+	}
 	input.dataLabels = dataLabels;
 	input.points = points || first !== 'line';
 	if (bool(val(groups[0], 'varyColors')) && !combo && isCartesianChart(first) && series.length === 1) input.varyColors = true;
@@ -580,6 +603,7 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 		spec.note ? 'the note' : ''
 	].filter(Boolean);
 	if (annotations.length) issues.push(`${annotations.join(', ').replace(/^./, (c) => c.toUpperCase())} ${annotations.length === 1 && !annotations[0].endsWith('s') ? 'is' : 'are'} not written: DrawingML has no equivalent.`);
+	if (spec.view3d) issues.push('The 3-D view is not written: the chart is saved flat.');
 	if (visible.length < spec.series.length) issues.push(`${spec.series.length - visible.length} hidden series ${spec.series.length - visible.length === 1 ? 'is' : 'are'} left out.`);
 	const grouping = spec.stacking === 'stacked' ? 'stacked' : spec.stacking === 'percent' ? 'percentStacked' : 'standard';
 	const ids = { cat: 500000001, val: 500000002, cat2: 500000003, val2: 500000004 };

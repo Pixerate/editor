@@ -205,6 +205,7 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
         let verb = (annotations.count == 1 && !annotations[0].hasSuffix("s")) ? "is" : "are"
         issues.append("\(capitalized) \(verb) not written: DrawingML has no equivalent.")
     }
+    if spec.view3d != nil { issues.append("The 3-D view is not written: the chart is saved flat.") }
     if visible.count < spec.series.count {
         let diff = spec.series.count - visible.count
         issues.append("\(diff) hidden series \(diff == 1 ? "is" : "are") left out.")

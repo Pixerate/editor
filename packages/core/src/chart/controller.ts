@@ -25,6 +25,7 @@ import type {
 	ChartCurve,
 	ChartErrorBars,
 	ChartLegend,
+	ChartView3d,
 	ChartLink,
 	ChartMarker,
 	ChartNumberFormat,
@@ -125,6 +126,8 @@ export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxi
 	yAxis?: Partial<ChartAxis>;
 	yAxis2?: Partial<ChartAxis>;
 	legend?: Partial<ChartLegend>;
+	/** A partial 3-D view merges into the current one; `null` draws the chart flat again. */
+	view3d?: Partial<ChartView3d> | null;
 };
 
 export interface ChartSeriesInput {
@@ -387,6 +390,7 @@ export class ChartController {
 			yAxis: patch.yAxis ? { ...s.yAxis, ...patch.yAxis } : s.yAxis,
 			yAxis2: patch.yAxis2 ? { ...s.yAxis2, ...patch.yAxis2 } : s.yAxis2,
 			legend: patch.legend ? { ...s.legend, ...patch.legend } : s.legend,
+			view3d: patch.view3d === null ? undefined : patch.view3d ? { ...s.view3d, ...patch.view3d } : s.view3d,
 			version: 1
 		};
 		const { spec, issues } = normalizeChartSpec(merged);
@@ -1391,6 +1395,7 @@ function updateLabel(patch: ChartSpecPatch): string {
 		map: 'Change map',
 		mapSteps: 'Change colour classes',
 		mapThresholds: 'Change class breaks',
+		view3d: 'Change 3-D view',
 		sunburstLabel: 'Edit centre caption',
 		tree: 'Replace grouped data',
 		links: 'Replace flows',

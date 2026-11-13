@@ -1261,6 +1261,28 @@ public func normalizeChartSpec(_ input: JSONValue?) -> (spec: ChartSpec, issues:
         }
     }
 
+    var view3d: ChartView3d? = nil
+    if let raw = value["view3d"], raw != .null {
+        if case .object(let v) = raw {
+            func angle(_ key: String, _ lo: Double, _ hi: Double, _ fallback: Double, _ what: String) -> Double {
+                guard let rawField = v[key] else { return fallback }
+                if rawField != .null, let n = jsNumberValue(rawField), n.isFinite, n >= lo && n <= hi { return n }
+                issues.append(ChartIssue(path: "view3d.\(key)", message: "view3d.\(key) must be \(what)."))
+                return fallback
+            }
+            for k in v.keys where !["azimuth", "elevation", "depth"].contains(k) {
+                issues.append(ChartIssue(path: "view3d.\(k)", message: "view3d has no \"\(k)\"; it takes azimuth, elevation and depth."))
+            }
+            view3d = ChartView3d(
+                azimuth: angle("azimuth", 0, 360, CHART_VIEW3D_DEFAULTS.azimuth, "a turn from 0 to 360 degrees"),
+                elevation: angle("elevation", 0, 90, CHART_VIEW3D_DEFAULTS.elevation, "an angle from 0 to 90 degrees"),
+                depth: angle("depth", 0.2, 20, CHART_VIEW3D_DEFAULTS.depth, "a multiple of the bar width from 0.2 to 20")
+            )
+        } else {
+            issues.append(ChartIssue(path: "view3d", message: "view3d must be { azimuth, elevation, depth } or null for a flat chart."))
+        }
+    }
+
     var radarTicks: Int? = nil
     if let rawRadar = value["radarTicks"], rawRadar != .null {
         if let t = jsNumberValue(rawRadar), isWholeNumber(t), Int(t) >= 1 && Int(t) <= 50 {
@@ -1319,7 +1341,8 @@ public func normalizeChartSpec(_ input: JSONValue?) -> (spec: ChartSpec, issues:
         raceTopN: raceTopN,
         map: mapId,
         mapSteps: mapSteps,
-        mapThresholds: mapThresholds
+        mapThresholds: mapThresholds,
+        view3d: view3d
     )
 
     if spec.stacking == .percent {
