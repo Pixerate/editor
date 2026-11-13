@@ -217,7 +217,7 @@ extension RasterLayer {
         RasterLayer(
             id: id ?? self.id, name: name ?? self.name, visible: visible ?? self.visible, opacity: opacity ?? self.opacity, blend: blend ?? self.blend,
             clipped: clipped ?? self.clipped, mask: mask ?? self.mask, locks: locks ?? self.locks, effects: effects ?? self.effects, edge: edge,
-            temporary: temporary ?? self.temporary, generator: generator,
+            temporary: temporary ?? self.temporary, generator: generator, vectorMask: vectorMask,
             content: content ?? self.content
         )
     }
