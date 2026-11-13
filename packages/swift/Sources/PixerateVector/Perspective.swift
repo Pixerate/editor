@@ -16,7 +16,7 @@ private func points(_ grid: JSONObject) -> [Vec2] { (grid["vanishingPoints"]?.ar
 
 /// The planes a grid with this many vanishing points has.
 public func vectorPerspectivePlanes(_ grid: JSONObject) -> [String] {
-    (grid["vanishingPoints"]?.arrayValue?.count ?? 0) <= 1 ? ["floor", "side", "front"] : ["floor", "left", "right"]
+    grid["isometric"] != nil || (grid["vanishingPoints"]?.arrayValue?.count ?? 0) > 1 ? ["floor", "left", "right"] : ["floor", "side", "front"]
 }
 
 /// Reads a perspective grid from untrusted data; nil when invalid.
@@ -25,6 +25,16 @@ public func sanitizeVectorPerspective(_ value: JSONValue?) -> JSONObject? {
     func point(_ v: JSONValue?) -> Vec2? {
         guard let o = v?.objectValue, let x = o["x"]?.numberValue, let y = o["y"]?.numberValue, x.isFinite, y.isFinite else { return nil }
         return Vec2(x, y)
+    }
+    if let iso = r["isometric"] {
+        // An isometric grid has an angle and an origin, and no vanishing points.
+        guard let angle = iso.objectValue?["angle"]?.numberValue, angle >= 1 && angle <= 89, let origin = point(r["origin"]) else { return nil }
+        if let vps = r["vanishingPoints"], vps.arrayValue?.isEmpty != true { return nil }
+        var out = JSONObject([("vanishingPoints", .array([])), ("origin", origin.json), ("isometric", .object(JSONObject([("angle", .number(angle))])))])
+        if let g = r["gridSize"]?.numberValue, g > 0, g.isFinite { out["gridSize"] = .number(JS.min(1000, g)) }
+        if let e = r["extent"]?.numberValue, e.isFinite { out["extent"] = .number(JS.min(100, JS.max(1, JS.round(e)))) }
+        if r["visible"] == .bool(false) { out["visible"] = false }
+        return out
     }
     guard let list = r["vanishingPoints"]?.arrayValue, (1 ... 3).contains(list.count), let origin = point(r["origin"]) else { return nil }
     let vps = list.compactMap(point)
@@ -53,6 +63,18 @@ private func towards(_ o: Vec2, _ vp: Vec2, _ want: String) -> [Double] {
 public func vectorPerspectivePlaneMap(_ grid: JSONObject, _ plane: String) -> [Double]? {
     if !vectorPerspectivePlanes(grid).contains(plane) { return nil }
     guard let o = Vec2(json: grid["origin"]) else { return nil }
+    if let angle = grid["isometric"]?.objectValue?["angle"]?.numberValue {
+        // Parallel projection: every direction is a fixed screen direction (a column ending in 0).
+        let a = (angle * Double.pi) / 180
+        let c = JS.cos(a)
+        let s = JS.sin(a)
+        let backRight: [Double] = [c, -s, 0]
+        let backLeft: [Double] = [-c, -s, 0]
+        let frontRight: [Double] = [c, s, 0]
+        let up: [Double] = [0, -1, 0]
+        let (x, y) = plane == "floor" ? (backRight, backLeft) : plane == "left" ? (frontRight, up) : (backRight, up)
+        return [x[0], y[0], o.x, x[1], y[1], o.y, x[2], y[2], 1]
+    }
     let vps = points(grid)
     guard let v1 = vps.first else { return nil }
     let v2 = vps.count > 1 ? vps[1] : nil
@@ -162,6 +184,16 @@ public func vectorPerspectivePreset(_ points: Int, _ width: Double, _ height: Do
     if points == 3 { vps.append(Vec2(width / 2, height * 3)) }
     return JSONObject([
         ("vanishingPoints", .array(vps.map(\.json))), ("origin", origin.json),
+        ("gridSize", .number(JS.max(4, JS.round(JS.min(width, height) / 20)))), ("extent", 12),
+    ])
+}
+
+/// A starting isometric grid for a page `width × height` (#799): the origin near the bottom
+/// middle, true isometric (30°) unless `angle` says otherwise.
+public func vectorIsometricPerspectivePreset(_ width: Double, _ height: Double, angle: Double = 30) -> JSONObject {
+    JSONObject([
+        ("vanishingPoints", .array([])), ("origin", Vec2(width / 2, height * 0.8).json),
+        ("isometric", .object(JSONObject([("angle", .number(angle))]))),
         ("gridSize", .number(JS.max(4, JS.round(JS.min(width, height) / 20)))), ("extent", 12),
     ])
 }

@@ -146,3 +146,49 @@ describe('isometric diagram export', () => {
 		expect((await registry.callTool('render_diagram', { projection: 'perspective' })).isError).toBe(true);
 	});
 });
+
+import { sanitizeVectorPerspective, vectorIsometricPerspectivePreset, vectorPerspectiveFlatToPlane, vectorPerspectiveGridLines, vectorPerspectivePlaneMap, vectorPerspectivePlanes } from '../src/vector';
+
+describe('isometric perspective grid (#799)', () => {
+	const grid = sanitizeVectorPerspective({ vanishingPoints: [], origin: { x: 200, y: 240 }, isometric: { angle: 30 }, gridSize: 10, extent: 4 })!;
+
+	it('reads an isometric grid with floor, left and right planes, and refuses a bad one', () => {
+		expect(grid).toEqual({ vanishingPoints: [], origin: { x: 200, y: 240 }, isometric: { angle: 30 }, gridSize: 10, extent: 4 });
+		expect(vectorPerspectivePlanes(grid)).toEqual(['floor', 'left', 'right']);
+		expect(sanitizeVectorPerspective({ origin: { x: 0, y: 0 }, isometric: { angle: 30 } })?.vanishingPoints).toEqual([]);
+		expect(sanitizeVectorPerspective({ vanishingPoints: [{ x: 1, y: 1 }], origin: { x: 0, y: 0 }, isometric: { angle: 30 } })).toBeNull();
+		expect(sanitizeVectorPerspective({ origin: { x: 0, y: 0 }, isometric: { angle: 95 } })).toBeNull();
+		expect(vectorIsometricPerspectivePreset(400, 300)).toEqual({ vanishingPoints: [], origin: { x: 200, y: 240 }, isometric: { angle: 30 }, gridSize: 15, extent: 12 });
+	});
+
+	it('maps planes in parallel: affine maps, art keeps its size anywhere, grid lines never clip', () => {
+		for (const plane of ['floor', 'left', 'right'] as const) {
+			const h = vectorPerspectivePlaneMap(grid, plane)!;
+			expect([h[6], h[7], h[8]]).toEqual([0, 0, 1]);
+			expect(vectorPerspectiveGridLines(grid, plane)).toHaveLength(plane === 'floor' ? 18 : 14);
+		}
+		const onFloor = vectorPerspectiveFlatToPlane(grid, 'floor')!;
+		const c = Math.cos(Math.PI / 6);
+		// One unit right of the origin goes back and to the right along the floor.
+		close(onFloor({ x: 201, y: 240 })!, { x: 200 + c, y: 239.5 });
+		// The same step far away is the same length: nothing recedes.
+		const a = onFloor({ x: 300, y: 240 })!;
+		const b = onFloor({ x: 301, y: 240 })!;
+		expect(Math.hypot(b.x - a.x, b.y - a.y)).toBeCloseTo(1, 9);
+		expect(vectorPerspectivePlaneMap(grid, 'side')).toBeNull();
+	});
+
+	it('vector.setPerspective takes isometric, and draws shapes on its planes', async () => {
+		const c = new VectorEditorController({ document: { width: 400, height: 300, nodes: [] } });
+		const commands = new CommandRegistry();
+		for (const spec of createVectorCommands(c)) commands.register(spec);
+		const tools = new ToolRegistry();
+		tools.register(createCommandToolProvider(commands));
+		const set = await tools.callTool('run_command', { id: 'vector.setPerspective', params: { origin: { x: 200, y: 240 }, isometric: { angle: 30 } } });
+		expect((set.structuredContent as any).result).toMatchObject({ perspective: { isometric: { angle: 30 } }, planes: ['floor', 'left', 'right'] });
+		const bad = await tools.callTool('run_command', { id: 'vector.setPerspective', params: { origin: { x: 200, y: 240 } } });
+		expect(bad.isError).toBe(true);
+		expect((bad.content as { text: string }[])[0].text).toContain('or isometric: { angle } (1 to 89 degrees)');
+		expect(c.setPerspectivePlane('left').ok).toBe(true);
+	});
+});

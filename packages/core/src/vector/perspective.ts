@@ -30,8 +30,8 @@ export type { Homography as VectorHomography } from '../geom/types.js';
 // ---------------------------------------------------------------------------
 
 /** The planes a grid with this many vanishing points has. */
-export function vectorPerspectivePlanes(p: Pick<VectorPerspective, 'vanishingPoints'>): VectorPerspectivePlane[] {
-	return p.vanishingPoints.length <= 1 ? ['floor', 'side', 'front'] : ['floor', 'left', 'right'];
+export function vectorPerspectivePlanes(p: Pick<VectorPerspective, 'vanishingPoints' | 'isometric'>): VectorPerspectivePlane[] {
+	return p.isometric || p.vanishingPoints.length > 1 ? ['floor', 'left', 'right'] : ['floor', 'side', 'front'];
 }
 
 /** Reads a perspective grid from untrusted data; null when invalid. */
@@ -39,6 +39,17 @@ export function sanitizeVectorPerspective(value: unknown): VectorPerspective | n
 	if (!value || typeof value !== 'object') return null;
 	const r = value as Record<string, unknown>;
 	const isPt = (v: unknown): v is Vec2 => !!v && typeof v === 'object' && Number.isFinite((v as Vec2).x) && Number.isFinite((v as Vec2).y);
+	if (r.isometric !== undefined) {
+		// An isometric grid has an angle and an origin, and no vanishing points.
+		const iso = r.isometric as Record<string, unknown> | null;
+		const angle = iso && typeof iso === 'object' ? iso.angle : undefined;
+		if (typeof angle !== 'number' || !(angle >= 1 && angle <= 89) || !isPt(r.origin) || (r.vanishingPoints !== undefined && !(Array.isArray(r.vanishingPoints) && r.vanishingPoints.length === 0))) return null;
+		const out: VectorPerspective = { vanishingPoints: [], origin: { x: r.origin.x, y: r.origin.y }, isometric: { angle } };
+		if (typeof r.gridSize === 'number' && r.gridSize > 0 && Number.isFinite(r.gridSize)) out.gridSize = Math.min(1000, r.gridSize);
+		if (typeof r.extent === 'number' && Number.isFinite(r.extent)) out.extent = Math.min(100, Math.max(1, Math.round(r.extent)));
+		if (r.visible === false) out.visible = false;
+		return out;
+	}
 	if (!Array.isArray(r.vanishingPoints) || r.vanishingPoints.length < 1 || r.vanishingPoints.length > 3 || !r.vanishingPoints.every(isPt) || !isPt(r.origin)) return null;
 	const origin = { x: r.origin.x, y: r.origin.y };
 	const vps = (r.vanishingPoints as Vec2[]).map((v) => ({ x: v.x, y: v.y }));
@@ -70,6 +81,19 @@ function towards(o: Vec2, vp: Vec2, want: 'right' | 'up'): Col {
 export function vectorPerspectivePlaneMap(p: VectorPerspective, plane: VectorPerspectivePlane): Homography | null {
 	if (!vectorPerspectivePlanes(p).includes(plane)) return null;
 	const o = p.origin;
+	if (p.isometric) {
+		// Parallel projection: every direction is a fixed screen direction (a column ending in 0),
+		// so the map is affine and nothing recedes.
+		const a = (p.isometric.angle * Math.PI) / 180;
+		const c = Math.cos(a);
+		const s = Math.sin(a);
+		const backRight: Col = [c, -s, 0];
+		const backLeft: Col = [-c, -s, 0];
+		const frontRight: Col = [c, s, 0];
+		const up: Col = [0, -1, 0];
+		const [x, y] = plane === 'floor' ? [backRight, backLeft] : plane === 'left' ? [frontRight, up] : [backRight, up];
+		return [x[0], y[0], o.x, x[1], y[1], o.y, x[2], y[2], 1];
+	}
 	const [v1, v2, v3] = p.vanishingPoints;
 	const right: Col = [1, 0, 0];
 	const up: Col = v3 ? towards(o, v3, 'up') : [0, -1, 0];
@@ -181,6 +205,11 @@ export function vectorPerspectiveGridLines(p: VectorPerspective, plane: VectorPe
 		if (s) out.push(s);
 	}
 	return out;
+}
+
+/** A starting isometric grid for a page `width × height` (#799): the origin near the bottom middle, true isometric (30°). */
+export function vectorIsometricPerspectivePreset(width: number, height: number, angle = 30): VectorPerspective {
+	return { vanishingPoints: [], origin: { x: width / 2, y: height * 0.8 }, isometric: { angle }, gridSize: Math.max(4, Math.round(Math.min(width, height) / 20)), extent: 12 };
 }
 
 /**
