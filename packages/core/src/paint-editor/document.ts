@@ -97,6 +97,14 @@ export interface PaintDocumentState {
   origin?: { x: number; y: number };
   /** Non-destructive time-machine ageing preview settings (`years`, `varnish`, `cracks`, `fading`, `dust`, `seed`). */
   age?: PaintAgeSettings;
+  /**
+   * Pixel layers holding pixels the stroke log doesn't have (imported, merged, moved or transformed
+   * pixels…), each with the change that put them there. A replay can't rebuild these layers, so
+   * they keep the side of a dual colour they were painted in whatever the colour scheme (#720).
+   * Kept by the editor on every commit; saved (extension `unlogged`) with documents that hold
+   * dual-colour strokes.
+   */
+  unlogged?: Readonly<Record<string, string>>;
 }
 
 /** A change a replay repeats besides strokes, recorded with how many strokes came before it. */

@@ -1,0 +1,979 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "color-scheme-replay",
+  "description": "A painting saved with light / dark strokes on pixel layers, opened by a viewer in the dark scheme: a layer painted only through the stroke log is replayed with each pair in its dark side, a layer with merged pixels keeps its colours and says why, and new strokes and undo keep the view current. The document never changes.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "colorScheme": "dark"
+  },
+  "skip": {
+    "swift": "Colour-scheme views (stroke layers and replayed pixel layers) are not ported to Swift yet (#720)"
+  },
+  "steps": [
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {},
+      "load": {
+        "unlogged": {
+          "plmwf28ir82": "Merge down"
+        },
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 48,
+        "height": 32,
+        "dpi": 300,
+        "paper": {
+          "preset": "cold-pressed",
+          "name": "Cold pressed watercolour",
+          "family": "watercolor",
+          "pattern": "cold-pressed",
+          "seed": 1,
+          "color": "#f7f3ea",
+          "scale": 1,
+          "tiling": "mirror",
+          "depth": 0.5,
+          "shading": 0.5,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          },
+          "absorption": 0.7,
+          "permeability": 0.5,
+          "roughness": 0.6
+        },
+        "activeLayerId": "plmwf28ir82",
+        "strokes": [
+          {
+            "id": "s1",
+            "layerId": "plmwf28iqk1",
+            "color": "#1e3a8a",
+            "points": [
+              {
+                "x": 4,
+                "y": 8,
+                "pressure": 0.8
+              },
+              {
+                "x": 24,
+                "y": 12,
+                "pressure": 0.9
+              },
+              {
+                "x": 44,
+                "y": 6,
+                "pressure": 0.7
+              }
+            ],
+            "seed": 1,
+            "dualColor": {
+              "light": "#1e3a8a",
+              "dark": "#bfdbfe"
+            },
+            "brush": {
+              "id": "ink-pen",
+              "name": "Ink pen",
+              "kind": "mark",
+              "medium": "ink",
+              "tip": {
+                "shape": "round",
+                "size": 4,
+                "spacing": 0.05
+              },
+              "dynamics": {
+                "smoothing": 0.5,
+                "pressureSmoothing": 0.4,
+                "minSize": 0.25,
+                "velocitySize": -0.45
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "layerId": "plmwf28iqk1",
+            "color": "#b91c1c",
+            "points": [
+              {
+                "x": 4,
+                "y": 20,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 24,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 2,
+            "brush": {
+              "id": "ink-pen",
+              "name": "Ink pen",
+              "kind": "mark",
+              "medium": "ink",
+              "tip": {
+                "shape": "round",
+                "size": 4,
+                "spacing": 0.05
+              },
+              "dynamics": {
+                "smoothing": 0.5,
+                "pressureSmoothing": 0.4,
+                "minSize": 0.25,
+                "velocitySize": -0.45
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "layerId": "plmwf28ir82",
+            "color": "#1e3a8a",
+            "points": [
+              {
+                "x": 6,
+                "y": 28,
+                "pressure": 0.8
+              },
+              {
+                "x": 40,
+                "y": 26,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "#1e3a8a",
+              "dark": "#bfdbfe"
+            },
+            "brush": {
+              "id": "ink-pen",
+              "name": "Ink pen",
+              "kind": "mark",
+              "medium": "ink",
+              "tip": {
+                "shape": "round",
+                "size": 4,
+                "spacing": 0.05
+              },
+              "dynamics": {
+                "smoothing": 0.5,
+                "pressureSmoothing": 0.4,
+                "minSize": 0.25,
+                "velocitySize": -0.45
+              }
+            }
+          },
+          {
+            "id": "s4",
+            "layerId": "plmwf28irb3",
+            "color": "#111111",
+            "points": [
+              {
+                "x": 20,
+                "y": 2,
+                "pressure": 0.8
+              },
+              {
+                "x": 22,
+                "y": 30,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 4,
+            "brush": {
+              "id": "pencil-hb",
+              "name": "HB pencil",
+              "kind": "mark",
+              "medium": "dry",
+              "variety": "pencil",
+              "tip": {
+                "shape": "round",
+                "size": 4,
+                "hardness": 0.7,
+                "spacing": 0.08,
+                "opacity": 0.85,
+                "flow": 0.55
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "pressureSmoothing": 0.3,
+                "minSize": 0.55,
+                "tiltSize": 0.9,
+                "tiltRoundness": 0.7,
+                "tiltOpacity": 0.5
+              },
+              "behaviour": {
+                "grain": 0.85
+              }
+            }
+          }
+        ],
+        "guides": {
+          "symmetry": {
+            "mode": "off",
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "rotation": 0,
+            "segments": 6,
+            "mirror": true
+          },
+          "perspective": {
+            "enabled": false,
+            "points": [],
+            "snap": true
+          },
+          "tracing": null,
+          "references": [],
+          "stencils": []
+        },
+        "swatches": [
+          {
+            "color": "#f7f5ee",
+            "name": "Warm white"
+          },
+          {
+            "color": "#f3d23a",
+            "name": "Lemon yellow"
+          },
+          {
+            "color": "#c8912f",
+            "name": "Yellow ochre"
+          },
+          {
+            "color": "#d23a2a",
+            "name": "Warm red"
+          },
+          {
+            "color": "#9e1f3d",
+            "name": "Crimson"
+          },
+          {
+            "color": "#8a4a2b",
+            "name": "Burnt earth"
+          },
+          {
+            "color": "#2f3f9e",
+            "name": "Deep blue"
+          },
+          {
+            "color": "#1d6f8f",
+            "name": "Cool blue"
+          },
+          {
+            "color": "#4f6e2c",
+            "name": "Leaf green"
+          },
+          {
+            "color": "#25221f",
+            "name": "Warm black"
+          }
+        ],
+        "layers": [
+          {
+            "id": "plmwf28iqk1",
+            "name": "Ink",
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "type": "pixel",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "asset": "plmwf28iqk1",
+            "x": 1,
+            "y": 3
+          },
+          {
+            "id": "plmwf28ir82",
+            "name": "Merged",
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "type": "pixel",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "asset": "plmwf28ir82",
+            "x": 3,
+            "y": -1
+          }
+        ],
+        "assets": {
+          "plmwf28iqk1": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAC4AAAAYCAYAAACFms+HAAACa0lEQVR4Ae2XOWtUURiGHRfc0cLdoCi4K+ICimJhJYp/wcJSxNbOQqy0sdDGTsFG/AUSLGxEQRG1EC3UaFyb7NmTyfMM5wwzN3cySyYzgeSFh0nu3Ln3/b5zzne+k1kwS7Xt1J3CR0ef2R8vrxddaLgSxpReFsFSWAvb4RAchwMwALehFfPZnPHwkIXhx+OQ9UKMrhaVMCZLYCVsgN1wLLAHNsJyMIC0pHbDPvidCS/YDHfhBPyB54FP0AEjkAtGGVAJYwYfja2DHXAQjoAv3Aprwj3eW60GYS+0adwX3oOrKTdq1iH6Di+gFd6DD9DYTnA4D4MZMwGroFZjpeQs6IQb8IDEjS0OX8TPpAxqBewPXAnXDaie68PnjYFJ+gef4W3gC/yHXsiPvIb94xY4pCfB+VVOtZj2PcPQBW3gyL2Bj+F/MzoEBpCfliptrRUuTg07/8zsBTgPu8CMV2rUF5oVTXwDM/YKNPcLXFwxa0VrplpNMlSw6GIFWA9H4SKcBeexQTp0zv138Bo+wE/QnJnNVyc1nQqVprKZTFSPWDXUKMyouXnNay4rtziftbT4EXuVWKqKaqk6194+a4LNBNOWuPtwGqyzf+EruIO5c1mTvWZ97g/3xIrSlAA1PlWvkpRm3dnsVdwBmxZg7FEqbYi8L9by1eBw2S8nVVGAJK3mAONU2QKP4AzUu7ObStWOoL3MuIEkF6enD3sTTyCbwH7aZt+W1RbWa/Yzy8Btv5EBGtxTuAY9qVt+CCSpeIKJU6VZAV6Gh9PqqZsU4CV4XM/DQEnVIUDPoi7aJ3AT+hpivFKVCVBylcfFOQHqCNDlnVw+JgAAAABJRU5ErkJggg==",
+          "plmwf28ir82": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAiCAYAAAAtZZsLAAACnElEQVR4Ac2YvY7TQBSFbSf7E34CYdGyAml7JBokGpDoEDwALc9ASQFCVAhBxRPwBLwBNFAgCioaoKGgYtmFAEbgwMbmfJFnNUSTYHwd5CMdxRNf3zlzr2fmjuPIgMFgwE9SNvPhcBiwsqE7+1YloPBsef1c/BSwMaEz+9Z8KHpE7rJ4QTwp9nu93sssy4rwE/Xg0lMHDO6UeEQ8LJ4Wl4KWBlgE5iKCEAoPlO1GYRFIKn94bUSuTNmYYRX4zWsjcHXKxgyLQJCKblLga1/AxoTaArXmIeyr9xdrKu9ho7BG8Ev5izjYD9iYYBVIBF2KWy3QiTxUsd/KsEaQWezvHH3tMKb9fRpWgd9FFmyAsIMBGxOsAjNx7LWZxa2K4Ej0BfbEVgncFX95LtlJaldIIVhTTPR+eu1lsXUCeQ8dqGasRfAfsEZw4RVNEwIXWtFYBYKFVjQmgf+jomkiggutaJqYcXMrms1z9/xmCG5hdwOEbJ/5u2fX5gus4jx9fTeNCvxN+kniZGlNz5Fm1kQmDO8kojlDr4nr4jFxo7w+KnIqxIadiME+Eq/Kz87EaymEdLOOwcrO89H2+mj76XH51WCTpLN/M1oenHH+XETq4LZ4s1uKUwfRA/G8iLjKzuNkNYrjblQU5Zac+zufCZO+STEXN8RLQbO/IZGLWOMpBRY5Ox9Z+qfA8QDkXaEAeSze5z/3Dtb/XBF39OyemEIRHCucqcJKrcgE+izuiB/E9+JWef1R5GsTNtiyZTI6UgD3JgniyPcJkRTTW2XnebY13k3fXFeK9QlkEsa3CuOtlY2LdOIGPjcACJmF6UkCXbgrOU9f3eGZKyJfuUjRE/GhFnFXaZvQSHGpcwgznanLYF5IHNtfu8BhqekDE/gNyEu59QhlGJcAAAAASUVORK5CYII="
+        }
+      },
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Merged",
+              "reason": "It holds pixels the stroke log doesn't have (from \"Merge down\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.",
+              "view": "kept"
+            },
+            {
+              "layerId": "@2",
+              "name": "Ink",
+              "state": "building",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 0,
+            "state": "building",
+            "total": 4
+          },
+          "scheme": "dark"
+        },
+        "loaded": []
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Merged",
+              "reason": "It holds pixels the stroke log doesn't have (from \"Merge down\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.",
+              "view": "kept"
+            },
+            {
+              "layerId": "@2",
+              "name": "Ink",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 4,
+            "state": "ready",
+            "total": 4
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-replay.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "a329d46505e9bcbaefac93b9685b2e7bc56e6b8c61ef6624e7b4a7e01b3d6d3d",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 34,
+                "width": 40,
+                "x": 3,
+                "y": -1
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Merged",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 24,
+                "width": 46,
+                "x": 1,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Ink",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_color",
+      "arguments": {
+        "dualColor": {
+          "light": "#065f46",
+          "dark": "#6ee7b7"
+        }
+      },
+      "expect": {
+        "result": {
+          "color": "#6ee7b7",
+          "dualColor": {
+            "dark": "#6ee7b7",
+            "light": "#065f46"
+          },
+          "locked": false,
+          "secondaryColor": "#ffffff"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "layerId": "plmwf28iqk1",
+        "points": [
+          {
+            "x": 4,
+            "y": 16,
+            "pressure": 0.8
+          },
+          {
+            "x": 44,
+            "y": 16,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "ink-pen",
+        "seed": 5
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 10,
+            "width": 50,
+            "x": -1,
+            "y": 11
+          },
+          "dabs": 81,
+          "layerId": "@2",
+          "strokeId": "s5"
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Merged",
+              "reason": "It holds pixels the stroke log doesn't have (from \"Merge down\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.",
+              "view": "kept"
+            },
+            {
+              "layerId": "@2",
+              "name": "Ink",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 5,
+            "state": "ready",
+            "total": 5
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-replay.6.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "f3a0ccf61d7b8e8520f040de3a38d596ed5e168c72968b380f43fefc7ea3ad7b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "undo_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "nextRedo": "Ink pen stroke",
+          "nextUndo": null,
+          "undone": "Ink pen stroke"
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Merged",
+              "reason": "It holds pixels the stroke log doesn't have (from \"Merge down\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.",
+              "view": "kept"
+            },
+            {
+              "layerId": "@2",
+              "name": "Ink",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 4,
+            "state": "ready",
+            "total": 4
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-replay.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "a329d46505e9bcbaefac93b9685b2e7bc56e6b8c61ef6624e7b4a7e01b3d6d3d",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": "yes"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Expected boolean, got string.",
+                "path": "/wait"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__get_color_scheme_view\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "scheme": "light"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Unknown property \"scheme\". Allowed: wait.",
+                "path": "/scheme"
+              }
+            ],
+            "message": "Invalid arguments for tool \"paint-editor__get_color_scheme_view\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "list_layers",
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 34,
+                "width": 40,
+                "x": 3,
+                "y": -1
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Merged",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": {
+                "height": 24,
+                "width": 46,
+                "x": 1,
+                "y": 3
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Ink",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@2": "pixerate-asset:pq-qu9e2600of",
+              "@1": "pixerate-asset:ri-14d30npgffm"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Ink",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 1,
+                "y": 3
+              },
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Merged",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 3,
+                "y": -1
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#1e3a8a",
+                "dualColor": {
+                  "dark": "#bfdbfe",
+                  "light": "#1e3a8a"
+                },
+                "id": "s1",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 8
+                  },
+                  {
+                    "pressure": 0.9,
+                    "x": 24,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.7,
+                    "x": 44,
+                    "y": 6
+                  }
+                ],
+                "seed": 1
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#b91c1c",
+                "id": "s2",
+                "layerId": "@2",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 24
+                  }
+                ],
+                "seed": 2
+              },
+              {
+                "brush": {
+                  "dynamics": {
+                    "minSize": 0.25,
+                    "pressureSmoothing": 0.4,
+                    "smoothing": 0.5,
+                    "velocitySize": -0.45
+                  },
+                  "id": "ink-pen",
+                  "kind": "mark",
+                  "medium": "ink",
+                  "name": "Ink pen",
+                  "tip": {
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.05
+                  }
+                },
+                "color": "#1e3a8a",
+                "dualColor": {
+                  "dark": "#bfdbfe",
+                  "light": "#1e3a8a"
+                },
+                "id": "s3",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 6,
+                    "y": 28
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 40,
+                    "y": 26
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.85
+                  },
+                  "dynamics": {
+                    "minSize": 0.55,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.25,
+                    "tiltOpacity": 0.5,
+                    "tiltRoundness": 0.7,
+                    "tiltSize": 0.9
+                  },
+                  "id": "pencil-hb",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "HB pencil",
+                  "tip": {
+                    "flow": 0.55,
+                    "hardness": 0.7,
+                    "opacity": 0.85,
+                    "shape": "round",
+                    "size": 4,
+                    "spacing": 0.08
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#111111",
+                "id": "s4",
+                "layerId": "@3",
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 2
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 22,
+                    "y": 30
+                  }
+                ],
+                "seed": 4
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "unlogged": {
+              "@1": "Merge down"
+            },
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/color-scheme-replay.11.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3c0d458fdcf98ebd16aa1a7c137dc97dbd8982aa7a6bb0f1e074d6e4e45e72af",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}
