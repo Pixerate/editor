@@ -64,12 +64,16 @@ extension PaintEditorController {
         stencilCache = nil
         clearBlastAnimation()
         let state = readExtensions(loaded.state, loaded.extensions, &problems)
+        if let unlogged = readUnlogged(loaded.extensions["unlogged"], state.layers) { state.unlogged = unlogged }
+        schemeViews = [:]
+        schemeCopies = [:]
+        preludeDry = []
         nextMagnetId = 1
         for m in state.magnets ?? [] {
             if let n = idNumber(m.id, "mag"), n >= nextMagnetId { nextMagnetId = n + 1 }
         }
         for (_, list) in state.liveStrokes ?? OrderedMap() { for s in list { bumpStrokeCounter(s.id) } }
-        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "brushSources", "effectLayers", "paperEffect", "authoredEffects", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
+        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "unlogged", "brushSources", "effectLayers", "paperEffect", "authoredEffects", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
             extensions[k] = nil
         }
         viewCompositor = createPaintCompositor()

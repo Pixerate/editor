@@ -7,9 +7,6 @@
     "height": 32,
     "colorScheme": "dark"
   },
-  "skip": {
-    "swift": "Colour-scheme views (stroke layers and replayed pixel layers) are not ported to Swift yet (#720)"
-  },
   "steps": [
     {
       "tool": "get_color_scheme_view",

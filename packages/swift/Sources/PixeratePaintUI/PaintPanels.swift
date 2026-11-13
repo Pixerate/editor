@@ -813,6 +813,9 @@ public struct PaintLayersPanel: View {
     public var body: some View {
         let layers = model.layers
         let active = layers.first(where: \.active)
+        // Layers whose light / dark paint the colour scheme can't (or can't yet) show in its side.
+        let schemeLayers: [PaintColorSchemeLayer] = model.colorSchemeView.layers
+        let scheme: [String: PaintColorSchemeLayer] = Dictionary(schemeLayers.map { (v: PaintColorSchemeLayer) -> (String, PaintColorSchemeLayer) in (v.layerId, v) }, uniquingKeysWith: { (a: PaintColorSchemeLayer, _: PaintColorSchemeLayer) -> PaintColorSchemeLayer in a })
         VStack(alignment: .leading, spacing: 8) {
             PanelHeading("Layers")
             HStack(spacing: 4) {
@@ -841,6 +844,7 @@ public struct PaintLayersPanel: View {
                         if l.temporary == true {
                             Text("Temporary").font(.caption2).foregroundStyle(.secondary)
                         }
+                        if let mark = scheme[l.id] { PaintLayerSchemeMark(view: mark) }
                         Spacer()
                         if l.locks["pixels"] == .bool(true) || l.locks["all"] == .bool(true) { Image(systemName: "lock.fill").help("Locked") }
                     }
@@ -864,6 +868,23 @@ public struct PaintLayersPanel: View {
                 }
                 .controlSize(.small)
             }
+        }
+    }
+}
+
+/**
+ * A layer's mark in the layers panel for its light / dark paint (`PaintLayersPanel` in React and
+ * Svelte): ◐ when it keeps its colours (pixels the stroke log doesn't have; the reason as help),
+ * ⟳ while the colour scheme's replay is repainting it. Nothing otherwise.
+ */
+struct PaintLayerSchemeMark: View {
+    let view: PaintColorSchemeLayer
+
+    var body: some View {
+        if view.view == "kept" {
+            Text("◐").help(view.reason ?? "").accessibilityLabel("Keeps its colours")
+        } else if view.state == "building" {
+            Text("⟳").help("Repainting this layer's light / dark paint for the colour scheme").accessibilityLabel("Updating for the colour scheme")
         }
     }
 }

@@ -62,6 +62,9 @@ public struct PaintDualColor: Equatable, Sendable {
     }
 
     public var json: JSONValue { ["light": .string(light), "dark": .string(dark)] }
+
+    /// The colour for a scheme (`dual[scheme]`): `dark`, else the light side.
+    public func side(_ scheme: String) -> String { scheme == "dark" ? dark : light }
 }
 
 func applyAffine(_ m: Affine, _ x: Double, _ y: Double) -> (x: Double, y: Double) {

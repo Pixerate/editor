@@ -180,11 +180,21 @@ func paintEditorHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
 
     h["set_color"] = { a in
         let color = a["color"]?.stringValue, secondary = a["secondaryColor"]?.stringValue, locked = a["locked"]?.boolValue
-        if color == nil && secondary == nil && locked == nil { throw PaintEditorError("Pass color, secondaryColor or locked.") }
+        let dualColor = a["dualColor"]
+        if color == nil && dualColor == nil && secondary == nil && locked == nil { throw PaintEditorError("Pass color, dualColor, secondaryColor or locked.") }
+        if color != nil && dualColor != nil { throw PaintEditorError("Pass color or dualColor, not both.") }
         if let color { _ = try c.setColor(color) }
+        if let dualColor { try c.setColorValue(dualColor) }
         if let secondary { _ = try c.setSecondaryColor(secondary) }
         if let locked { c.setColorLocked(locked) }
-        return ["color": .string(c.color), "secondaryColor": .string(c.secondaryColor), "locked": .bool(c.colorLocked)]
+        var out: JSONObject = ["color": .string(c.color), "secondaryColor": .string(c.secondaryColor), "locked": .bool(c.colorLocked)]
+        if let d = dualColor?.objectValue {
+            out["dualColor"] = ["light": .string(d["light"]?.stringValue?.lowercased() ?? ""), "dark": .string(d["dark"]?.stringValue?.lowercased() ?? "")]
+        }
+        return .object(out)
+    }
+    h["get_color_scheme_view"] = { a in
+        a["wait"] == .bool(true) ? await c.colorSchemeViewReady().json : c.colorSchemeView().json
     }
     h["set_paint"] = { a in
         let p = try c.setPaint(a["paint"] ?? .null)
@@ -277,7 +287,22 @@ func contractProvider(_ id: String, _ handlers: [String: PaintToolHandler], cont
 /// The paint editor's tools (`createPaintEditorToolProvider`): the ones this port implements.
 public func createPaintEditorToolProvider(_ controller: PaintEditorController) throws -> AgentToolProvider {
     let handlers = paintEditorHandlers(controller).merging(paintGuideHandlers(controller)) { a, _ in a }.merging(paintPadHandlers(controller)) { a, _ in a }.merging(paintTracingHandlers(controller)) { a, _ in a }.merging(paintStrokeHandlers(controller)) { a, _ in a }.merging(paintEvolutionHandlers(controller)) { a, _ in a }.merging(paintEffectHandlers(controller)) { a, _ in a }.merging(paintColorHandlers(controller)) { a, _ in a }.merging(paintExportHandlers(controller)) { a, _ in a }.merging(paintReplayExportHandlers(controller)) { a, _ in a }.merging(paintStickerHandlers(controller)) { a, _ in a }.merging(paintWetHandlers(controller)) { a, _ in a }.merging(paintMutationHandlers(controller)) { a, _ in a }.merging(paintFerroHandlers(controller)) { a, _ in a }.merging(paintSpecialtyHandlers(controller)) { a, _ in a }.merging(paintTimeMachineHandlers(controller)) { a, _ in a }.merging(paintCultureHandlers(controller)) { a, _ in a }
-    return try contractProvider("paint-editor", handlers, content: paintContentHandlers(controller).merging(paintReplayExportContentHandlers(controller)) { a, _ in a }.merging(paintTimeMachineContentHandlers(controller)) { a, _ in a })
+    let content = paintContentHandlers(controller).merging(paintReplayExportContentHandlers(controller)) { a, _ in a }.merging(paintTimeMachineContentHandlers(controller)) { a, _ in a }
+    // A tool call is where the TS core's scheme replay would have run the microtask a change queued
+    // (a stale replay starting over, an undo rolling back), so a call never sees a view the document no longer has.
+    let settled = handlers.mapValues { h -> PaintToolHandler in
+        { (a: JSONObject) async throws -> JSONValue in
+            controller.settleSchemeReplay()
+            return try await h(a)
+        }
+    }
+    let settledContent = content.mapValues { h -> (JSONObject) async throws -> ToolOutput in
+        { (a: JSONObject) async throws -> ToolOutput in
+            controller.settleSchemeReplay()
+            return try await h(a)
+        }
+    }
+    return try contractProvider("paint-editor", settled, content: settledContent)
 }
 
 /// The brush library's tools for a paint editor (`createPaintBrushLibraryToolProvider`): the ones this port implements.

@@ -977,7 +977,7 @@ extension PaintEditorController {
             let full = renderXrayPixels(target.doc.canvas.width, target.doc.canvas.height, dried, target.doc.thick, strokes, totalStrokes)
             return scaleXray(full, maxSide)
         }
-        let dried = driedLayers(currentLayers())
+        let dried = driedLayers(currentLayers(), scheme: true)
         let full = renderXrayPixels(doc.canvas.width, doc.canvas.height, dried, doc.thick, totalStrokes, totalStrokes)
         return scaleXray(full, maxSide)
     }

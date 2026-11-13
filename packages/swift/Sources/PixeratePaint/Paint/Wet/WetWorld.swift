@@ -341,6 +341,9 @@ public final class WetWorld {
 
     public func laneIds() -> [String] { lanes.compactMap { $0?.id } }
 
+    /// Sets the clock of a world with no lanes (a scheme replay's checkpoint; `w.clock = cp.clock` in TS).
+    func setClock(_ value: Int) { clock = value }
+
     /// Adds a wet layer (or updates it). Throws when `MAX_WET_LANES` are in use.
     public func ensureLane(_ id: String, params: JSONObject? = nil, base: TiledSurface? = nil, flow: WetFlowField? = nil, flowStrength: Double? = nil, light: TiledSurface? = nil, ghost: WetGhostState? = nil, livePatterns: LivePatternField? = nil) throws {
         if let existing = lanes.first(where: { $0?.id == id }) ?? nil {

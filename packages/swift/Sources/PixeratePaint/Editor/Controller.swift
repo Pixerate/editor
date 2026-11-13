@@ -125,6 +125,13 @@ public struct PaintLayerInfo {
 public struct PaintStrokeInit {
     public var layerId: String?
     public var color: String?
+    /**
+     * A light / dark pair as the colour, instead of `color` (`PaintStrokeInit.color` as a
+     * `DualColor`): recorded with the stroke (`RecordedStroke.dualColor`); on a stroke layer the
+     * document draws its light side and the view the viewer's (`setColorScheme`); on a pixel layer
+     * it paints the scheme's side.
+     */
+    public var dualColor: PaintDualColor?
     /// A paint source (colour or gradient) for this stroke.
     public var paint: JSONValue?
     public var brushId: String?
@@ -236,6 +243,32 @@ public final class PaintEditorController {
     public internal(set) var colorLocked = false { didSet { emit() } }
     var colorScheme = "light"
     var brushColour: JSONValue?
+    /// Stroke layers in the colour scheme (`ControllerColorScheme.swift`): one cached view surface per layer.
+    var schemeViews: [String: SchemeView] = [:]
+    /// Dual-colour strokes as the scheme shows them, by `RecordedStroke.key` (`schemeCopies` in TS).
+    var schemeCopies: [Int: (scheme: String, stroke: RecordedStroke)] = [:]
+    /// Set while a stroke is painted for the document rather than the view (`runStroke` on a stroke layer): dual colours take this side.
+    var paintScheme: String?
+    /// The replay of the document in the colour scheme (`SchemeReplay.swift`), while pixel layers need one.
+    var schemeReplay: SchemeReplay?
+    /// Set on the headless editors replays paint into: they never replay themselves.
+    var replayTarget = false
+    /// The paper a scheme replay's editor was made with (another paper means a fresh replay).
+    var replayPaper: PaperSettings?
+    var schemeNeedsCache: (doc: PaintDocumentState, scheme: String, value: SchemeNeeds)?
+    /// Wet events logged only to dry a layer before a change outside the log (`dryLayersFirst`), by key: they don't put that change in the log.
+    var preludeDry = Set<Int>()
+    /**
+     * How long the scheme's replay works before it pauses for a frame (ms), when a host runs it
+     * from a view (`runSchemeReplay`); nil (default) only yields between pieces of work, as the TS
+     * replay's `setTimeout(0)` does.
+     */
+    public var schemeReplayFrameMs: Double?
+    var schemeReplaySliceStart = 0.0
+    /// How many replay editors this editor has made (`createReplayTarget`; tests check a replay is kept current, not rebuilt).
+    var replayTargetsMade = 0
+    /// Called each time the scheme's replay lets the host in (benchmarks measure the longest wait between two).
+    var schemeReplayYieldObserver: (() -> Void)?
     /// Painting guides (symmetry, perspective, tracing, references, stencils).
     public internal(set) var guides: PaintGuides { didSet { emit() } }
     var nextStencilId = 1
@@ -389,7 +422,7 @@ public final class PaintEditorController {
         deinit { c.cancel() }
     }
 
-    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions(), stickers: (any StickerProvider)? = nil, authoredEffects: AuthoredEffectsPolicy = .replay, rawShaders: Bool = false, authoredEffectLimits: AuthoredEffectLimits = AuthoredEffectLimits()) throws {
+    public init(width: Double? = nil, height: Double? = nil, dpi: Double? = nil, paper: JSONObject? = nil, paperPreset presetId: String? = nil, brushId: String? = nil, color: String? = nil, hand: String? = nil, historyLimit: Int? = nil, brushLibrary: BrushLibrary? = nil, wet wetOptions: PaintWetOptions = PaintWetOptions(), stickers: (any StickerProvider)? = nil, authoredEffects: AuthoredEffectsPolicy = .replay, rawShaders: Bool = false, authoredEffectLimits: AuthoredEffectLimits = AuthoredEffectLimits(), colorScheme: String? = nil) throws {
         self.historyLimit = Swift.max(1, historyLimit ?? 200)
         authoredPolicy = authoredEffects
         self.rawShaders = rawShaders
@@ -409,6 +442,8 @@ public final class PaintEditorController {
         brushSpec = start.spec
         self.color = try color.map { try parseColor(.string($0)) } ?? "#1f2937"
         self.hand = hand == "left" ? "left" : "right"
+        // The host's colour scheme: light / dark brush colours resolve for it, and dual-colour paint shows in its side.
+        self.colorScheme = colorScheme == "dark" ? "dark" : "light"
         guides = defaultGuides(doc.canvas)
         refreshBrushes()
         library = LibraryCancellable(self.brushLibrary.subscribe { [weak self] in self?.refreshBrushes() })
@@ -458,7 +493,9 @@ public final class PaintEditorController {
 
     func commit(_ label: String, _ nextIn: PaintDocumentState, before beforeIn: PaintDocumentState? = nil) {
         // Live growth commits first as its own step, and its replay events carry into `next`.
-        let (next, before) = flushCultureInto(nextIn, before: beforeIn ?? doc)
+        let flushed = flushCultureInto(nextIn, before: beforeIn ?? doc)
+        let before = flushed.before
+        let next = withUnlogged(label, flushed.next, base: doc)
         if grouping != nil {
             // Inside `group`: the change joins the group's one step.
             grouping!.changed = true
@@ -1529,11 +1566,18 @@ public final class PaintEditorController {
         if !refs.isEmpty { try? prepareStickers(refs) }
     }
 
+    /**
+     * The host's colour scheme: a paint colour that came from a brush's light / dark default (or a
+     * light / dark `setColor`) resolves to the new side, and dual-colour paint shows in it (stroke
+     * layers redrawn from their strokes, pixel layers replayed from the stroke log). Only the view
+     * changes: the document, history and saved file don't.
+     */
     public func setColorScheme(_ scheme: String) {
         let next = scheme == "dark" ? "dark" : "light"
         if next == colorScheme { return }
         colorScheme = next
-        if !colorLocked, let d = brushColour, let hex = brushColourHex(d, colorScheme) {
+        // `this.brushColour ? brushColourHex(...)`: the TS core resolves it whether or not the colour is locked.
+        if let d = brushColour, let hex = brushColourHex(d, colorScheme) {
             color = hex
         }
         let refs = brushStickerRefs(brush)
@@ -1557,8 +1601,26 @@ public final class PaintEditorController {
 
     /// Sets the paint colour (and goes back to one colour from gradient paint).
     public func setColor(_ c: String) throws -> String {
-        color = try parseColor(.string(c))
-        brushColour = nil
+        try setColorValue(.string(c))
+    }
+
+    /**
+     * Sets the paint colour to a light / dark pair: it paints the colour scheme's side, follows
+     * `setColorScheme`, and is recorded with each stroke painted in it. Returns the colour as #rrggbb.
+     */
+    @discardableResult
+    public func setColor(dual: PaintDualColor) throws -> String {
+        try setColorValue(dual.json)
+    }
+
+    /// `setColor(color: ColorValue)`: #rrggbb (or another CSS colour), or `{ light, dark }` with a colour each.
+    @discardableResult
+    func setColorValue(_ value: JSONValue) throws -> String {
+        let isString = value.stringValue != nil
+        let dual = isString ? nil : dualHex(value)
+        if !isString && dual == nil { throw PaintEditorError("color \(value.stringified()) is not a colour; use #rrggbb, or { light, dark } with a colour each.") }
+        if let dual { color = colorScheme == "dark" ? dual.dark : dual.light } else { color = try parseColor(value) }
+        brushColour = dual?.json
         gradient = nil
         clearEffectPaint()
         return color
@@ -1682,11 +1744,20 @@ public final class PaintEditorController {
 
     func sessionFor(_ d: PaintDocumentState, _ iIn: PaintStrokeInit) throws -> PaintStrokeSession {
         var i = iIn
+        // A light / dark pair paints the scheme's side and is recorded with the stroke.
+        var dualColor: PaintDualColor? = nil
+        if let given = i.dualColor {
+            dualColor = dualHex(given.json)
+            if dualColor == nil { throw PaintEditorError("color \(given.json.stringified()) is not a colour; use #rrggbb, or { light, dark } with a colour each.") }
+        }
+        let scheme = paintScheme ?? colorScheme
+        if let dual = dualColor { i.color = dual.side(scheme) }
         if let p = i.paint, !isPaintEffectPaint(p) {
             switch try readStrokePaint(p) {
             case .color(let c):
                 i.color = c
                 i.paint = nil
+                dualColor = nil
             case .gradient: break
             }
         }
@@ -1861,8 +1932,16 @@ public final class PaintEditorController {
                 layer = temp
             }
         }
+        // A brush with its own colour paints it (resolved for the scheme now, and recorded with the stroke).
         var color = try i.color.map { try parseColor(.string($0)) } ?? (ownColour(i.brushId) ?? self.color)
-        if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { color = try sampleTracingColor(start.x, start.y) ?? color }
+        var traced: String? = nil
+        if i.color == nil, let start = i.start, let t = guides.tracing, t.visible, t.sampleColors { traced = try sampleTracingColor(start.x, start.y) }
+        if let traced {
+            color = traced
+        } else if i.color == nil {
+            dualColor = dualPaint(i.brushId)
+            if let dual = dualColor { color = dual.side(scheme) }
+        }
         let perspective = guides.perspective
         let snapper = i.snapToPerspective == true && perspective.enabled && perspective.snap ? PerspectiveSnapper(perspective) : nil
         let useStencils = i.stencils != false
@@ -1887,12 +1966,15 @@ public final class PaintEditorController {
             seedCounter += 1
         }
         let copies = (i.copies ?? symmetryCopies(guides.symmetry)).filter { m in m.enumerated().contains { $0.element != IDENTITY_AFFINE[$0.offset] } }
+        let gradient = effect != nil ? nil : try strokeGradient(i, brush, color)
+        // Only a stroke that paints its one colour keeps the pair (gradient and effect paint have their own colours).
+        let keptDual: PaintDualColor? = dualColor.flatMap { dual in gradient == nil && effect == nil && dual.side(scheme) == color ? dual : nil }
         let initValues = StrokeSessionInit(
             layerId: layer.id, surface: layer.pixelSurface, offset: layer.pixelOffset, lockTransparency: isLayerLocked(layer.locks, .transparency),
             brush: brush, color: rgba, background: rgbaOf(d.paper.color), grain: paperGrain(d.paper), paperDepth: d.paper.depth, seed: seed,
-            colorHex: color, affineCopies: copies, copies: ([IDENTITY_AFFINE] + copies).map(affineCopy),
+            colorHex: color, dualColor: keptDual, affineCopies: copies, copies: ([IDENTITY_AFFINE] + copies).map(affineCopy),
             mixerLoad: i.load ?? brushLoadForStroke(brush, mixerLoad, [Double(rgba[0]) / 255, Double(rgba[1]) / 255, Double(rgba[2]) / 255]),
-            secondary: rgbaOf(secondaryColor), selection: selection, inputFilter: inputFilter, paint: effect != nil ? nil : try strokeGradient(i, brush, color)
+            secondary: rgbaOf(secondaryColor), selection: selection, inputFilter: inputFilter, paint: gradient
         )
         var withLight = initValues
         withLight.effect = effect
@@ -1977,9 +2059,20 @@ public final class PaintEditorController {
     }
 
     func record(_ s: PaintStrokeSession) -> RecordedStroke {
-        let i = s.initValues
-        var stroke = RecordedStroke(id: "s\(strokeCounter)", layerId: s.layerId, brush: i.brush, color: i.colorHex, points: s.points, seed: i.seed)
+        let id = "s\(strokeCounter)"
         strokeCounter += 1
+        return recordOf(s, id)
+    }
+
+    /// A stroke as `record` records it, under `id` (a live stroke: as far as it has got).
+    func recordOf(_ s: PaintStrokeSession, _ id: String) -> RecordedStroke {
+        let i = s.initValues
+        var stroke = RecordedStroke(id: id, layerId: s.layerId, brush: i.brush, color: i.colorHex, points: s.points, seed: i.seed)
+        if let dual = i.dualColor {
+            stroke.dualColor = dual
+            // On a stroke layer the document draws a dual-colour stroke in its light side, whoever painted it (the view shows the scheme's).
+            if doc.liveStrokes?.get(s.layerId) != nil { stroke.color = dual.light }
+        }
         if !i.affineCopies.isEmpty { stroke.copies = i.affineCopies }
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
@@ -1998,7 +2091,14 @@ public final class PaintEditorController {
     func runStroke(_ d: PaintDocumentState, _ i: PaintStrokeInit, _ points: [PenPoint]) throws -> (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush) {
         var i = i
         if i.points == nil { i.points = points }
-        let session = try sessionFor(d, i)
+        // A stroke layer's document pixels are drawn in the light side of dual colours (the view shows the scheme's).
+        let target = i.layerId ?? d.activeLayerId
+        paintScheme = target.flatMap { d.liveStrokes?.get($0) } != nil ? "light" : nil
+        let session: PaintStrokeSession
+        do {
+            defer { paintScheme = nil }
+            session = try sessionFor(d, i)
+        }
         try session.push(points)
         return try endStroke(d, session)
     }
@@ -2174,7 +2274,7 @@ public final class PaintEditorController {
         if let override = frameOverride {
             return override.keys.sorted().reduce(doc.layers) { ls, id in mapLayer(ls, id) { $0.withSurface(override[id]!) } }
         }
-        guard let live = liveStroke, live.open, !live.isWet else { return blastFrameLayers(effectFrameLayers(doc.layers)) }
+        guard let live = liveStroke, live.open, !live.isWet else { return schemeLayers(blastFrameLayers(effectFrameLayers(doc.layers))) }
         if let scraper = live.shown.initValues.scraper {
             var layers = doc.layers
             for (id, surface) in scraper.liveSurfaces() {
@@ -2189,13 +2289,15 @@ public final class PaintEditorController {
             }
             return next
         }
-        return mapLayer(doc.layers, live.layerId) { $0.withSurface(live.shown.currentSurface()) }
+        // The scheme's replay follows the stroke on a layer it shows.
+        if shownSchemeReplay() != nil && schemeNeeds().replay.contains(live.layerId) { return schemeLayers(doc.layers) }
+        return mapLayer(schemeLayers(doc.layers), live.layerId) { $0.withSurface(live.shown.currentSurface()) }
     }
 
     /// `wet`: "display" shows wet paint as it is now; "dried" dries it where it is (saving and export).
     func renderLayers(paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "display", view: Bool = false, age ageOpt: Bool? = nil, backlight withBacklight: Bool = true) -> [ViewLayer] {
         let (shown, winding) = view ? vortexViewLayers(currentLayers()) : (currentLayers(), false)
-        let base = wetMode == "dried" ? driedLayers(shown) : shown
+        let base = wetMode == "dried" ? driedLayers(shown, scheme: true) : shown
         let live = liveStroke.flatMap { l -> (layerId: String, channels: ThickChannels)? in
             guard l.open else { return nil }
             if let ch = l.shown.thickChannels() { return (l.layerId, ch) }
@@ -2351,6 +2453,15 @@ public final class PaintEditorController {
             var ext = JSONObject()
             for (id, list) in live where findLayer(d.layers, id) != nil { ext[id] = .array(list.map(strokeToJSON)) }
             if !ext.isEmpty { out["liveStrokes"] = .object(ext) }
+        }
+        // Layers a replay can't rebuild, for documents whose dual-colour strokes follow the scheme.
+        let unlogged = (doc.unlogged ?? OrderedMap()).filter { findLayer(d.layers, $0.key) != nil }
+        if !unlogged.isEmpty && d.strokes.contains(where: { $0.dualColor != nil }) {
+            var ext = JSONObject()
+            for (id, why) in unlogged { ext[id] = .string(why) }
+            out["unlogged"] = .object(ext)
+        } else {
+            out["unlogged"] = nil
         }
         // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
         var sourceIds: [String] = []

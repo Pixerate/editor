@@ -80,6 +80,10 @@ struct DemoRoot: View {
 
     @State private var chartModel: ChartEditorModel? = try? ChartEditorModel()
 
+    /// The paint editor's appearance: `system`, `light` or `dark`.
+    @State private var paintScheme = "system"
+    @Environment(\.colorScheme) private var systemScheme
+
     /// The tab shown first: `PIXERATE_DEMO_TAB` (`paint`, `chart` or `vector`), for snapshots.
     @State private var tab: String = ProcessInfo.processInfo.environment["PIXERATE_DEMO_TAB"] ?? "paint"
 
@@ -104,7 +108,20 @@ struct DemoRoot: View {
         if let model {
             TabView(selection: $tab) {
                 HStack(spacing: 0) {
-                    PaintEditorView(model: model)
+                    VStack(spacing: 0) {
+                        // Light / dark paint (a colour's `dualColor`, the chalk's default) follows the
+                        // editor's appearance: the system's, or the one picked here (as the TS demo's toggle).
+                        Picker("Paint colour scheme", selection: $paintScheme) {
+                            Text("System").tag("system")
+                            Text("Light").tag("light")
+                            Text("Dark").tag("dark")
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                        .padding(6)
+                        PaintEditorView(model: model)
+                            .environment(\.colorScheme, paintScheme == "system" ? systemScheme : (paintScheme == "dark" ? .dark : .light))
+                    }
                     Divider()
                     AgentPanel(registry: model.registry, name: "Paint — Swift demo", kind: "paint")
                         .frame(width: 280)

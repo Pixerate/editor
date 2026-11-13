@@ -26,11 +26,17 @@ public final class PaintLiveStroke {
     /// What the editor shows while the stroke is open.
     var shown: PaintStrokeSession { preview ?? session }
 
-    init(_ controller: PaintEditorController, _ session: PaintStrokeSession, before: PaintDocumentState) {
+    /// Painted on the scheme's view of a stroke layer (`viewBase` in TS), and the scheme that view was in.
+    private let onView: Bool
+    private let viewScheme: String
+
+    init(_ controller: PaintEditorController, _ session: PaintStrokeSession, before: PaintDocumentState, onView: Bool = false, viewScheme: String = "light") {
         self.controller = controller
         self.session = session
         layerId = session.layerId
         beforeDoc = before
+        self.onView = onView
+        self.viewScheme = viewScheme
     }
 
     /// Whether the stroke paints wet media (its layer shows the wet simulation as it goes).
@@ -150,8 +156,8 @@ public final class PaintLiveStroke {
         let current = c.doc
         let before = isWet || c.tempLayerTargets[layerId] != nil ? beforeDoc : current
         let run: (doc: PaintDocumentState, result: PaintStrokeResult, brush: PaintBrush)
+        var finalSession = session
         do {
-            var finalSession = session
             if let pathEffect {
                 var reInit = session.initValues
                 reInit.effect = pathEffect
@@ -170,7 +176,23 @@ public final class PaintLiveStroke {
         }
         if let load = run.result.mixerLoad { c.keepLoad(run.brush, load) }
         if run.doc !== current || c.wetOp != nil {
-            c.commit("\(run.brush.name) stroke", c.withWetEvents(run.doc), before: before)
+            var next = c.withWetEvents(run.doc)
+            // Painted on the scheme's view of a stroke layer, or in a dual colour's dark side: the document draws it in its own colours.
+            if let l = c.getLayer(layerId), l.isPixel, let list = next.liveStrokes?.get(l.id), let sid = run.result.strokeId, let stroke = list.last(where: { $0.id == sid }),
+               onView || stroke.color != finalSession.initValues.colorHex {
+                do {
+                    let canonical = try c.withLiveStrokes(next.with { $0.layers = mapLayer(next.layers, l.id) { _ in l } }, l, list, record: false)
+                    if let drawn = findLayer(canonical.layers, l.id)?.layer, let surface = finalSession.surfaceAfter {
+                        // What was painted is the view in the scheme it was painted in.
+                        c.schemeViews[l.id] = SchemeView(scheme: viewScheme, list: list.map(\.key), base: drawn.pixelSurface, surface: surface)
+                    }
+                    next = canonical
+                } catch {
+                    c.emit()
+                    throw error
+                }
+            }
+            c.commit("\(run.brush.name) stroke", next, before: before)
             c.queueVortexAnimation(after: run.result)
             c.startPendingBlastAnimation(run.result.bounds)
             if let sid = run.result.strokeId, let stroke = c.doc.strokes.last(where: { $0.id == sid }) {
@@ -237,6 +259,7 @@ extension PaintEditorController {
         dirtyLog.append((version, dirty))
         if dirtyLog.count > MAX_DIRTY_LOG { dirtyLog.removeFirst(dirtyLog.count - MAX_DIRTY_LOG) }
         for l in Array(listeners.values) { l() }
+        syncSchemeReplay()
     }
 
     /**
@@ -277,12 +300,25 @@ extension PaintEditorController {
         if i.snapToPerspective == nil { i.snapToPerspective = true }
         let before = doc
         clearBlastAnimation()
+        // On a stroke layer shown in the scheme, the stroke paints on what the viewer sees.
+        let targetLayer = (i.layerId ?? doc.activeLayerId).flatMap { findLayer(doc.layers, $0)?.layer }
+        let targetStrokes = targetLayer.flatMap { $0.isPixel ? doc.liveStrokes?.get($0.id) : nil }
+        var viewBase: TiledSurface? = nil
+        if let targetLayer, let targetStrokes { viewBase = schemeSurface(targetLayer, targetStrokes) }
+        let viewScheme = colorScheme
         let session: PaintStrokeSession
-        do { session = try sessionFor(doc, i) } catch {
+        do {
+            if let viewBase, let targetLayer {
+                let d = doc
+                session = try sessionFor(d.with { $0.layers = mapLayer(d.layers, targetLayer.id) { $0.withSurface(viewBase) } }, i)
+            } else {
+                session = try sessionFor(doc, i)
+            }
+        } catch {
             wetOp = nil
             throw error
         }
-        let stroke = PaintLiveStroke(self, session, before: before)
+        let stroke = PaintLiveStroke(self, session, before: before, onView: viewBase != nil, viewScheme: viewScheme)
         liveStroke = stroke
         emit()
         return stroke

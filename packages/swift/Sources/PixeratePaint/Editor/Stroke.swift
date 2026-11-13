@@ -28,6 +28,8 @@ struct StrokeSessionInit {
     var seed: Int
     /// The paint colour as #rrggbb (recorded with the stroke).
     var colorHex: String
+    /// The light / dark pair `colorHex` is one side of, when the colour came from one (recorded with the stroke).
+    var dualColor: PaintDualColor? = nil
     /// The stroke's extra copies as affine maps (recorded); `copies` holds all of them as engine copies.
     var affineCopies: [Affine]
     var copies: [StrokeCopy]

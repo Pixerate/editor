@@ -62,6 +62,7 @@ extension PaintEditorController {
             _ = try? wet.dry(id)
         }
         logWet("dry", layerId: wetIds.joined(separator: ","))
+        if let k = pendingWetEvents.last?.key { preludeDry.insert(k) }
         return wetIds
     }
 
@@ -443,11 +444,19 @@ extension PaintEditorController {
         return out
     }
 
-    /// The layers with every wet layer dried where it is (what saving and exporting see).
-    func driedLayers(_ layers: [PaintLayer]) -> [PaintLayer] {
-        let ids = wet.wetLayerIds()
-        if ids.isEmpty { return layers }
+    /**
+     * The layers with every wet layer dried where it is (what saving and exporting see). With
+     * `scheme` (`layers` came from the view), a layer the scheme's replay shows dries as the replay does.
+     */
+    func driedLayers(_ layers: [PaintLayer], scheme: Bool = false) -> [PaintLayer] {
+        let replay = scheme ? shownSchemeReplay() : nil
+        let replayed = replay.map { _ in schemeNeeds().replay } ?? []
         var out = layers
+        for id in replayed {
+            if let baked = replay!.bakedSurface(id), findLayer(out, id) != nil { out = mapLayer(out, id) { $0.withSurface(baked) } }
+        }
+        let ids = wet.wetLayerIds().filter { !replayed.contains($0) }
+        if ids.isEmpty { return out }
         for id in ids {
             if let baked = wet.bakedSurface(id), findLayer(out, id) != nil { out = mapLayer(out, id) { $0.withSurface(baked) } }
         }

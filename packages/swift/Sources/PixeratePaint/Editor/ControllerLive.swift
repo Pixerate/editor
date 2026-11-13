@@ -94,7 +94,8 @@ extension PaintEditorController {
     }
 
     /// Changes a live stroke's brush, colour, paint or seed, and redraws its layer (one undo step).
-    public func updateStroke(_ id: String, brushId: String?, brushChanges: JSONObject?, color: String?, paint: JSONValue?, seed: Double?) throws -> (stroke: RecordedStroke, bounds: RasterRect) {
+    /// `dualColor` (instead of `color`) gives the stroke a light / dark pair: the document draws its light side, the view the scheme's.
+    public func updateStroke(_ id: String, brushId: String?, brushChanges: JSONObject?, color: String?, paint: JSONValue?, seed: Double?, dualColor: PaintDualColor? = nil) throws -> (stroke: RecordedStroke, bounds: RasterRect) {
         let (layer, strokes, index) = try findLiveStroke(id)
         let was = strokes[index]
         var brush = was.brush
@@ -116,8 +117,15 @@ extension PaintEditorController {
             if !(seed.rounded() == seed && seed >= 0) { throw PaintEditorError("seed \(jsText(seed)) must be a whole number of 0 or more.") }
             next.seed = Int(seed)
         }
-        if let color {
+        if let dualColor {
+            guard let dual = dualHex(dualColor.json) else { throw PaintEditorError("color \(dualColor.json.stringified()) is not a colour; use #rrggbb, or { light, dark } with a colour each.") }
+            next.color = dual.light
+            next.dualColor = dual
+            next.paint = nil
+            next.effect = nil
+        } else if let color {
             next.color = try parseColor(.string(color))
+            next.dualColor = nil
             next.paint = nil
             next.effect = nil
         }
@@ -136,6 +144,7 @@ extension PaintEditorController {
                 switch try readStrokePaintPublic(paint) {
                 case .color(let c):
                     next.color = c
+                    next.dualColor = nil
                     next.paint = nil
                 case .gradient(let g): next.paint = g
                 }
@@ -268,8 +277,12 @@ extension PaintEditorController {
         return (effectPaintImage(p) ?? renderEffectPaintSync(p)) == nil
     }
 
-    private func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke]) throws -> PaintDocumentState {
-        if isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) first.") }
+    /**
+     * The document with a layer's strokes set and its pixels redrawn. With `record` false (the same
+     * strokes drawn for the colour scheme) the pixel lock doesn't apply and no event is recorded for replays.
+     */
+    func withLiveStrokes(_ d: PaintDocumentState, _ layer: PaintLayer, _ list: [RecordedStroke], record: Bool = true) throws -> PaintDocumentState {
+        if record && isLayerLocked(layer.locks, .pixels) { throw PaintEditorError("Layer \"\(layer.name)\" has its pixels locked; unlock it (update_layer locks) first.") }
         let current = findLayer(d.layers, layer.id)?.layer ?? layer
         // Light is drawn with the strokes while any of them lays it (each stroke's twin dims or erases it too).
         let lit = list.contains { $0.brush.light.amount > 0 }
@@ -290,6 +303,7 @@ extension PaintEditorController {
                 o.removingThick([layer.id])
             }
         }
+        if !record { return next }
         return withPaintEvent(next, kind: "live-strokes", layerId: layer.id, data: ["strokes": .array(list.map(recordedStrokeJSON))], strokes: list)
     }
 
