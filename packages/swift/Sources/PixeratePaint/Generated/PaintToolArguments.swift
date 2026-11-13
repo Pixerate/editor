@@ -4041,6 +4041,53 @@ public struct LoadPaintDocumentArguments: Sendable {
     }
 }
 
+/// Arguments of `save_paint_document`.
+public struct SavePaintDocumentArguments: Sendable {
+    /// Name to save under (default: the paint's current name, or "Untitled paint").
+    public var name: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        name = try args.string("name")
+    }
+}
+
+/// Arguments of `list_saved_paint_documents`.
+public struct ListSavedPaintDocumentsArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `open_saved_paint_document`.
+public struct OpenSavedPaintDocumentArguments: Sendable {
+    /// A key from list_saved_paint_documents or save_paint_document.
+    public var key: String
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        key = try args.required(try args.string("key"), "key")
+    }
+}
+
+/// Arguments of `find_unreferenced_paint_assets`.
+public struct FindUnreferencedPaintAssetsArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `delete_unreferenced_paint_assets`.
+public struct DeleteUnreferencedPaintAssetsArguments: Sendable {
+    /// Delete only these references from find_unreferenced_paint_assets (refs).
+    public var refs: [String]?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        refs = try args.strings("refs")
+    }
+}
+
 /// A tool's arguments read into its `…Arguments` struct.
 public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws -> any Sendable {
     switch name {
@@ -4240,5 +4287,10 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .checkBrushStyle: try CheckBrushStyleArguments(args)
     case .getPaintDocument: try GetPaintDocumentArguments(args)
     case .loadPaintDocument: try LoadPaintDocumentArguments(args)
+    case .savePaintDocument: try SavePaintDocumentArguments(args)
+    case .listSavedPaintDocuments: try ListSavedPaintDocumentsArguments(args)
+    case .openSavedPaintDocument: try OpenSavedPaintDocumentArguments(args)
+    case .findUnreferencedPaintAssets: try FindUnreferencedPaintAssetsArguments(args)
+    case .deleteUnreferencedPaintAssets: try DeleteUnreferencedPaintAssetsArguments(args)
     }
 }

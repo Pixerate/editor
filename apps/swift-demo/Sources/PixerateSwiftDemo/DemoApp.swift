@@ -51,11 +51,22 @@ final class DemoAppDelegate: NSObject, NSApplicationDelegate {
 }
 #endif
 
+/// Saved documents for the demo's editors: a folder in Application Support (memory when there is none).
+private func demoDocumentStore() -> EditorDocumentStore {
+    let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("PixerateSwiftDemo", isDirectory: true)
+        .appendingPathComponent("documents", isDirectory: true)
+    let storage: EditorStorage = folder.map { DirectoryEditorStorage(directory: $0) } ?? MemoryEditorStorage()
+    return createEditorDocumentStore(EditorDocumentStoreOptions(storage: storage, namespace: "pixerate-demo.documents"))
+}
+
 struct DemoRoot: View {
     @State private var model: PaintEditorModel? = {
         do {
             // `author`: the Effects tab offers New effect and the effect authoring editor (#752).
-            let m = try PaintEditorModel(controller: PaintEditorController(width: 1024, height: 768, authoredEffects: .author))
+            // The saved-document tools (save / list / open paintings, clean up their images) over a
+            // folder in Application Support, as the TS demo's paint tab passes its IndexedDB store.
+            let m = try PaintEditorModel(controller: PaintEditorController(width: 1024, height: 768, authoredEffects: .author), documentStore: demoDocumentStore())
             // A few marks so the canvas isn't empty on first launch.
             let c = m.controller
             _ = try c.setColor("#2563eb")

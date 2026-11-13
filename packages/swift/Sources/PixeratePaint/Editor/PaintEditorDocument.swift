@@ -52,13 +52,16 @@ public func createPaintEditorDocument(_ controller: PaintEditorController, asset
 /**
  `get_paint_document` / `load_paint_document` over a paint editor document
  (`createDocumentToolProvider(createPaintEditorDocument(controller), { namespace: '', history: false })`):
- bare names, and no `undo_paint` / `redo_paint` of its own (the editor provider has them).
+ bare names, and no `undo_paint` / `redo_paint` of its own (the editor provider has them). With the
+ host's document `store` (as the TS demo's paint tab and the paint contract pass one), also
+ `save_paint_document`, `list_saved_paint_documents`, `open_saved_paint_document` and, when the
+ store's storage lists its keys, `find_unreferenced_paint_assets` / `delete_unreferenced_paint_assets`.
  */
-public func createPaintDocumentToolProvider(_ document: EditorDocument) -> AgentToolProvider {
-    createDocumentToolProvider(document, DocumentToolProviderOptions(namespace: "", skill: "pixerate-paint-editor", history: false))
+public func createPaintDocumentToolProvider(_ document: EditorDocument, store: EditorDocumentStore? = nil) -> AgentToolProvider {
+    createDocumentToolProvider(document, DocumentToolProviderOptions(namespace: "", skill: "pixerate-paint-editor", history: false, store: store))
 }
 
-/// `get_paint_document` / `load_paint_document` over a new paint editor document of `controller`.
-public func createPaintDocumentToolProvider(_ controller: PaintEditorController, assets: EditorAssetRegistry = EditorAssetRegistry()) throws -> AgentToolProvider {
-    createPaintDocumentToolProvider(try createPaintEditorDocument(controller, assets: assets))
+/// The paint document tools over a new paint editor document of `controller` (with `store`, the saved-document tools too).
+public func createPaintDocumentToolProvider(_ controller: PaintEditorController, assets: EditorAssetRegistry = EditorAssetRegistry(), store: EditorDocumentStore? = nil) throws -> AgentToolProvider {
+    createPaintDocumentToolProvider(try createPaintEditorDocument(controller, assets: assets), store: store)
 }

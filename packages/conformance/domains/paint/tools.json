@@ -23382,6 +23382,118 @@
             "idempotentHint": false,
             "openWorldHint": false
           }
+        },
+        {
+          "name": "save_paint_document",
+          "title": "Save the paint",
+          "description": "Saves the current paint under a name in the host's document storage. Saving the same name again replaces that saved copy. Returns { key, name, savedAt, revision }; pass key to open_saved_paint_document to load it again.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Name to save under (default: the paint's current name, or \"Untitled paint\")."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Save the paint",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "list_saved_paint_documents",
+          "title": "List saved paint documents",
+          "description": "Lists the paint documents in the host's document storage, newest first. Returns { documents: [{ key, name, savedAt, formatVersion }] }.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "List saved paint documents",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "open_saved_paint_document",
+          "title": "Open a saved paint",
+          "description": "Replaces the current paint with a saved one. Unsaved changes stay reachable through undo_paint when undoable is true. Returns { key, name, revision, undoable, migratedFrom?, problems?, unknownKeys? }.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1,
+                "description": "A key from list_saved_paint_documents or save_paint_document."
+              }
+            },
+            "required": [
+              "key"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Open a saved paint",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "find_unreferenced_paint_assets",
+          "title": "Find unreferenced paint assets",
+          "description": "Finds the stored image data (layer pixels, masks and other assets of every image and paint document in the host's storage) that no saved document or autosave snapshot refers to any more, without deleting anything. The open paint's own assets always count as used. Returns { assets, referenced, kept, unreferenced, unreferencedChars, refs, more }: unreferenced is how many could be deleted, unreferencedChars the characters of data they hold, refs up to 100 of their references for delete_unreferenced_paint_assets, and more how many were left out of refs.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Find unreferenced paint assets",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
+        },
+        {
+          "name": "delete_unreferenced_paint_assets",
+          "title": "Delete unreferenced paint assets",
+          "description": "Deletes stored image data that no saved document or autosave snapshot refers to, to free browser storage. Saved documents and the open paint are never affected, and a write in progress is waited for. Call find_unreferenced_paint_assets first to see what would go, and do it when the user asks to free space or clean up storage. It cannot be undone, but nothing refers to the deleted data. Returns { removed, freedChars, kept, remaining }: how many assets were deleted, the characters of data freed, how many unreferenced ones were kept because a write was using them, and how many assets are left.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "refs": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^pixerate-asset:"
+                },
+                "minItems": 1,
+                "uniqueItems": true,
+                "description": "Delete only these references from find_unreferenced_paint_assets (refs). Default: every unreferenced asset. If any is no longer unreferenced, nothing is deleted and the error names it."
+              }
+            },
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Delete unreferenced paint assets",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "idempotentHint": true,
+            "openWorldHint": false
+          }
         }
       ]
     }

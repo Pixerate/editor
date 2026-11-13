@@ -147,20 +147,115 @@ public func internalizeAssets(_ value: JSONValue, _ registry: EditorAssetRegistr
 // MARK: - Storage
 
 /**
- Key–value storage of strings (the TS `StorageAdapter`'s `get` / `set`): a file folder, a
- database, a server. `get` returns nil for a key it does not hold.
+ Key–value storage of strings (the TS `StorageAdapter`): a file folder, a database, a server.
+ `get` returns nil for a key it does not hold. Storage that can list its keys (`listsKeys`, as
+ `MemoryEditorStorage` and `DirectoryEditorStorage` can) also supports asset garbage collection
+ (`collectEditorAssetGarbage`).
  */
 public protocol EditorStorage: AnyObject {
+    /// Short backend name, e.g. `"memory"` or `"directory"`.
+    var kind: String { get }
     func get(_ key: String) async throws -> String?
     func set(_ key: String, _ value: String) async throws
+    func remove(_ key: String) async throws
+    /// Whether `keys(_:)` works (the TS adapter's optional `keys` method). Default false.
+    var listsKeys: Bool { get }
+    /// Every stored key that starts with `prefix` (`""`: every key), in no particular order.
+    func keys(_ prefix: String) async throws -> [String]
 }
 
-/// An `EditorStorage` in memory (`memoryStorage`), for tests and previews.
+extension EditorStorage {
+    public var kind: String { "custom" }
+    public var listsKeys: Bool { false }
+    public func keys(_ prefix: String) async throws -> [String] {
+        throw EditorStorageError("This \(kind) storage cannot list its keys.")
+    }
+}
+
+/// An error a storage operation throws; its message says what failed.
+public struct EditorStorageError: Error, LocalizedError, CustomStringConvertible {
+    public let message: String
+    public init(_ message: String) { self.message = message }
+    public var errorDescription: String? { message }
+    public var description: String { message }
+}
+
+/**
+ An `EditorStorage` in memory (`createMemoryStorage`), for tests, previews and session-only
+ storage. Keys are listed in the order they were first set, as the TS `Map` lists them (initial
+ values in key order).
+ */
 public final class MemoryEditorStorage: EditorStorage {
-    public private(set) var values: [String: String] = [:]
-    public init(_ values: [String: String] = [:]) { self.values = values }
-    public func get(_ key: String) async throws -> String? { values[key] }
-    public func set(_ key: String, _ value: String) async throws { values[key] = value }
+    private var order: [String] = []
+    private var stored: [String: String] = [:]
+    public init(_ values: [String: String] = [:]) {
+        for key in values.keys.sorted() {
+            stored[key] = values[key]
+            order.append(key)
+        }
+    }
+    public var kind: String { "memory" }
+    public var listsKeys: Bool { true }
+    /// The stored values (inspect them in tests).
+    public var values: [String: String] { stored }
+    /// The stored keys in the order they were first set (the TS `entries.keys()`).
+    public var orderedKeys: [String] { order }
+    public func get(_ key: String) async throws -> String? { stored[key] }
+    public func set(_ key: String, _ value: String) async throws {
+        if stored.updateValue(value, forKey: key) == nil { order.append(key) }
+    }
+    public func remove(_ key: String) async throws {
+        if stored.removeValue(forKey: key) != nil { order.removeAll { $0 == key } }
+    }
+    public func keys(_ prefix: String) async throws -> [String] { order.filter { $0.jsStartsWith(prefix) } }
+}
+
+/**
+ An `EditorStorage` over a folder (the TS OPFS adapter's job in the Swift editors): one file per
+ key, named by the key with every character outside `[A-Za-z0-9._-]` percent-encoded, written
+ atomically. Lists its keys, so asset garbage collection works on it.
+ */
+public final class DirectoryEditorStorage: EditorStorage {
+    public let directory: URL
+    /// Storage in `directory` (made when the first value is written).
+    public init(directory: URL) { self.directory = directory }
+    public var kind: String { "directory" }
+    public var listsKeys: Bool { true }
+
+    private static let plain = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+    private func url(_ key: String) -> URL {
+        // "." is encoded too, so no name is hidden or clashes with a temporary file.
+        let name = key.addingPercentEncoding(withAllowedCharacters: Self.plain) ?? key
+        return directory.appendingPathComponent(name.isEmpty ? "%" : name, isDirectory: false)
+    }
+
+    public func get(_ key: String) async throws -> String? {
+        let file = url(key)
+        guard FileManager.default.fileExists(atPath: file.path) else { return nil }
+        return try String(contentsOf: file, encoding: .utf8)
+    }
+
+    public func set(_ key: String, _ value: String) async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data(value.utf8).write(to: url(key), options: .atomic)
+    }
+
+    public func remove(_ key: String) async throws {
+        let file = url(key)
+        if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+    }
+
+    public func keys(_ prefix: String) async throws -> [String] {
+        guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        let keys: [String] = names.compactMap { (name: String) -> String? in
+            // Our names never hold a "." (it is encoded): skip .DS_Store and unfinished atomic writes.
+            if name.contains(".") { return nil }
+            if name == "%" { return "" }
+            return name.removingPercentEncoding
+        }
+        return keys.filter { $0.jsStartsWith(prefix) }.sorted()
+    }
 }
 
 /// Values kept per object for as long as it lives (a JavaScript `WeakMap`).
@@ -204,7 +299,7 @@ private enum Marker: Equatable {
 /// Asset keys each storage already holds (written in this session), valid while its collection marker is unchanged.
 private let persisted = WeakObjectMap<(marker: Marker, keys: Set<String>)>()
 
-private func assetKey(_ ref: String, _ options: EditorAssetStorageOptions) -> String {
+func assetKey(_ ref: String, _ options: EditorAssetStorageOptions) -> String {
     options.prefix + String(ref.dropFirst(editorAssetPrefix.count))
 }
 
@@ -213,11 +308,19 @@ private func assetKey(_ ref: String, _ options: EditorAssetStorageOptions) -> St
  storage already has. Call before writing the document, so it never points at missing data.
  */
 public func persistEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, _ document: JSONValue, options: EditorAssetStorageOptions = EditorAssetStorageOptions()) async throws {
-    let refs = collectAssetRefs(document)
+    try await persistEditorAssets(storage, registry, refs: collectAssetRefs(document), options: options)
+}
+
+/// `persistEditorAssets` for a document's JSON text.
+public func persistEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, text: String, options: EditorAssetStorageOptions = EditorAssetStorageOptions()) async throws {
+    try await persistEditorAssets(storage, registry, refs: collectAssetRefs(text: text), options: options)
+}
+
+private func persistEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, refs: [String], options: EditorAssetStorageOptions) async throws {
     if refs.isEmpty { return }
     // An unreadable marker never matches, so the cache is dropped and assets are written again.
     let marker: Marker
-    do { marker = .value(try await storage.get("\(options.prefix)#collected")) } catch { marker = .unread }
+    do { marker = .value(try await storage.get(assetMarkerKey(options))) } catch { marker = .unread }
     persisted.with(storage, default: { (marker: .unread, keys: []) }) { cache in
         if marker == .unread || marker != cache.marker {
             cache.keys.removeAll()
@@ -240,8 +343,18 @@ public func persistEditorAssets(_ storage: EditorStorage, _ registry: EditorAsse
  */
 @discardableResult
 public func preloadEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, _ document: JSONValue, options: EditorAssetStorageOptions = EditorAssetStorageOptions()) async throws -> [String] {
+    try await preloadEditorAssets(storage, registry, refs: collectAssetRefs(document), options: options)
+}
+
+/// `preloadEditorAssets` for a document's JSON text.
+@discardableResult
+public func preloadEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, text: String, options: EditorAssetStorageOptions = EditorAssetStorageOptions()) async throws -> [String] {
+    try await preloadEditorAssets(storage, registry, refs: collectAssetRefs(text: text), options: options)
+}
+
+private func preloadEditorAssets(_ storage: EditorStorage, _ registry: EditorAssetRegistry, refs: [String], options: EditorAssetStorageOptions) async throws -> [String] {
     var missing: [String] = []
-    for ref in collectAssetRefs(document) {
+    for ref in refs {
         if registry.has(ref) { continue }
         if let data = try await storage.get(assetKey(ref, options)) {
             registry.set(ref, data)
@@ -251,3 +364,6 @@ public func preloadEditorAssets(_ storage: EditorStorage, _ registry: EditorAsse
     }
     return missing
 }
+
+/// Changed by every collection that deletes something; never matches an asset key.
+func assetMarkerKey(_ options: EditorAssetStorageOptions) -> String { "\(options.prefix)#collected" }

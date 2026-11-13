@@ -11,7 +11,9 @@
 
 import type { EffectProvider } from '../effects/types';
 import { BRUSH_OPTION_CONTROLS } from '../image-editor/layers/paint-ui';
+import { createEditorDocumentStore, type EditorDocumentStore } from '../persistence/documentStore';
 import { createDocumentToolProvider } from '../persistence/documentTools';
+import { createMemoryStorage } from '../persistence/storage';
 import { EDITOR_DOCUMENT_FORMAT, toEditorDocumentFile } from '../persistence/editorDocument';
 import { defaultLayerEffect, LAYER_EFFECT_KINDS } from '../raster/effects/model';
 import { LAYER_EFFECT_MENU, layerEffectControls } from '../raster/effects/ui';
@@ -284,7 +286,7 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
     createPaintBrushLibraryToolProvider(controller),
     createPaintProposalToolProvider(createPaintProposals({ controller })),
     ...paintStyleProviders(controller, paintStyleResolver({})),
-    paintDocumentToolProvider(document),
+    paintDocumentToolProvider(document, paintDocumentStore()),
   ].map(toolList);
   const files: Record<string, unknown> = {
     'document.schema.json': { $schema: 'https://json-schema.org/draft/2020-12/schema', $id: 'document.schema.json', ...PAINT_DOCUMENT_JSON_SCHEMA },
@@ -304,10 +306,23 @@ export function paintContracts(options: { effects: EffectProvider }): Record<str
 
 /**
  * `get_paint_document` / `load_paint_document` over a paint editor document: bare names, and no
- * `undo_paint` / `redo_paint` of its own (the editor provider has them).
+ * `undo_paint` / `redo_paint` of its own (the editor provider has them). With the host's document
+ * store (as the demo's paint tab passes it), also `save_paint_document`,
+ * `list_saved_paint_documents`, `open_saved_paint_document` and, as the store's storage lists
+ * its keys, `find_unreferenced_paint_assets` / `delete_unreferenced_paint_assets`.
  */
-function paintDocumentToolProvider(document: ReturnType<typeof createPaintEditorDocument>): AgentToolProvider {
-  return createDocumentToolProvider(document, { namespace: '', history: false, skill: 'pixerate-paint-editor' });
+function paintDocumentToolProvider(document: ReturnType<typeof createPaintEditorDocument>, store: EditorDocumentStore): AgentToolProvider {
+  return createDocumentToolProvider(document, { namespace: '', history: false, skill: 'pixerate-paint-editor', store });
+}
+
+/**
+ * The document store of a paint host: memory storage (which lists its keys) and a clock that
+ * starts at 2026-01-01T00:00:00.000Z and moves one minute per save, so `savedAt` is the same in
+ * every implementation.
+ */
+function paintDocumentStore(): EditorDocumentStore {
+  let saves = 0;
+  return createEditorDocumentStore({ storage: createMemoryStorage(), now: () => Date.UTC(2026, 0, 1) + 60_000 * saves++ });
 }
 
 /** A house-style check list: check ids, or `{ id, ...options }`. */
@@ -356,7 +371,8 @@ const GENERATED_ID = /^(pl[0-9a-z]{9,}|[a-z]+_[0-9a-z]{8,}_[0-9a-z]+)$/;
 
 /**
  * A fresh paint editor for replaying a conformance scenario (`domains/paint/fixtures`): every paint
- * tool provider in one registry that validates arguments, the saved document (the
+ * tool provider in one registry that validates arguments (the document tools over a memory
+ * document store of the host's own, `paintDocumentStore`), the saved document (the
  * `pixerate.editor-document` envelope) and the composited pixels. `setup` is the scenario's
  * editor options, such as `{ width, height }`, where `stickers: "fake"` is the editor's stickers with
  * the fake sticker library (`createFakeStickerProvider`, which has an animated sticker); `effects` is
@@ -379,7 +395,7 @@ export function createPaintConformanceHost(raw: Omit<PaintEditorOptions, 'sticke
   registry.register(createPaintBrushLibraryToolProvider(controller));
   registry.register(createPaintProposalToolProvider(createPaintProposals({ controller })));
   for (const p of paintStyleProviders(controller, paintStyleResolver({ style, brushStyle, brand }), readOnly)) registry.register(p);
-  registry.register(paintDocumentToolProvider(createPaintEditorDocument(controller)));
+  registry.register(paintDocumentToolProvider(createPaintEditorDocument(controller), paintDocumentStore()));
   return {
     callTool: (name, args) => registry.callTool(name, args),
     document: () => toEditorDocumentFile(createPaintEditorDocument(controller)),

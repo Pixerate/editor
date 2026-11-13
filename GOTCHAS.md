@@ -4804,3 +4804,15 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: Dropping a dragged Gantt bar or quadrant point also selected it (or cleared the selection when the drop ended over the background).
 - **Root Cause**: The browser fires `click` after `pointerup` on the element under the pointer, whether or not the pointer moved in between.
 - **Solution / Workaround**: `MermaidFamilyScene` sets a `dragged` flag once the pointer travels past `DIAGRAM_DRAG_THRESHOLD` and swallows the next click. Drag coordinates go through `svg.getScreenCTM().inverse()`, so they stay right when the scene is drawn scaled; jsdom has no `getScreenCTM`, so tests fall back to client coordinates.
+
+### [swift] `NSLock.lock()` Is Unavailable in an `async` Function
+
+- **Issue / Symptom**: The Swift document store's queue (`AsyncSerialQueue`) failed to build with "instance method 'lock' is unavailable from asynchronous contexts; Use async-safe scoped locking instead".
+- **Root Cause**: Swift 6 marks `NSLock.lock()` / `unlock()` unavailable inside `async` functions, because a lock held across a suspension point can deadlock or be released on another thread.
+- **Solution / Workaround**: Take and release the lock only in synchronous code: a plain helper method, or the closure of `withCheckedContinuation` (it runs synchronously), which decides whether to resume at once or queue the continuation. Never hold a lock across an `await`.
+
+### [swift/core] Asset Garbage Reports List References in the Storage's Key Order
+
+- **Issue / Symptom**: `find_unreferenced_<kind>_assets` returned the right counts but its `refs` in another order than the TS recording, and the store's stored keys came out in a different order than the TS `createMemoryStorage` map.
+- **Root Cause**: `collectEditorAssetGarbage` walks `storage.keys(prefix)` in the order the storage lists them; the TS memory storage is a `Map` (insertion order), and the first `MemoryEditorStorage` was a Swift `Dictionary` (no order).
+- **Solution / Workaround**: `MemoryEditorStorage` keeps insertion order (`orderedKeys`), so a conformance host gives the TS order. Storage that lists keys in another order (a folder: `DirectoryEditorStorage` sorts them) gives the same counts with `refs` in its own order, as the TS adapters do among themselves. The paint contract lists the store tools (its host has a store), so a Swift host or test that compares against the contract must pass `store:` to `createPaintDocumentToolProvider`.
