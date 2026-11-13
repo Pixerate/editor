@@ -165,6 +165,7 @@ import {
 import type { EffectAuthoringSession } from '../effects/authoring.js';
 import { createPixelEffectProvider, isPixelDocument } from '../effects/pixel-provider.js';
 import { PIXEL_TEMPLATES } from '../effects/pixel-provider.js';
+import { PixelWebGL } from '../effects/pixel-webgl.js';
 import { effectPaintKey, effectPaintSize, isPaintEffectPaint, readEffectStrokeMap, readPaintEffectPaint, withStrokePath, type EffectPaintPixels, type PaintEffectPaint } from './effect-paint';
 import { checkPaintEffectPlace, effectLayersToJSON, effectPaintFromHint, mixPixels, nextPaperEffectVersion, overPixels, PaintEffectsRenderer, PAPER_EFFECT_BLENDS, paperEffectFromJSON, paperEffectToJSON, readPaintEffectSource, type PaintEffectPlace, type PaintEffectSource, type PaintPaperEffect, type PaperEffectBlend } from './effects';
 import { DEFAULT_LIGHTING, DEFAULT_VIEW_TILT, emptyThickChannels, FilmBuffer, hasThickChannels, LitCache, normalizeLighting, normalizeViewTilt, reliefInfo, thickFromJSON, thickToJSON, type PaintLighting, type PaintViewTilt, type ThickChannels } from './thick';
@@ -336,6 +337,15 @@ export interface PaintEditorOptions extends Partial<PaintCanvas> {
   rawShaders?: boolean;
   /** Budgets for authored effects (source length, cost per pixel, trial render, live frames). */
   authoredEffectLimits?: AuthoredEffectLimits;
+  /**
+   * Draw live view frames of pixel expression authored effects with WebGL2 when there is one
+   * (default true; a `PixelWebGL` uses that context instead of the shared one). Frames drawn on the
+   * GPU are view only and dropped once shown, so exports, replays and saved pixels always come
+   * from the CPU evaluator. Without WebGL2 (Node, workers without OffscreenCanvas), on a shader
+   * that doesn't compile within 2 s, or after context loss, frames render on the CPU
+   * (`authoredEffectsGPUStatus` says why). The same switch as Swift's `authoredEffectsGPU`.
+   */
+  authoredEffectsGPU?: boolean | PixelWebGL;
   /** Wet media: kernel, threads, speed (steps per second) and the memory kept for undoing wet strokes. */
   wet?: PaintWetOptions;
   /** The sticker library (default the editor's own stamps, `editorStickers()`); see `setStickersProvider`. */
@@ -1018,6 +1028,20 @@ export class PaintEditorController {
   private readonly slowAuthoredFrames = new Map<string, number>();
   /** Set while live frames render, so authored effect renders are timed. */
   private timingLiveFrames = false;
+  /**
+   * Draw live view frames of pixel expression authored effects with WebGL2 when there is one
+   * (the `authoredEffectsGPU` option, default true). Frames drawn on the GPU are view only and
+   * dropped once shown, so exports, replays and saved pixels always come from the CPU renderer.
+   */
+  authoredEffectsGPU: boolean;
+  /** The WebGL2 context live frames use (the option's, else `PixelWebGL.shared()` on first use). */
+  private pixelWebGL: PixelWebGL | null;
+  /** Effect paint keys rendered on the GPU for the view frame being drawn (dropped once it is shown). */
+  private readonly gpuFrameKeys = new Set<string>();
+  /** Why the last live frame of an authored effect rendered on the CPU instead of the GPU. */
+  private gpuFallback: string | null = null;
+  /** Whether the last live frame of an authored effect was drawn on the GPU. */
+  private gpuLastFrame = false;
   private paperEffectNodeCache: ImageNode | null = null;
   private mutations: MutationEntry[] = [];
   private nextMutationId = 1;
@@ -1036,6 +1060,8 @@ export class PaintEditorController {
     this.authoredPolicy = policy;
     this.rawShaders = options.rawShaders === true;
     this.authoredLimits = { ...AUTHORED_DEFAULT_LIMITS, ...options.authoredEffectLimits };
+    this.authoredEffectsGPU = options.authoredEffectsGPU !== false;
+    this.pixelWebGL = options.authoredEffectsGPU instanceof PixelWebGL ? options.authoredEffectsGPU : null;
     this.rasterizeSticker = options.rasterizeSticker ?? defaultStickerRasterizer;
     if (options.stickers) this.stickers.set(options.stickers);
     this.doc = createPaintDocument({ width: options.width, height: options.height, dpi: options.dpi, paper: this.resolvePaper(options.paper) });
@@ -2677,6 +2703,55 @@ export class PaintEditorController {
     return out;
   }
 
+  /**
+   * How live frames of authored effects are drawn: `gpu` is the `authoredEffectsGPU` switch,
+   * `renderer` what drew the last live frame of a pixel expression effect (`webgl2` or `cpu`; `null`
+   * before one was drawn) and `reason` why it fell back to the CPU (no WebGL2, a shader that did not
+   * compile or took over 2 s, a lost context), or null. Exports, replays and saved pixels always
+   * come from the CPU.
+   */
+  get authoredEffectsGPUStatus(): { gpu: boolean; renderer: 'webgl2' | 'cpu' | null; reason: string | null } {
+    const renderer = this.gpuLastFrame ? 'webgl2' : this.gpuFallback !== null ? 'cpu' : null;
+    return { gpu: this.authoredEffectsGPU, renderer, reason: this.gpuLastFrame ? null : this.gpuFallback };
+  }
+
+  /**
+   * A live view frame of a pixel expression authored effect drawn with WebGL2, or null to render
+   * it on the CPU (the reason is kept for `authoredEffectsGPUStatus`).
+   */
+  private async gpuLiveFrame(p: PaintEffectPaint, width: number, height: number): Promise<EffectPixels | null> {
+    if (!this.authoredEffectsGPU) {
+      this.gpuLastFrame = false;
+      this.gpuFallback = 'authoredEffectsGPU is off';
+      return null;
+    }
+    const gpu = (this.pixelWebGL ??= PixelWebGL.shared());
+    try {
+      if (!gpu.available) throw new Error(`Pixel expressions render on the CPU: ${gpu.reason}.`);
+      const r = await this.authoredProvider().createGPURenderer(p.effect, { width, height }, gpu);
+      // Not written in pixel expressions: its own provider draws it.
+      if (!r) return null;
+      try {
+        const pixels = r.renderSync!({ time: p.time, values: p.values });
+        this.gpuLastFrame = true;
+        this.gpuFallback = null;
+        return pixels;
+      } finally {
+        r.dispose();
+      }
+    } catch (e) {
+      this.gpuLastFrame = false;
+      this.gpuFallback = e instanceof Error ? e.message : String(e);
+      return null;
+    }
+  }
+
+  /** Drops the effect paint renders the GPU drew for a view frame. */
+  private dropGPUFrames(): void {
+    for (const k of this.gpuFrameKeys) this.effectPaintPixels.delete(k);
+    this.gpuFrameKeys.clear();
+  }
+
   /** Two live frames of an authored effect over budget in a row stop its live playback. */
   private noteLiveFrame(effect: string, ms: number): void {
     if (!this.timingLiveFrames || !isAuthoredEffectId(effect) || this.frozenAuthored.has(effect)) return;
@@ -3213,7 +3288,10 @@ export class PaintEditorController {
     let pixels: EffectPixels;
     try {
       const t0 = authoredNow();
-      pixels = await this.rendererFor(p.effect).render(provider, p.effect, { width, height }, { time: p.time, values: p.values });
+      // A live view frame of a pixel expression effect may render on the GPU; it is dropped once shown (`gpuFrameKeys`).
+      const gpu = isAuthoredEffectId(p.effect) && this.timingLiveFrames ? await this.gpuLiveFrame(p, width, height) : null;
+      if (gpu) this.gpuFrameKeys.add(effectPaintKey(p));
+      pixels = gpu ?? (await this.rendererFor(p.effect).render(provider, p.effect, { width, height }, { time: p.time, values: p.values }));
       this.noteLiveFrame(p.effect, authoredNow() - t0);
     } catch (e) {
       throw new PaintEditorError(`Effect paint could not render ${what}: ${e instanceof Error ? e.message : String(e)}`);
@@ -5970,7 +6048,7 @@ export class PaintEditorController {
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
-    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits });
+    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits, authoredEffectsGPU: false });
     target.brushEntries = this.brushEntries;
     target.brushSources.set(this.brushSources.all());
     const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
@@ -8276,30 +8354,38 @@ export class PaintEditorController {
     this.timingLiveFrames = true;
     try {
       await this.prepareEffectPaints(sources.map((p) => this.framePaint(p, time)));
+    } catch (e) {
+      this.dropGPUFrames();
+      throw e;
     } finally {
       this.timingLiveFrames = false;
     }
-    if (revision !== this.docRevision || this.session) return false;
-    const next = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
-    const dirty: RasterRect[] = [];
-    this.liveEffectAt = time;
+    // Frames drawn on the GPU are for this view frame only: exports and replays render on the CPU.
     try {
-      for (const { layer, strokes } of layers) {
-        const shown = this.animatedLayers.get(layer.id);
-        const from = shown && shown.base === layer.surface ? shown.surface : layer.surface;
-        // Where live strokes may paint at any frame: what they painted, and their reach.
-        const areas = strokes.filter(isLiveEffect).flatMap((st) => [liveStrokeBounds(st), ...(this.paintedBounds.get(st) ? [this.paintedBounds.get(st)!] : [])]);
-        const surface = this.drawLiveStrokes({ ...layer, surface: from, offset: { x: 0, y: 0 } }, strokes, layer.offset.x || layer.offset.y ? null : areas);
-        next.set(layer.id, { base: layer.surface, surface });
-        dirty.push(...areas);
+      if (revision !== this.docRevision || this.session) return false;
+      const next = new Map<string, { base: TiledSurface; surface: TiledSurface }>();
+      const dirty: RasterRect[] = [];
+      this.liveEffectAt = time;
+      try {
+        for (const { layer, strokes } of layers) {
+          const shown = this.animatedLayers.get(layer.id);
+          const from = shown && shown.base === layer.surface ? shown.surface : layer.surface;
+          // Where live strokes may paint at any frame: what they painted, and their reach.
+          const areas = strokes.filter(isLiveEffect).flatMap((st) => [liveStrokeBounds(st), ...(this.paintedBounds.get(st) ? [this.paintedBounds.get(st)!] : [])]);
+          const surface = this.drawLiveStrokes({ ...layer, surface: from, offset: { x: 0, y: 0 } }, strokes, layer.offset.x || layer.offset.y ? null : areas);
+          next.set(layer.id, { base: layer.surface, surface });
+          dirty.push(...areas);
+        }
+      } finally {
+        this.liveEffectAt = null;
       }
+      this.animatedLayers = next;
+      this.effectTime = time;
+      this.emit(dirty);
+      return true;
     } finally {
-      this.liveEffectAt = null;
+      this.dropGPUFrames();
     }
-    this.animatedLayers = next;
-    this.effectTime = time;
-    this.emit(dirty);
-    return true;
   }
 
   /**
