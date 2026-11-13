@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/conformance",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Language-neutral contracts generated from @pixerate/editor, for other implementations (the Swift port) to conform to",
   "license": "MIT",
