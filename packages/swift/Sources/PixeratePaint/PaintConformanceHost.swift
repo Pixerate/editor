@@ -7,7 +7,8 @@ import PixerateCore
  * `createPaintConformanceHost` in `paint-editor/contract.ts`: every paint tool provider this port
  * has in one registry that validates arguments, the saved document (the `pixerate.editor-document`
  * envelope) and the composited pixels. Wet paint runs with the GPU engine off, as in the TS host. `setup` is the scenario's editor options (`width`,
- * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`). Provider effects come from `FakeEffectProvider` (with paint hints for `effectPaintHints: true`),
+ * `height`, `dpi`, `paper`, `brushId`, `color`, `authoredEffects`, `rawShaders`, `authoredEffectLimits`), and the house style
+ * (`style`, `brushStyle`, `brand` and `readOnly`, as `PaintStyleSetup`). Provider effects come from `FakeEffectProvider` (with paint hints for `effectPaintHints: true`),
  * as the TS host uses the fake provider.
  */
 public final class PaintConformanceHost: ConformanceHost {
@@ -37,6 +38,30 @@ public final class PaintConformanceHost: ConformanceHost {
         _ = try registry.register(createPaintEffectAuthoringToolProvider(controller))
         _ = try registry.register(createPaintBrushLibraryToolProvider(controller))
         _ = try registry.register(createPaintProposalToolProvider(PaintProposals(controller: controller)))
+
+        // `setup.style || setup.brushStyle || setup.brand ? { 'house/SKILL.md', 'house/paint-editor.json'?,
+        // 'house/brushes.json'?, 'house/brand.json'? } : {}` in one `org` layer: a truthy value is a
+        // file of the skill, and each is validated as `createStyleResolver` does.
+        func truthy(_ value: JSONValue?) -> JSONValue? {
+            switch value {
+            case nil, .null?, .bool(false)?, .string("")?: return nil
+            case .number(let n)? where n == 0 || n.isNaN: return nil
+            case let raw?: return raw
+            }
+        }
+        let style = truthy(setup["style"]), brushStyle = truthy(setup["brushStyle"]), brand = truthy(setup["brand"])
+        let styles = style == nil && brushStyle == nil && brand == nil
+            ? PaintHouseStyles()
+            : PaintHouseStyles(skill: "house", layer: "org", style: style, brushStyle: brushStyle, brand: brand)
+        // `readOnly`: true, or the reason as a string, hides fix_paint_style.
+        let readOnly: String?
+        switch truthy(setup["readOnly"]) {
+        case .string(let reason)?: readOnly = reason
+        case nil: readOnly = nil
+        default: readOnly = "This painting is read-only."
+        }
+        _ = try registry.register(createPaintStyleToolProvider(controller, styles.paint, readOnly: { readOnly }))
+        _ = try registry.register(createBrushStyleToolProvider(controller.brushLibrary, styles.brushes))
     }
 
     private static func limits(_ o: JSONObject?) -> AuthoredEffectLimits {

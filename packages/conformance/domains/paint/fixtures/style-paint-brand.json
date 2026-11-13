@@ -1,0 +1,590 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-brand",
+  "description": "A brand.json alone (#791): the paint and brush profiles take their palette from the brand, the brand's checks run after the profile's own (named on the org layer), and fix_paint_style leaves a house brush the library does not have.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "brand": {
+      "name": "Acme",
+      "colors": {
+        "primary": "#2244aa",
+        "secondary": "#cc3300",
+        "accent": "#2244AA",
+        "text": "#111111",
+        "background": "#ffffff"
+      },
+      "checks": [
+        "palette-only",
+        {
+          "id": "min-contrast",
+          "ratio": 7
+        },
+        "distinguishable"
+      ]
+    },
+    "style": {
+      "brushes": [
+        "acme-house-pen"
+      ],
+      "checks": [
+        "brushes"
+      ]
+    },
+    "brushStyle": {
+      "checks": [
+        "media",
+        {
+          "id": "palette-only",
+          "allowNeutrals": false
+        }
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.5
+          },
+          {
+            "x": 16,
+            "y": 10,
+            "pressure": 0.8
+          },
+          {
+            "x": 28,
+            "y": 8,
+            "pressure": 0.6
+          }
+        ],
+        "brushId": "ink-pen",
+        "color": "#cc3300",
+        "seed": 31
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 10,
+            "width": 32,
+            "x": 0,
+            "y": 2
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 12,
+            "pressure": 0.5
+          },
+          {
+            "x": 16,
+            "y": 16,
+            "pressure": 0.8
+          },
+          {
+            "x": 28,
+            "y": 14,
+            "pressure": 0.6
+          }
+        ],
+        "brushId": "ink-pen",
+        "color": "#33aa55",
+        "seed": 32
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 10,
+            "width": 32,
+            "x": 0,
+            "y": 8
+          },
+          "dabs": 49,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "The current brush is \"pencil-6b\"; the house brushes are acme-house-pen. Pick \"acme-house-pen\" before painting.",
+              "severity": "warning",
+              "target": {
+                "brush": "acme-house-pen"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s1 was painted with \"ink-pen\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s1"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s2 was painted with \"ink-pen\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s2"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "The current colour uses #1f2937, which is not a house colour; the nearest is #111111. Change it to #111111 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "color": "current"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 2 (\"Lemon yellow\") uses #f3d23a, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 3 (\"Yellow ochre\") uses #c8912f, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 4 (\"Warm red\") uses #d23a2a, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 5 (\"Crimson\") uses #9e1f3d, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 4
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 6 (\"Burnt earth\") uses #8a4a2b, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 5
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 7 (\"Deep blue\") uses #2f3f9e, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 6
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 8 (\"Cool blue\") uses #1d6f8f, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 7
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 9 (\"Leaf green\") uses #4f6e2c, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 8
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Stroke s2 uses #33aa55, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "stroke": "s2"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "brushes",
+            "palette-only",
+            "min-contrast",
+            "distinguishable"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "changed": {},
+          "left": [
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "The current brush is \"pencil-6b\"; the house brushes are acme-house-pen. Pick \"acme-house-pen\" before painting.",
+              "severity": "warning",
+              "target": {
+                "brush": "acme-house-pen"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s1 was painted with \"ink-pen\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s1"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s2 was painted with \"ink-pen\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s2"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "The current colour uses #1f2937, which is not a house colour; the nearest is #111111. Change it to #111111 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "color": "current"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 2 (\"Lemon yellow\") uses #f3d23a, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 3 (\"Yellow ochre\") uses #c8912f, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 4 (\"Warm red\") uses #d23a2a, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 5 (\"Crimson\") uses #9e1f3d, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 4
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 6 (\"Burnt earth\") uses #8a4a2b, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 5
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 7 (\"Deep blue\") uses #2f3f9e, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 6
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 8 (\"Cool blue\") uses #1d6f8f, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 7
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 9 (\"Leaf green\") uses #4f6e2c, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 8
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Stroke s2 uses #33aa55, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "stroke": "s2"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {
+        "ids": [
+          "crayon",
+          "ballpoint",
+          "highlighter",
+          "eraser-soft"
+        ]
+      },
+      "expect": {
+        "result": {
+          "checked": [
+            "crayon",
+            "ballpoint",
+            "highlighter",
+            "eraser-soft"
+          ],
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") default colour uses #dc2626, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": "default"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 1 uses #dc2626, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 0
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 2 uses #f59e0b, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 3 uses #facc15, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 4 uses #16a34a, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 5 uses #2563eb, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 4
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 6 uses #7c3aed, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 5
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") default colour uses #1e3a8a, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": "default"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 1 uses #1e3a8a, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 0
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 2 uses #111827, which is not a house colour; the nearest is #111111. Change it to #111111 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 3 uses #b91c1c, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 4 uses #166534, which is not a house colour; the nearest is #2244aa. Change it to #2244aa or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush highlighter (\"Highlighter\") default colour uses #fff200, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "highlighter",
+                "colour": "default"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush highlighter (\"Highlighter\") palette colour 1 uses #fff200, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "highlighter",
+                "colour": 0
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush highlighter (\"Highlighter\") palette colour 2 uses #ff6ec7, which is not a house colour; the nearest is #cc3300. Change it to #cc3300 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "highlighter",
+                "colour": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush highlighter (\"Highlighter\") palette colour 3 uses #7cff4f, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "highlighter",
+                "colour": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush highlighter (\"Highlighter\") palette colour 4 uses #ffa630, which is not a house colour; the nearest is #ffffff. Change it to #ffffff or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "highlighter",
+                "colour": 3
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only",
+            "min-contrast",
+            "distinguishable"
+          ],
+          "skipped": [
+            {
+              "check": "media",
+              "reason": "The check could not run: the profile has no \"media\"."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

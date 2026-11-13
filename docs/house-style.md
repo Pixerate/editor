@@ -189,8 +189,9 @@ picker's selection; `fix_typography_style` snaps it to the house type in one cha
 
 An aspect-ratio finding carries the centred crop that reaches the nearest house ratio, for
 `set_crop`; `fix_image_style` clamps the base adjustments. `fix_paint_style` switches to the house
-paper and brush; strokes already painted stay as they are. The Swift paint editor does not read
-house styles yet.
+paper and brush; strokes already painted stay as they are. The Swift paint editor reads the same
+`paint-editor.json`, `brushes.json` and `brand.json` (`PaintHouseStyles` in `PixeratePaint`), with
+`check_paint_style`, `fix_paint_style` and `check_brush_style` matching the TS core.
 
 ### `animation-editor.json` and `video-editor.json`
 

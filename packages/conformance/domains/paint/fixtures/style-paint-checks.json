@@ -1,0 +1,462 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-checks",
+  "description": "check_paint_style (#791): the paper, brushes (the current brush and strokes painted with other brushes), max-layers and palette-only checks on strokes (one finding per colour), the current colour and swatches.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "style": {
+      "papers": [
+        "hot-pressed",
+        "rough-watercolor"
+      ],
+      "brushes": [
+        "pencil-hb",
+        "ink-pen"
+      ],
+      "maxLayers": 1,
+      "palette": [
+        "#f3d23a",
+        "#c8912f",
+        "#d23a2a",
+        "#9e1f3d",
+        "#8a4a2b",
+        "#2f3f9e",
+        "#1d6f8f",
+        "#4f6e2c",
+        "#2244aa"
+      ],
+      "checks": [
+        "paper",
+        "brushes",
+        "max-layers",
+        "palette-only"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "paper",
+              "layer": "org",
+              "message": "The painting is on \"cold-pressed\" paper; the house papers are \"hot-pressed\", \"rough-watercolor\". Switch to \"hot-pressed\" with set_paper.",
+              "severity": "warning",
+              "target": {
+                "paper": "hot-pressed"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "The current brush is \"pencil-6b\"; the house brushes are pencil-hb, ink-pen. Pick \"pencil-hb\" before painting.",
+              "severity": "warning",
+              "target": {
+                "brush": "pencil-hb"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "The current colour uses #1f2937, which is not a house colour; the nearest is #2f3f9e. Change it to #2f3f9e or another palette colour.",
+              "severity": "error",
+              "target": {
+                "color": "current"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "paper",
+            "brushes",
+            "max-layers",
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 4,
+            "pressure": 0.5
+          },
+          {
+            "x": 16,
+            "y": 8,
+            "pressure": 0.8
+          },
+          {
+            "x": 28,
+            "y": 6,
+            "pressure": 0.6
+          }
+        ],
+        "brushId": "pencil-hb",
+        "color": "#2244aa",
+        "seed": 11
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 12,
+            "width": 32,
+            "x": 0,
+            "y": 0
+          },
+          "dabs": 50,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 10,
+            "pressure": 0.5
+          },
+          {
+            "x": 16,
+            "y": 14,
+            "pressure": 0.8
+          },
+          {
+            "x": 28,
+            "y": 12,
+            "pressure": 0.6
+          }
+        ],
+        "brushId": "marker",
+        "color": "#ff00ff",
+        "seed": 12
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 41,
+            "width": 62,
+            "x": -15,
+            "y": -9
+          },
+          "dabs": 26,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 16,
+            "pressure": 0.5
+          },
+          {
+            "x": 16,
+            "y": 20,
+            "pressure": 0.8
+          },
+          {
+            "x": 28,
+            "y": 18,
+            "pressure": 0.6
+          }
+        ],
+        "brushId": "marker",
+        "color": "#FF00FF",
+        "seed": 13
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 41,
+            "width": 62,
+            "x": -15,
+            "y": -3
+          },
+          "dabs": 26,
+          "layerId": "@1",
+          "strokeId": "s3"
+        }
+      }
+    },
+    {
+      "tool": "add_layer",
+      "arguments": {
+        "name": "Glaze"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": null,
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Glaze",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "add_swatch",
+      "arguments": {
+        "color": "#00ff88",
+        "name": "Mint"
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f7f5ee",
+              "index": 0,
+              "name": "Warm white"
+            },
+            {
+              "color": "#f3d23a",
+              "index": 1,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 2,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 3,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 4,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 5,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 6,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 7,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 8,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 9,
+              "name": "Warm black"
+            },
+            {
+              "color": "#00ff88",
+              "index": 10,
+              "name": "Mint"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "add_swatch",
+      "arguments": {
+        "color": "#00ffee"
+      },
+      "expect": {
+        "result": {
+          "swatches": [
+            {
+              "color": "#f7f5ee",
+              "index": 0,
+              "name": "Warm white"
+            },
+            {
+              "color": "#f3d23a",
+              "index": 1,
+              "name": "Lemon yellow"
+            },
+            {
+              "color": "#c8912f",
+              "index": 2,
+              "name": "Yellow ochre"
+            },
+            {
+              "color": "#d23a2a",
+              "index": 3,
+              "name": "Warm red"
+            },
+            {
+              "color": "#9e1f3d",
+              "index": 4,
+              "name": "Crimson"
+            },
+            {
+              "color": "#8a4a2b",
+              "index": 5,
+              "name": "Burnt earth"
+            },
+            {
+              "color": "#2f3f9e",
+              "index": 6,
+              "name": "Deep blue"
+            },
+            {
+              "color": "#1d6f8f",
+              "index": 7,
+              "name": "Cool blue"
+            },
+            {
+              "color": "#4f6e2c",
+              "index": 8,
+              "name": "Leaf green"
+            },
+            {
+              "color": "#25221f",
+              "index": 9,
+              "name": "Warm black"
+            },
+            {
+              "color": "#00ff88",
+              "index": 10,
+              "name": "Mint"
+            },
+            {
+              "color": "#00ffee",
+              "index": 11
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "set_color",
+      "arguments": {
+        "color": "#2244aa"
+      },
+      "expect": {
+        "result": {
+          "color": "#2244aa",
+          "locked": false,
+          "secondaryColor": "#ffffff"
+        }
+      }
+    },
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "paper",
+              "layer": "org",
+              "message": "The painting is on \"cold-pressed\" paper; the house papers are \"hot-pressed\", \"rough-watercolor\". Switch to \"hot-pressed\" with set_paper.",
+              "severity": "warning",
+              "target": {
+                "paper": "hot-pressed"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "The current brush is \"pencil-6b\"; the house brushes are pencil-hb, ink-pen. Pick \"pencil-hb\" before painting.",
+              "severity": "warning",
+              "target": {
+                "brush": "pencil-hb"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s2 was painted with \"marker\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s2"
+              }
+            },
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Stroke s3 was painted with \"marker\", not a house brush.",
+              "severity": "info",
+              "target": {
+                "stroke": "s3"
+              }
+            },
+            {
+              "check": "max-layers",
+              "layer": "org",
+              "message": "The painting has 2 layers; the house style keeps paintings to 1. Merge layers that belong together.",
+              "severity": "info",
+              "target": {
+                "painting": true
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 11 (\"Mint\") uses #00ff88, which is not a house colour; the nearest is #f3d23a. Change it to #f3d23a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 10
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Swatch 12 uses #00ffee, which is not a house colour; the nearest is #f3d23a. Change it to #f3d23a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "swatch": 11
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Stroke s2 uses #ff00ff, which is not a house colour; the nearest is #d23a2a. Change it to #d23a2a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "stroke": "s2"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "paper",
+            "brushes",
+            "max-layers",
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}
