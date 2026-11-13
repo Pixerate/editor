@@ -50,6 +50,7 @@ the pitfalls, and uses the tools below.
 | --- | --- | --- |
 | `inspect_color` | Inspects a colour string and converts between hex, rgb, hsl, and oklch, checking sRGB gamut and relative luminance | `{ hex, rgb, hsl, oklch, css, inSrgbGamut, relativeLuminance }` |
 | `check_color_contrast` | Evaluates WCAG 2 contrast ratio between foreground and background, returning AA/AAA pass status and an OKLCH lightness suggestion if failing | `{ ratio, level, passesAA, passesAAA, suggestion? }` |
+| `pick_text_color` | Picks the text colour that reads on a fill: whichever of `dark` and `light` contrasts more (dark on a tie); call it before putting a label on a coloured shape, and change the fill when `passesAA` is false | `{ color, side, ratio, passesAA }` |
 | `check_color_palette` | Audits an array of colours for pairwise distinctness across normal vision and CVD (protanopia, deuteranopia, tritanopia), and surface contrast | `{ ok, closest, contrast, issues, skipped }` |
 | `suggest_color_harmony` | Generates harmonic colour combinations on RGB or RYB colour wheels | `{ colors: [{ hex, angle }] }` |
 | `blend_colors` | Interpolates between two colours in OKLab, OKLCH, sRGB, or sRGB-linear at factor `t` or as an even `steps` ramp | `{ color }` or `{ colors }` |

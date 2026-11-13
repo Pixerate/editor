@@ -13,6 +13,7 @@ import { mixColors } from './mix.js';
 import { rgbToHsl, rgbToOklab, oklabToOklch } from './convert.js';
 import { inSrgbGamut, toSrgbGamut } from './gamut.js';
 import { suggestAccessibleForeground } from './suggest.js';
+import { inkSide } from './ink.js';
 import {
 	parseDualColor,
 	normalizeDualColor,
@@ -183,6 +184,35 @@ export function createColorToolProvider(options: ColorToolProviderOptions = {}):
 				passesAAA,
 				...(suggestion ? { suggestion } : {})
 			};
+		}
+	};
+
+	const pickTextColor: AgentTool = {
+		name: 'pick_text_color',
+		title: 'Pick a text colour for a fill',
+		description:
+			'Picks the text colour that reads on a fill (a label on a bar, text on a badge or a cell): whichever of `dark` and `light` contrasts more with it, dark on a tie. Returns { color, side ("dark" or "light"), ratio (WCAG contrast of that colour on the fill), passesAA (for normal text, or large text with `large`) }. Use it before putting text on a coloured shape; when passesAA is false neither ink reads well enough, so change the fill.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				fill: { type: 'string', description: `The background the text sits on. ${COLOR_PARAM_DESC}` },
+				dark: { type: 'string', description: 'Ink for light fills (default #111111, or the house text colour).' },
+				light: { type: 'string', description: 'Ink for dark fills (default #ffffff, or the house background colour).' },
+				large: { type: 'boolean', description: 'The text is large (at least 24 px, or 18.66 px bold): AA needs 3 instead of 4.5. Default false.' }
+			},
+			required: ['fill'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Pick a text colour for a fill', ...READ },
+		handler: (args: Record<string, any>) => {
+			const { fill, dark = '#111111', light = '#ffffff', large = false } = args;
+			const bg = requireColor(fill, 'fill');
+			requireColor(dark, 'dark');
+			requireColor(light, 'light');
+			const side = inkSide(bg, { dark, light })!;
+			const color = side === 'dark' ? dark : light;
+			const ratio = Math.round(contrastRatio(parseColor(color)!, bg) * 100) / 100;
+			return { color, side, ratio, passesAA: contrastLevel(ratio, { large }) !== 'fail' };
 		}
 	};
 
@@ -524,6 +554,7 @@ export function createColorToolProvider(options: ColorToolProviderOptions = {}):
 		tools: [
 			inspectColor,
 			checkColorContrast,
+			pickTextColor,
 			checkColorPalette,
 			suggestColorHarmony,
 			blendColors,

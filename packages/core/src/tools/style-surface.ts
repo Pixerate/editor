@@ -10,7 +10,8 @@
 import { contrastRatio } from '../color/contrast.js';
 import { oklabToOklch, rgbToOklab } from '../color/convert.js';
 import { parseColor } from '../color/parse.js';
-import { brandColors, brandFonts, brandPalette, type BrandProfile } from './brand.js';
+import { brandColor, brandColors, brandFonts, brandPalette, type BrandProfile } from './brand.js';
+import { contrast, inkSide } from '../color/ink.js';
 import type { StyleCheck } from './style.js';
 
 /** One colour a domain's state draws with. */
@@ -129,8 +130,11 @@ const minContrast: StyleCheck<StyleSurface> = {
 		},
 		additionalProperties: false
 	},
-	run(surface, _profile, options) {
+	run(surface, _profile, options, context) {
 		const ratio = typeof options.ratio === 'number' ? options.ratio : 4.5;
+		// The inks a fix can switch to: the brand's text and background colours, else near-black and white.
+		const dark = brandColor(context?.brand, 'text') ?? '#111111';
+		const light = brandColor(context?.brand, 'background') ?? '#ffffff';
 		const largeRatio = typeof options.largeRatio === 'number' ? options.largeRatio : 3;
 		const out = [];
 		for (const item of surface.colors ?? []) {
@@ -142,10 +146,16 @@ const minContrast: StyleCheck<StyleSurface> = {
 			const needed = large ? largeRatio : ratio;
 			const got = contrastRatio(fg, bg);
 			if (got + 1e-9 >= needed) continue;
+			// A certain fix: the ink that reads on this background, when it passes.
+			const side = inkSide(bg, { dark, light });
+			const suggested = side === 'dark' ? dark : side === 'light' ? light : undefined;
+			const suggestedRatio = suggested ? contrast(suggested, bg) : null;
+			const suggestion = suggested && suggestedRatio !== null && suggestedRatio + 1e-9 >= needed ? { color: suggested, ratio: Math.round(suggestedRatio * 100) / 100 } : undefined;
 			out.push({
 				severity: 'error' as const,
-				message: `${item.label}: ${item.color} on ${item.background} has a contrast ratio of ${got.toFixed(2)}; it needs ${needed}. Use a darker or lighter house colour.`,
-				...(item.target !== undefined ? { target: item.target } : {})
+				message: `${item.label}: ${item.color} on ${item.background} has a contrast ratio of ${got.toFixed(2)}; it needs ${needed}. ${suggestion ? `Use ${suggestion.color} (contrast ${suggestion.ratio.toFixed(2)}), or another house colour that passes.` : 'Use a darker or lighter house colour.'}`,
+				...(item.target !== undefined ? { target: item.target } : {}),
+				...(suggestion ? { suggestion } : {})
 			});
 		}
 		return out;

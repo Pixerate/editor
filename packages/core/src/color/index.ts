@@ -11,6 +11,7 @@ export * from './format.js';
 export * from './gamut.js';
 export * from './contrast.js';
 export * from './suggest.js';
+export * from './ink.js';
 export * from './vision.js';
 export * from './harmony.js';
 export * from './mix.js';
