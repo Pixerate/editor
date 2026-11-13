@@ -1,5 +1,17 @@
 # @pixerate/conformance
 
+## 0.0.5
+
+### Patch Changes
+
+- 2b1bb28: Swift paint documents now open the last three edge cases the way the TS core does (#742). Saved channels far off the canvas are no longer refused: their tiles get the keys TS gives them, including keys that round past 2^53 (`jsTileKey`; `tileKey` switches to it outside ±2^30 tiles). Deep 16- and 32-bit samples with a fractional, text, boolean or array `width` or `height` are written where JavaScript arithmetic puts them (`writeDeepRegionUnchecked`), and an array `deep` is reported as TS reports it. A saved wet event with a non-integer `at` (`1.5`, `"0.25"`, `true`) replays at that value among the strokes instead of at 0 (`WetEvent.replayAt`).
+
+  The new `document-load-edge-cases` paint scenario checks all three.
+
+- 2b1bb28: Swift paint documents read the image editor's vector parts as the TS core does (#742). Vector masks on pixel layers and groups are read through a port of `readShapeComponents` (live rectangles, ellipses, polygons, stars and lines, anchor lists with handles and live corners, SVG path data, hybrid edges), kept on `RasterLayer.vectorMask` and saved back; a damaged one is left out with the TS core's message. Shape and type layers are checked with the image editor's validation (components, live shapes, paints, gradients, patterns, strokes, text and paragraph styles, PSD blocks, stored pixels) and report its problem before the paint editor leaves them out, and annotation layers are reported as the shape, type or annotation layers the image editor migrates them to. `PixerateRaster` adds `JS.tan` (V8's `Math.tan`, bit-exact), and `PixeratePaint` now depends on `PixerateGeometry`.
+
+  The new `document-load-vector-layers` paint scenario checks all of it.
+
 ## 0.0.4
 
 ### Patch Changes
