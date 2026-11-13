@@ -239,7 +239,9 @@ in the house style, without generating. `fix_parameters_style` sets the house va
 undo step; the brand checks run on solid fills, strokes, text and the artboard. Effect authoring
 checks the effect open in a session (`createEffectAuthoringStyleToolProvider({ session })`):
 `fix_effect_authoring_style` sets the house timing in one step, and the house presets and colour
-controls are left to the agent. The Swift vector editor does not read house styles yet.
+controls are left to the agent. The Swift vector editor reads house styles too
+(`createVectorStyleToolProvider` in `PixerateVector`): `vector.json` and `brand.json`, the same
+checks and `fix_vector_style`, with results that match the TS core's in the conformance scenarios.
 
 ### `stickers.json` and `brushes.json`
 

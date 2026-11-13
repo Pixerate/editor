@@ -1,0 +1,529 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-surface",
+  "description": "The shared house-style checks on the vector surface (#791): palette-only on solid fills and strokes (neutrals allowed), min-contrast for text on the artboard (large and bold text need less), fonts-allowed on text (generic families allowed), and distinguishable, which has no series colours to compare in a drawing; fix_vector_style leaves them all for the agent.",
+  "setup": {
+    "width": 300,
+    "height": 200,
+    "background": "#ffffff",
+    "style": {
+      "palette": [
+        "#0b5fff",
+        "#ff6a00"
+      ],
+      "fonts": [
+        "Inter"
+      ],
+      "checks": [
+        "palette-only",
+        "min-contrast",
+        "fonts-allowed",
+        "distinguishable"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 10,
+          "y": 10,
+          "width": 60,
+          "height": 40,
+          "fill": "#0b5fff",
+          "stroke": "#e01010",
+          "strokeWidth": 2,
+          "name": "Logo"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n1"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "ellipse",
+          "x": 90,
+          "y": 10,
+          "width": 40,
+          "height": 40,
+          "fill": "#22aa22",
+          "stroke": "none"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n2"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addShape",
+        "params": {
+          "kind": "rect",
+          "x": 150,
+          "y": 10,
+          "width": 40,
+          "height": 40,
+          "fill": "#808080",
+          "stroke": "#ff6a00"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addShape",
+          "ok": true,
+          "result": {
+            "id": "n3"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Hello",
+          "x": 10,
+          "y": 100,
+          "fill": "#bbbbbb",
+          "font": {
+            "fontFamily": "Comic Sans MS",
+            "fontSize": 16
+          },
+          "name": "Greeting"
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 16,
+              "width": 36.8,
+              "x": 10,
+              "y": 87.2
+            },
+            "fill": "#bbbbbb",
+            "font": {
+              "fontFamily": "Comic Sans MS",
+              "fontSize": 16,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 10,
+              "y": 100
+            },
+            "id": "n4",
+            "lines": [
+              {
+                "end": 5,
+                "start": 0,
+                "text": "Hello"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Hello"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Big",
+          "x": 10,
+          "y": 150,
+          "fill": "#888888",
+          "font": {
+            "fontFamily": "\"Inter\", sans-serif",
+            "fontSize": 30
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 30,
+              "width": 44.4,
+              "x": 10,
+              "y": 126
+            },
+            "fill": "#888888",
+            "font": {
+              "fontFamily": "\"Inter\", sans-serif",
+              "fontSize": 30,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 10,
+              "y": 150
+            },
+            "id": "n5",
+            "lines": [
+              {
+                "end": 3,
+                "start": 0,
+                "text": "Big"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Big"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Bold",
+          "x": 120,
+          "y": 150,
+          "fill": "#999999",
+          "font": {
+            "fontFamily": "Georgia",
+            "fontSize": 20,
+            "fontWeight": 700
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 20,
+              "width": 42.42,
+              "x": 120,
+              "y": 134
+            },
+            "fill": "#999999",
+            "font": {
+              "fontFamily": "Georgia",
+              "fontSize": 20,
+              "fontWeight": 700
+            },
+            "frame": {
+              "kind": "point",
+              "x": 120,
+              "y": 150
+            },
+            "id": "n6",
+            "lines": [
+              {
+                "end": 4,
+                "start": 0,
+                "text": "Bold"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Bold"
+          }
+        }
+      }
+    },
+    {
+      "tool": "run_command",
+      "arguments": {
+        "id": "vector.addText",
+        "params": {
+          "text": "Small",
+          "x": 200,
+          "y": 150,
+          "fill": "#999999",
+          "font": {
+            "fontFamily": "system-ui",
+            "fontSize": 12
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "id": "vector.addText",
+          "ok": true,
+          "result": {
+            "bounds": {
+              "height": 12,
+              "width": 31.32,
+              "x": 200,
+              "y": 140.4
+            },
+            "fill": "#999999",
+            "font": {
+              "fontFamily": "system-ui",
+              "fontSize": 12,
+              "fontWeight": 400
+            },
+            "frame": {
+              "kind": "point",
+              "x": 200,
+              "y": 150
+            },
+            "id": "n7",
+            "lines": [
+              {
+                "end": 5,
+                "start": 0,
+                "text": "Small"
+              }
+            ],
+            "missingFonts": [],
+            "orientation": "horizontal",
+            "outlines": false,
+            "overflow": false,
+            "paragraph": {},
+            "runs": [],
+            "shaper": "metric",
+            "stroke": null,
+            "text": "Small"
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n1 (\"Logo\") stroke uses #e01010, which is not a house colour; the nearest is #ff6a00. Change it to #ff6a00 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n1",
+                "property": "stroke"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n2 (\"Ellipse\") uses #22aa22, which is not a house colour; the nearest is #ff6a00. Change it to #ff6a00 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n2",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n4 (\"Greeting\"): #bbbbbb on #ffffff has a contrast ratio of 1.92; it needs 4.5. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n4",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n6 (\"Bold\"): #999999 on #ffffff has a contrast ratio of 2.85; it needs 3. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n6",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n7 (\"Small\"): #999999 on #ffffff has a contrast ratio of 2.85; it needs 4.5. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n7",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n4 (\"Greeting\") uses the font \"Comic Sans MS\"; the house fonts are \"Inter\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n4",
+                "property": "fontFamily"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n6 (\"Bold\") uses the font \"Georgia\"; the house fonts are \"Inter\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n6",
+                "property": "fontFamily"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only",
+            "min-contrast",
+            "fonts-allowed",
+            "distinguishable"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_vector_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "corners": [],
+          "left": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n1 (\"Logo\") stroke uses #e01010, which is not a house colour; the nearest is #ff6a00. Change it to #ff6a00 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n1",
+                "property": "stroke"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Node n2 (\"Ellipse\") uses #22aa22, which is not a house colour; the nearest is #ff6a00. Change it to #ff6a00 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "node": "n2",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n4 (\"Greeting\"): #bbbbbb on #ffffff has a contrast ratio of 1.92; it needs 4.5. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n4",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n6 (\"Bold\"): #999999 on #ffffff has a contrast ratio of 2.85; it needs 3. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n6",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Text n7 (\"Small\"): #999999 on #ffffff has a contrast ratio of 2.85; it needs 4.5. Use #111111 (contrast 18.88), or another house colour that passes.",
+              "severity": "error",
+              "suggestion": {
+                "color": "#111111",
+                "ratio": 18.88
+              },
+              "target": {
+                "node": "n7",
+                "property": "fill"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n4 (\"Greeting\") uses the font \"Comic Sans MS\"; the house fonts are \"Inter\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n4",
+                "property": "fontFamily"
+              }
+            },
+            {
+              "check": "fonts-allowed",
+              "layer": "org",
+              "message": "Text n6 (\"Bold\") uses the font \"Georgia\"; the house fonts are \"Inter\". Change it to one of those.",
+              "severity": "error",
+              "target": {
+                "node": "n6",
+                "property": "fontFamily"
+              }
+            }
+          ],
+          "strokeWidths": {}
+        }
+      }
+    }
+  ]
+}

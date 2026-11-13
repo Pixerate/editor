@@ -18,7 +18,7 @@ public enum VectorContracts {
         return try list.map(VectorCommandContract.init(json:))
     }
 
-    /// The tool providers (`vector-commands`, `vector-effects`, `vector-generation`) and their tools.
+    /// The tool providers (`vector-commands`, `vector-effects`, `vector-generation`, `vector-style`) and their tools.
     public static func toolProviders() throws -> [ToolProviderContract] {
         try ToolProviderContract.providers(json: json("tools.json"))
     }

@@ -54,10 +54,10 @@ describe('the vector contracts in @pixerate/conformance', () => {
 
 	it('lists every tool with a strict schema, a title and all four annotations', () => {
 		const { providers } = committed('tools.json') as { providers: Array<{ id: string; tools: Array<{ name: string; title: string; description: string; inputSchema: JsonSchema; annotations: object }> }> };
-		expect(providers.map((p) => p.id)).toEqual(['vector-commands', 'vector-effects', 'vector-generation']);
+		expect(providers.map((p) => p.id)).toEqual(['vector-commands', 'vector-effects', 'vector-generation', 'vector-style']);
 		const names = providers.flatMap((p) => p.tools.map((t) => t.name));
 		expect(new Set(names).size).toBe(names.length);
-		expect(names).toEqual(expect.arrayContaining(['list_commands', 'run_command', 'run_commands', 'apply_effect', 'generate_vector_art']));
+		expect(names).toEqual(expect.arrayContaining(['list_commands', 'run_command', 'run_commands', 'apply_effect', 'generate_vector_art', 'check_vector_style', 'fix_vector_style']));
 		for (const t of providers.flatMap((p) => p.tools)) {
 			expect(t.title, t.name).toBeTruthy();
 			expect(t.description, t.name).toBeTruthy();
