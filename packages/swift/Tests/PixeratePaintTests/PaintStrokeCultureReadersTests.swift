@@ -141,6 +141,71 @@ final class PaintStrokeCultureReadersTests: XCTestCase {
         }
     }
 
+    /// Far-off channel tiles take the keys TS rounds them to (values from the TS core): past 2^53,
+    /// tiles 0 and 1 share one, and a negative key reads back as another tile.
+    func testFarChannelTilesTakeRoundedKeys() throws {
+        let s = try surfaceAtSavedRect(["x": 255, "y": 70368744177664], width: 2, height: 2, data: [10, 20, 30, 40], channels: 1)
+        XCTAssertEqual(s.tiles.keys, [18014400656998400])
+        let t = try XCTUnwrap(s.tiles.get(18014400656998400))
+        let written: [String] = t.data.enumerated().filter { (e: (offset: Int, element: UInt8)) -> Bool in e.element != 0 }.map { (e: (offset: Int, element: UInt8)) -> String in "\(e.offset):\(e.element)" }
+        XCTAssertEqual(written, ["0:20", "255:10", "256:40", "511:30"])
+        XCTAssertEqual(tileCoord(18014400656998400).tx, 0)
+        XCTAssertEqual(tileCoord(18014400656998400).ty, 274877906944)
+        XCTAssertEqual(jsTileKey(274877906945, -274877906945), -18014121484124160)
+        XCTAssertEqual(tileKey(274877906945, -274877906945), -18014121484124160)
+        XCTAssertEqual(tileCoord(-18014121484124160).tx, -65536)
+        XCTAssertEqual(tileCoord(-18014121484124160).ty, -274873712641)
+        // Within ±2^30 tiles the key is the exact packing it always was.
+        XCTAssertEqual(tileKey(-3, 5), (5 + 32768) * 65536 + (-3 + 32768))
+    }
+
+    /// Deep samples with a fractional or text size are written where JavaScript arithmetic puts them
+    /// (values from the TS core's `decodeDeepSurface`).
+    func testDeepSamplesWithOddSizes() throws {
+        func decode(_ deep: JSONValue) -> (problems: [String], samples: [String]) {
+            var problems: [String] = []
+            let s = decodeDeepSurface(emptySurface(1), deep, &problems, "L")
+            var samples: [String] = []
+            for (key, tile) in s.tiles {
+                guard case .u16(let a)? = tile.deep else { continue }
+                let set: [String] = a.enumerated().filter { (e: (offset: Int, element: UInt16)) -> Bool in e.element != 0 }.map { (e: (offset: Int, element: UInt16)) -> String in "\(e.offset):\(e.element)" }
+                samples.append("\(key) " + set.joined(separator: " "))
+            }
+            return (problems, samples)
+        }
+        // 1.5 × 2: the first row copies sample 0 (`subarray(0, 1.5)`), the second samples 1 and 2 (`subarray(1.5, 3)`).
+        let frac = decode(["depth": 16, "x": 3, "y": 1, "width": 1.5, "height": 2, "data": "eJx7wXyBfQc3AApVAoY="])
+        XCTAssertEqual(frac.problems, [])
+        XCTAssertEqual(frac.samples, ["2147516416 259:1000 515:2000 516:3000"])
+        // "2" × 1: `3 + "2"` is `"32"`, so the row copies up to 29 samples (all 2 there are).
+        let text = decode(["depth": 16, "x": 3, "y": 1, "width": "2", "height": 1, "data": "eJx7wXyBHQAFVAHD"])
+        XCTAssertEqual(text.problems, [])
+        XCTAssertEqual(text.samples, ["2147516416 259:1000 260:2000"])
+        // 1.25 samples: never a whole count, so never readable.
+        let quarter = decode(["depth": 16, "x": 3, "y": 1, "width": 1.25, "height": 1, "data": "eJx7wQwAAdUA7A=="])
+        XCTAssertEqual(quarter.problems, ["L: its 16-bit samples could not be read, so it was opened at 8 bits"])
+        XCTAssertEqual(quarter.samples, [])
+        // An array is an object in JS (with no depth).
+        XCTAssertEqual(decode([16]).problems, ["L: its undefined-bit samples could not be read, so it was opened at 8 bits"])
+    }
+
+    /// A replay puts a saved wet event at `event.at ?? 0`, read as a number.
+    func testWetEventsReplayAtTheirSavedValue() throws {
+        func at(_ v: JSONValue?) throws -> Double {
+            var o: JSONObject = ["clock": 0, "kind": "dry"]
+            if let v { o["at"] = v }
+            return try XCTUnwrap(WetEvent(json: .object(o))).replayAt
+        }
+        XCTAssertEqual(try at(1.5), 1.5)
+        XCTAssertEqual(try at("0.25"), 0.25)
+        XCTAssertEqual(try at(true), 1)
+        XCTAssertEqual(try at(.null), 0)
+        XCTAssertEqual(try at(nil), 0)
+        XCTAssertEqual(try at(3), 3)
+        XCTAssertTrue(try at(["a": 1]).isNaN)
+        XCTAssertEqual(WetEvent(clock: 0, at: 2, kind: "dry", layerId: nil, data: nil).replayAt, 2)
+    }
+
     /// A version 1 stroke (flat engine brush) reads and saves its brush as a facet brush.
     func testVersionOneFlatBrushStroke() throws {
         let flat = normalizePaintBrush(["id": "my-ink", "name": "My ink", "engine": "dab", "tip": ["size": 14, "opacity": 0.8]])

@@ -1,6 +1,7 @@
 import Foundation
 import PixerateCore
 import PixerateRaster
+import PixerateGeometry
 
 /**
  * Replaying a painting from its data (`paint-editor/replay.ts`): every recorded stroke and the
@@ -169,8 +170,13 @@ extension PaintEditorController {
         var order = 0
         for (i, st) in source.strokes.enumerated() { items.append((.stroke(st), Double(i) + 0.5, order)); order += 1 }
         for e in source.paintEvents ?? [] { items.append((.paint(e), Double(e.at), order)); order += 1 }
-        for e in source.wetEvents ?? [] { items.append((.wet(e), Double(e.at ?? 0), order)); order += 1 }
-        items.sort { $0.at != $1.at ? $0.at < $1.at : $0.order < $1.order }
+        for e in source.wetEvents ?? [] { items.append((.wet(e), e.replayAt, order)); order += 1 }
+        // `a.at - b.at || a.order - b.order`: a NaN difference falls back to the order, as 0 does.
+        items = jsSorted(items) { (a: (item: Item, at: Double, order: Int), b: (item: Item, at: Double, order: Int)) -> Double in
+            let d: Double = a.at - b.at
+            if d.isNaN || d == 0 { return Double(a.order - b.order) }
+            return d
+        }
         let chunk = wetChunk > 0 ? wetChunk : Int.max
         func advanceTo(_ clock: Int) throws {
             var left = clock - (target.wet.world?.clock ?? 0)
