@@ -84,6 +84,10 @@ public final class ChartStyleResolver: @unchecked Sendable {
     public var profile: JSONObject
     /// The layer that set the profile's `checks` (`style.sources.checks`), named on findings.
     public var layer: String?
+    /// The skill's `brand.json`, when it has a valid, non-empty one.
+    public var brand: JSONObject?
+    /// The layer that set the brand's `checks` (`style.sources['$brand.checks']`).
+    public var brandLayer: String?
     public var styleIssues: [JSONValue]
     /// Whether a style skill applies to charts (without one, `check_chart_style` adds a note).
     public var hasSkills: Bool
@@ -96,20 +100,55 @@ public final class ChartStyleResolver: @unchecked Sendable {
     }
 
     /// One `layer` holding one skill whose `chart.json` is `chartJson` (parsed JSON).
-    public init(skill: String, layer: String, chartJson: JSONValue) {
-        let loaded = loadChartStyleProfile(chartJson)
+    public convenience init(skill: String, layer: String, chartJson: JSONValue) {
+        self.init(skill: skill, layer: layer, chartJson: chartJson, brandJson: nil)
+    }
+
+    /**
+     * One `layer` holding one skill with an optional `chart.json` and an optional `brand.json`
+     * (parsed JSON). As `resolve` does, the chart starts from the profile it derives from the brand
+     * (`chartStyleFromBrand`), its own profile merges over that, and the brand's checks run after
+     * its own.
+     */
+    public init(skill: String, layer: String, chartJson: JSONValue?, brandJson: JSONValue?) {
         var issues: [JSONValue] = []
-        if let error = loaded.error {
-            issues.append(.object(JSONObject([("skill", .string(skill)), ("layer", .string(layer)), ("message", .string(error))])))
+        func issue(_ message: String) {
+            issues.append(.object(JSONObject([("skill", .string(skill)), ("layer", .string(layer)), ("message", .string(message))])))
         }
-        self.profile = loaded.profile ?? JSONObject()
-        self.layer = self.profile["checks"] != nil ? layer : nil
+        // Profiles load in domain order: chart, then brand (the brand domain is added last).
+        var own: JSONObject?
+        if let chartJson {
+            let loaded = loadChartStyleProfile(chartJson)
+            if let error = loaded.error { issue(error) }
+            own = loaded.profile
+        }
+        var brand: JSONObject?
+        if let brandJson {
+            let loaded = loadBrandProfile(brandJson)
+            if let error = loaded.error { issue(error) }
+            if let p = loaded.profile, !p.isEmpty { brand = p }
+        }
+        var profile = JSONObject()
+        if let brand {
+            let derived = chartStyleFromBrand(brand)
+            let errors = validateJSONSchema(.object(derived), CHART_STYLE_PROFILE_SCHEMA).map { "\($0.path.isEmpty ? "(profile)" : $0.path): \($0.message)" }
+            if errors.isEmpty {
+                profile = derived
+            } else {
+                issues.append(.object(JSONObject([("message", .string("The chart style derived from the brand is left out: \(errors.joined(separator: " "))"))])))
+            }
+        }
+        if let own { mergeStyleProfile(&profile, own) }
+        self.profile = profile
+        self.layer = own?["checks"] != nil ? layer : nil
+        self.brand = brand
+        self.brandLayer = brand?["checks"] != nil ? layer : nil
         self.styleIssues = issues
         self.hasSkills = true
     }
 
     public func check(_ spec: ChartSpec) -> ChartStyleCheckReport {
-        runChartStyleChecks(spec, profile: profile, layer: layer, styleIssues: styleIssues)
+        runChartStyleChecks(spec, profile: profile, layer: layer, styleIssues: styleIssues, brand: brand, brandLayer: brandLayer)
     }
 }
 
@@ -149,94 +188,43 @@ private let CHART_STYLE_CHECK_OPTIONS: [(id: String, schema: JSONValue)] = [
     ("allowed-type", styleSchema("""
     {"type":"object","properties":{"types":{"type":"array","items":{"type":"string","enum":[\(STYLE_CHART_TYPES.map { "\"\($0)\"" }.joined(separator: ","))]},"minItems":1}},"required":["types"],"additionalProperties":false}
     """)),
+    // Shared checks the chart does not replace (`styleChecksOf`): fonts-allowed.
+    ("fonts-allowed", SHARED_STYLE_CHECK_OPTIONS.first(where: { $0.id == "fonts-allowed" })!.schema),
 ]
-
-/// `resolveTokens` with no token source: every `{ "$token": ... }` is an error and resolves to
-/// `undefined` (`nil`). An `undefined` array item becomes `null`, its path kept in `undefinedPaths` so
-/// the schema message can say `undefined`; an `undefined` object member is dropped (the TS validator
-/// skips it, and `required` treats it as missing).
-private func resolveStyleTokens(_ value: JSONValue, _ path: String, _ pointer: String, _ errors: inout [String], _ undefinedPaths: inout Set<String>) -> JSONValue? {
-    switch value {
-    case .array(let items):
-        return .array(items.enumerated().map { i, v in
-            if let r = resolveStyleTokens(v, "\(path)[\(i)]", "\(pointer)/\(i)", &errors, &undefinedPaths) { return r }
-            undefinedPaths.insert("\(pointer)/\(i)")
-            return .null
-        })
-    case .object(let obj):
-        if obj.contains("$token") {
-            let token = obj["$token"]
-            let mode = obj["mode"]
-            let tokenOk: Bool = { if case .string(let s)? = token { return !s.isEmpty }; return false }()
-            let modeOk: Bool = { if mode == nil { return true }; if case .string? = mode { return true }; return false }()
-            if !tokenOk || !modeOk || obj.keys.contains(where: { $0 != "$token" && $0 != "mode" }) {
-                errors.append("\(path.isEmpty ? "profile" : path): a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }.")
-                return nil
-            }
-            errors.append("\(path.isEmpty ? "profile" : path): \"\(token!.stringValue!)\" is a token reference, but this host has no design tokens to resolve it.")
-            return nil
-        }
-        var out = JSONObject()
-        for (k, v) in obj {
-            if let r = resolveStyleTokens(v, path.isEmpty ? k : "\(path).\(k)", "\(pointer)/\(k)", &errors, &undefinedPaths) { out[k] = r }
-        }
-        return .object(out)
-    default:
-        return value
-    }
-}
-
-private func styleSchemaErrors(_ value: JSONValue, _ schema: JSONValue, _ undefinedPaths: Set<String>, pointerPrefix: String = "") -> [SchemaValidationError] {
-    validateJSONSchema(value, schema).map { e in
-        guard undefinedPaths.contains(pointerPrefix + e.path), e.message.hasSuffix(", got null.") else { return e }
-        return SchemaValidationError(path: e.path, message: String(e.message.dropLast("null.".count)) + "undefined.")
-    }
-}
-
-/// `checkListErrors`: problems with a profile's `checks` list, against the chart checks.
-private func chartCheckListErrors(_ list: JSONValue?, _ undefinedPaths: Set<String>) -> [String] {
-    guard let list else { return [] }
-    guard case .array(let entries) = list else { return ["checks: expected a list of check ids or { \"id\": ..., options } objects."] }
-    var errors: [String] = []
-    for (i, entry) in entries.enumerated() {
-        let id: String?
-        switch entry {
-        case .string(let s): id = s
-        case .object(let o): id = o["id"]?.stringValue
-        default: id = nil
-        }
-        guard let id, !id.isEmpty, !undefinedPaths.contains("/checks/\(i)") else {
-            errors.append("checks[\(i)]: expected a check id or { \"id\": ..., options }.")
-            continue
-        }
-        guard case .object(var options) = entry, let check = CHART_STYLE_CHECK_OPTIONS.first(where: { $0.id == id }) else { continue }
-        options["id"] = Optional<JSONValue>.none
-        for e in styleSchemaErrors(.object(options), check.schema, undefinedPaths, pointerPrefix: "/checks/\(i)") {
-            errors.append("checks[\(i)] (\(id))\(e.path): \(e.message)")
-        }
-    }
-    return errors
-}
 
 /// Loads a style skill's `chart.json` as `createStyleResolver` does: the profile, or why it is left out.
 public func loadChartStyleProfile(_ raw: JSONValue, file: String = "chart.json") -> (profile: JSONObject?, error: String?) {
-    guard case .object = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.") }
-    var errors: [String] = []
-    var undefinedPaths = Set<String>()
-    // A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object: the
-    // profile is left out with the reason, as `createStyleResolver` does (#768).
-    // With no token source here, it always resolves to nothing and an error says why.
-    guard case .object(let resolved)? = resolveStyleTokens(stripPrototypeKeys(raw), "", "", &errors, &undefinedPaths) else {
-        return (nil, "\(file) is left out: \(errors.joined(separator: " "))")
-    }
-    var rest = resolved
-    rest["checks"] = Optional<JSONValue>.none
-    errors += styleSchemaErrors(.object(rest), CHART_STYLE_PROFILE_SCHEMA, undefinedPaths).map { "\($0.path.isEmpty ? "(profile)" : $0.path): \($0.message)" }
-    errors += chartCheckListErrors(resolved["checks"], undefinedPaths)
-    if !errors.isEmpty { return (nil, "\(file) is left out: \(errors.joined(separator: " "))") }
-    return (resolved, nil)
+    loadStyleProfile(raw, file: file, schema: CHART_STYLE_PROFILE_SCHEMA, checks: CHART_STYLE_CHECK_OPTIONS)
 }
 
+public func chartStyleFromBrand(_ brand: JSONObject) -> JSONObject {
+    let palette = brandPalette(brand)
+    var theme = JSONObject()
+    func set(_ key: String, _ value: String?) {
+        if let value, !value.isEmpty { theme[key] = .string(value) }
+    }
+    set("background", brandColor(brand, "background"))
+    set("surface", brandColor(brand, "surface"))
+    set("text", brandColor(brand, "text"))
+    set("mutedText", brandColor(brand, "mutedText"))
+    set("grid", brandColor(brand, "border"))
+    set("axis", brandColor(brand, "border"))
+    set("positive", brandColor(brand, "positive"))
+    set("negative", brandColor(brand, "negative"))
+    let fonts = brand["fonts"]?.objectValue
+    let font = fonts?["body"]?.stringValue ?? fonts?["heading"]?.stringValue
+    // A brand names one family; charts need a stack that still reads where it is not installed.
+    if let font, !font.contains(",") {
+        let quoted = font.contains(where: { $0.isWhitespace }) ? JSONValue.string(font).stringified() : font
+        set("fontFamily", "\(quoted), system-ui, sans-serif")
+    } else {
+        set("fontFamily", font)
+    }
+    var out = JSONObject()
+    if !palette.isEmpty { out["palette"] = .array(palette.map { .string($0) }) }
+    if !theme.isEmpty { out["theme"] = .object(theme) }
+    return out
+}
 private struct DrawnColorItem {
     var color: String
     var label: String
@@ -277,16 +265,27 @@ public func runChartStyleChecks(
     _ spec: ChartSpec,
     profile: JSONObject,
     layer: String? = "org",
-    styleIssues: [JSONValue] = []
+    styleIssues: [JSONValue] = [],
+    brand: JSONObject? = nil,
+    brandLayer: String? = nil
 ) -> ChartStyleCheckReport {
     var findings: [ChartStyleFinding] = []
     var ran: [String] = []
     var skipped: [ChartStyleSkipped] = []
-    guard case .array(let checkEntries)? = profile["checks"] else {
-        return ChartStyleCheckReport(findings: findings, ran: ran, skipped: skipped, styleIssues: styleIssues)
+    func idOf(_ entry: JSONValue) -> String? {
+        switch entry {
+        case .string(let s): return s
+        case .object(let o): return o["id"]?.stringValue
+        default: return nil
+        }
     }
-    let knownChecks = ["palette-only", "distinguishable", "min-contrast", "allowed-type"]
-    for entry in checkEntries {
+    // The profile's checks, then the brand's checks the profile does not list itself.
+    let own = profile["checks"]?.arrayValue ?? []
+    let ownIds = own.map(idOf)
+    let fromBrand = (brand?["checks"]?.arrayValue ?? []).filter { e in !ownIds.contains(where: { $0 == idOf(e) }) }
+    let checkEntries = own.map { (entry: $0, layer: layer) } + fromBrand.map { (entry: $0, layer: brandLayer) }
+    let knownChecks = ["palette-only", "distinguishable", "min-contrast", "allowed-type", "fonts-allowed"]
+    for (entry, layer) in checkEntries {
         let id: String
         let options: JSONObject
         switch entry {
@@ -385,6 +384,14 @@ public func runChartStyleChecks(
                     message: "\(item.label) (\(item.color)) has contrast \(JSONValue.jsString(rounded)):1 against the background \(background); want at least \(JSONValue.jsString(ratio)):1, so use a darker or lighter palette colour.",
                     target: item.target
                 ))
+            }
+        case "fonts-allowed":
+            // The shared check on the chart surface, which has no fonts: it runs with no findings
+            // once some font is named, and is skipped otherwise.
+            let allowed = styleStrings(options["fonts"]) ?? styleStrings(profile["fonts"]) ?? brandFonts(brand)
+            if allowed.isEmpty {
+                skipped.append(ChartStyleSkipped(check: id, reason: "The check could not run: neither the check, the profile nor the brand names any fonts."))
+                continue
             }
         case "allowed-type":
             let allowed = options["types"]?.arrayValue?.compactMap { $0.stringValue } ?? []

@@ -87,14 +87,21 @@ public final class ChartConformanceHost: ConformanceHost {
             )
         )
 
-        // `setup.style ? { 'house/SKILL.md', 'house/chart.json': JSON.stringify(setup.style) } : {}` in one
-        // `org` layer: a truthy style is a skill, and its profile is validated as `createStyleResolver` does.
-        let style: ChartStyleResolver
-        switch setup["style"] {
-        case nil, .null?, .bool(false)?, .string("")?: style = ChartStyleResolver()
-        case .number(let n)? where n == 0 || n.isNaN: style = ChartStyleResolver()
-        case let raw?: style = ChartStyleResolver(skill: "house", layer: "org", chartJson: raw)
+        // `setup.style || setup.brand ? { 'house/SKILL.md', 'house/chart.json'?, 'house/brand.json'? } : {}`
+        // in one `org` layer: a truthy style or brand is a skill, and each profile is validated as
+        // `createStyleResolver` does.
+        func truthy(_ value: JSONValue?) -> JSONValue? {
+            switch value {
+            case nil, .null?, .bool(false)?, .string("")?: return nil
+            case .number(let n)? where n == 0 || n.isNaN: return nil
+            case let raw?: return raw
+            }
         }
+        let styleJson = truthy(setup["style"])
+        let brandJson = truthy(setup["brand"])
+        let style: ChartStyleResolver = styleJson == nil && brandJson == nil
+            ? ChartStyleResolver()
+            : ChartStyleResolver(skill: "house", layer: "org", chartJson: styleJson, brandJson: brandJson)
 
         self.commands = CommandRegistry(context: controller, history: controller.history)
         try commands.register(createChartCommands(controller))

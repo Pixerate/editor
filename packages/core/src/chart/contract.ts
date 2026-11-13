@@ -481,6 +481,8 @@ export interface ChartConformanceSetup {
 	files?: ReadonlyArray<{ name: string; data: string | Uint8Array }> | Record<string, string | Uint8Array>;
 	/** Optional house-style profile for `check_chart_style`. */
 	style?: ChartStyleProfile & { checks?: ReadonlyArray<string | Record<string, unknown>> };
+	/** Optional `brand.json` beside it (#791): the chart profile is derived from it and its checks run too. */
+	brand?: Record<string, unknown>;
 	/** Extra map geometries to register alongside `EUROPE_CHART_MAP`. */
 	maps?: ReadonlyArray<ChartMapGeometry>;
 }
@@ -557,12 +559,14 @@ export function createChartConformanceHost(setup: ChartConformanceSetup & Record
 	});
 
 	const openFiles = parseSetupFiles(setup.files);
-	const styleFiles: Record<string, string> = setup.style
-		? {
-				'house/SKILL.md': '---\nname: house\ndescription: House chart style.\n---\nFollow the house chart style.',
-				'house/chart.json': JSON.stringify(setup.style)
-			}
-		: {};
+	const styleFiles: Record<string, string> =
+		setup.style || setup.brand
+			? {
+					'house/SKILL.md': '---\nname: house\ndescription: House chart style.\n---\nFollow the house chart style.',
+					...(setup.style ? { 'house/chart.json': JSON.stringify(setup.style) } : {}),
+					...(setup.brand ? { 'house/brand.json': JSON.stringify(setup.brand) } : {})
+				}
+			: {};
 	const styles = createStyleResolver({
 		layers: [{ id: 'org', store: memoryStyleStore(styleFiles) }],
 		domains: [chartStyleDomain]
