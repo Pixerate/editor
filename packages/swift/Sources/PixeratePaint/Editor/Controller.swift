@@ -244,6 +244,8 @@ public final class PaintEditorController {
     var paintedBounds: [Int: RasterRect?] = [:]
     /// Each layer's light spill (missing: the default).
     var lightSpills: [String: LightSpill] = [:]
+    /// Each lit layer's glow tiles and spill between frames (`lightCaches` in `controller.ts`).
+    var lightCaches: [String: LightCache] = [:]
     var previewing = false
     /// View-only vortex winding animations (`ControllerVortexAnimation.swift`).
     let vortexPlayback = VortexPlayback()
@@ -2249,14 +2251,20 @@ public final class PaintEditorController {
         var ids = light.keys
         for id in doc.thick?.keys ?? [] where !ids.contains(id) { ids.append(id) }
         for id in blastChannelLayerIds where !ids.contains(id) { ids.append(id) }
-        if ids.isEmpty { return layers }
+        if ids.isEmpty {
+            lightCaches = [:]
+            return layers
+        }
+        if lightCaches.count > ids.count { lightCaches = lightCaches.filter { ids.contains($0.key) } }
         var out = layers
         for id in ids {
             guard let l = findLayer(out, id)?.layer, l.isPixel else { continue }
             let lit = blastViewLight(id, light.get(id))
-            let glowed = glowSurface(l.pixelSurface, lit, liveThick?.layerId == id ? liveThick!.channels : blastViewThick(id, doc.thick?.get(id)))
+            let cache = lightCaches[id] ?? LightCache()
+            lightCaches[id] = cache
+            let glowed = cache.glow(l.pixelSurface, lit, liveThick?.layerId == id ? liveThick!.channels : blastViewThick(id, doc.thick?.get(id)))
             if glowed !== l.pixelSurface { out = mapLayer(out, id) { $0.withSurface(glowed) } }
-            if let lit, let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = computeSpill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
+            if let lit, let committed = findLayer(doc.layers, id)?.layer, committed.isPixel, let spill = cache.spill(committed.pixelSurface, lit, lightSpills[id] ?? DEFAULT_LIGHT_SPILL) {
                 let node = RasterLayer(id: "\(id)::light", name: "\(l.name) light", visible: l.visible, opacity: l.opacity, blend: .mode(.linearDodge), content: .pixel(surface: spill, offset: l.pixelOffset, fillOpacity: nil))
                 out = insertAfter(out, id, node)
             }

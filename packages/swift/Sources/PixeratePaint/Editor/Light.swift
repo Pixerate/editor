@@ -111,7 +111,7 @@ func scaleLight(_ light: TiledSurface, _ k: Double) -> TiledSurface {
     return TiledSurface(channels: 1, tiles: tiles, defaultValue: 0)
 }
 
-private func boxBlur(_ p: inout [Float], _ w: Int, _ h: Int, _ r: Int) {
+private func boxBlur(_ p: UnsafeMutablePointer<Float>, _ w: Int, _ h: Int, _ r: Int) {
     var tmp = [Float](repeating: 0, count: Swift.max(w, h))
     let n = Double(2 * r + 1)
     for y in 0..<h {
@@ -134,7 +134,17 @@ private func boxBlur(_ p: inout [Float], _ w: Int, _ h: Int, _ r: Int) {
     }
 }
 
-/// The light a layer spills around it, as a Linear Dodge (Add) surface, or nil.
+/// `colourToLinear(b / 255)` for every byte.
+private let byteToLinear: [Double] = (0..<256).map { colourToLinear(Double($0) / 255) }
+
+/**
+ * The light a layer spills around it, as a Linear Dodge (Add) surface, or nil.
+ *
+ * The three passes run on every core, each over items that do not share a result: the energy by
+ * rows of reduced cells (a cell takes pixels from its own row of cells only, in the same order),
+ * the blur by colour channel, and the picture by pixel row. Pixels whose four reduced cells hold no
+ * energy are skipped: they add nothing (`colourFromLinear(0)` is 0).
+ */
 func computeSpill(_ color: TiledSurface, _ light: TiledSurface?, _ spill: LightSpill) -> TiledSurface? {
     guard let light, let b = lightInfo(light).bounds, spill.radius > 0, spill.strength > 0 else { return nil }
     let r = Int(JS.ceil(spill.radius))
@@ -145,43 +155,72 @@ func computeSpill(_ color: TiledSurface, _ light: TiledSurface?, _ spill: LightS
     let f = Swift.max(1, Int(JS.floor(spill.radius / 6)))
     let w = Int(JS.ceil(Double(region.width) / Double(f)))
     let h = Int(JS.ceil(Double(region.height) / Double(f)))
-    var e = [[Float](repeating: 0, count: w * h), [Float](repeating: 0, count: w * h), [Float](repeating: 0, count: w * h)]
-    for y in 0..<region.height {
-        for x in 0..<region.width {
-            let i = y * region.width + x
-            let l = lit[i]
-            if l == 0 { continue }
-            let j = i * 4
-            let k = ((Double(l) / 255) * (Double(col[j + 3]) / 255)) / Double(f * f)
-            let cell = (y / f) * w + x / f
-            for ch in 0..<3 { e[ch][cell] = Float(Double(e[ch][cell]) + colourToLinear(Double(col[j + ch]) / 255) * k) }
-        }
-    }
+    let rw = region.width, rh = region.height
+    let cells = w * h
+    // The three channels' energy, one after the other.
+    var e = [Float](repeating: 0, count: cells * 3)
+    var out = [UInt8](repeating: 0, count: rw * rh * 4)
+    let strength = spill.strength
+    let toLinear = byteToLinear
     // Three box blurs ≈ a Gaussian with σ ≈ radius / 2.
     let box = Swift.max(1, Int(JS.round(spill.radius / Double(f) / 2.5)))
-    for ch in 0..<3 { for _ in 0..<3 { boxBlur(&e[ch], w, h, box) } }
-    var out = [UInt8](repeating: 0, count: region.width * region.height * 4)
-    for y in 0..<region.height {
-        for x in 0..<region.width {
-            let fx = Swift.min(Double(w - 1), Swift.max(0, (Double(x) + 0.5) / Double(f) - 0.5))
-            let fy = Swift.min(Double(h - 1), Swift.max(0, (Double(y) + 0.5) / Double(f) - 0.5))
-            let x0 = Int(JS.floor(fx)), y0 = Int(JS.floor(fy))
-            let x1 = Swift.min(w - 1, x0 + 1), y1 = Swift.min(h - 1, y0 + 1)
-            let tx = fx - Double(x0), ty = fy - Double(y0)
-            let add = e.map { p -> Double in
-                let v = (Double(p[y0 * w + x0]) * (1 - tx) + Double(p[y0 * w + x1]) * tx) * (1 - ty) + (Double(p[y1 * w + x0]) * (1 - tx) + Double(p[y1 * w + x1]) * tx) * ty
-                return Swift.min(1, colourFromLinear(Swift.min(1, v * spill.strength)))
+    // Where each pixel column samples the reduced cells.
+    var colX0 = [Int](repeating: 0, count: rw), colX1 = [Int](repeating: 0, count: rw), colT = [Double](repeating: 0, count: rw)
+    for x in 0..<rw {
+        let fx = Swift.min(Double(w - 1), Swift.max(0, (Double(x) + 0.5) / Double(f) - 0.5))
+        let x0 = Int(JS.floor(fx))
+        colX0[x] = x0
+        colX1[x] = Swift.min(w - 1, x0 + 1)
+        colT[x] = fx - Double(x0)
+    }
+    e.withUnsafeMutableBufferPointer { eb in
+        out.withUnsafeMutableBufferPointer { ob in
+            nonisolated(unsafe) let e = eb.baseAddress!
+            nonisolated(unsafe) let o = ob.baseAddress!
+            paintParallel(h) { cy in
+                for y in (cy * f)..<Swift.min(rh, (cy + 1) * f) {
+                    for x in 0..<rw {
+                        let i = y * rw + x
+                        let l = lit[i]
+                        if l == 0 { continue }
+                        let j = i * 4
+                        let k = ((Double(l) / 255) * (Double(col[j + 3]) / 255)) / Double(f * f)
+                        let cell = cy * w + x / f
+                        for ch in 0..<3 { e[ch * cells + cell] = Float(Double(e[ch * cells + cell]) + toLinear[Int(col[j + ch])] * k) }
+                    }
+                }
             }
-            let a = Swift.max(add[0], add[1], add[2])
-            if a <= 1.0 / 255 { continue }
-            let o = (y * region.width + x) * 4
-            out[o] = JS.u8c(JS.round((add[0] / a) * 255))
-            out[o + 1] = JS.u8c(JS.round((add[1] / a) * 255))
-            out[o + 2] = JS.u8c(JS.round((add[2] / a) * 255))
-            out[o + 3] = JS.u8c(JS.round(a * 255))
+            paintParallel(3) { ch in for _ in 0..<3 { boxBlur(e + ch * cells, w, h, box) } }
+            let e0 = e, e1 = e + cells, e2 = e + 2 * cells
+            paintParallel(rh) { y in
+                let fy = Swift.min(Double(h - 1), Swift.max(0, (Double(y) + 0.5) / Double(f) - 0.5))
+                let y0 = Int(JS.floor(fy))
+                let y1 = Swift.min(h - 1, y0 + 1)
+                let ty = fy - Double(y0)
+                for x in 0..<rw {
+                    let x0 = colX0[x], x1 = colX1[x]
+                    let tx = colT[x]
+                    let a00 = y0 * w + x0, a01 = y0 * w + x1, a10 = y1 * w + x0, a11 = y1 * w + x1
+                    if e0[a00] == 0 && e0[a01] == 0 && e0[a10] == 0 && e0[a11] == 0
+                        && e1[a00] == 0 && e1[a01] == 0 && e1[a10] == 0 && e1[a11] == 0
+                        && e2[a00] == 0 && e2[a01] == 0 && e2[a10] == 0 && e2[a11] == 0 { continue }
+                    func add(_ p: UnsafeMutablePointer<Float>) -> Double {
+                        let v = (Double(p[a00]) * (1 - tx) + Double(p[a01]) * tx) * (1 - ty) + (Double(p[a10]) * (1 - tx) + Double(p[a11]) * tx) * ty
+                        return Swift.min(1, colourFromLinear(Swift.min(1, v * strength)))
+                    }
+                    let add0 = add(e0), add1 = add(e1), add2 = add(e2)
+                    let a = Swift.max(add0, add1, add2)
+                    if a <= 1.0 / 255 { continue }
+                    let p = (y * rw + x) * 4
+                    o[p] = JS.u8c(JS.round((add0 / a) * 255))
+                    o[p + 1] = JS.u8c(JS.round((add1 / a) * 255))
+                    o[p + 2] = JS.u8c(JS.round((add2 / a) * 255))
+                    o[p + 3] = JS.u8c(JS.round(a * 255))
+                }
+            }
         }
     }
-    return surfaceFromPixels(width: region.width, height: region.height, data: out, channels: 4, x: region.x, y: region.y)
+    return surfaceFromPixels(width: rw, height: rh, data: out, channels: 4, x: region.x, y: region.y)
 }
 
 /// A light channel as saved (`{ rect, light }`, a grey PNG data URL), or nil when it has no light.

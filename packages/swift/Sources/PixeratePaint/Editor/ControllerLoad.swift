@@ -250,6 +250,7 @@ extension PaintEditorController {
             }
         }
         lightSpills = [:]
+        lightCaches = [:]
         if let raw = ext["lightSpill"]?.objectValue {
             for (id, v) in raw {
                 do {
