@@ -1731,6 +1731,13 @@
           "react": "✅ (`update_chart` and `ChartController.update`)",
           "svelte": "✅ (`update_chart` and `ChartController.update`)",
           "swift": "✅ (`ChartView3d`, `update_chart`, Office import); drawing in 3-D: Planned (#533)"
+        },
+        {
+          "feature": "3-D Charts with three.js (optional `@pixerate/editor/three` entry, three.js an optional peer: `layoutChart3d` lays out bars as boxes and lines / areas as ribbons in world units, pure and testable; `createChart3dScene` builds the scene and a camera fitted to the chart's `view3d`, without WebGL; `renderChart3d` draws it on demand with overlay labels in CSS px; `renderChart3dImage` makes a PNG with labels; `render_chart` png draws 3-D through the host's `render3d` hook)",
+          "core": "`layoutChart3d`, `CHART_3D_TYPES` (`/chart`), `createChart3dScene`, `renderChart3d`, `renderChart3dImage` (`/three`), `render3d` tool option",
+          "react": "✅ (`useChartToolProvider` `render3d`; draw with `renderChart3d`)",
+          "svelte": "✅ (`createChartToolProvider` `render3d`; draw with `renderChart3d`)",
+          "swift": "Planned (#533)"
         }
       ]
     },

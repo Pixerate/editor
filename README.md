@@ -462,7 +462,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Chart editor</strong> (27)</summary>
+<summary><strong>Chart editor</strong> (28)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -493,6 +493,7 @@ Every feature is available from core and from both framework packages, except wh
 | Chart Streaming, Presence & Sparklines (lenient partial Mermaid / JSON, steady axes, tweened scenes; agent cursors that act out edits as one undo step; word-sized line / column / win-loss charts) | `ChartStream`, `blendChartScenes`, `ChartDirector`, `ChartPresence`, `layoutSparkline` | `<ChartStreamingView>`, `useChartDirector`, `<ChartSparkline>` | `<ChartStreamingView>`, `createChartDirector`, `<ChartSparkline>` | `ChartStream`, `blendChartScenes`, `planChartCommand`, `chartPointAnchor`, `layoutSparkline` |
 | Chart Summaries & Accessibility (per-series min / max / mean / trend, layout warnings, plain-language description, SVG `<title>` and `<desc>`, recommendations from table shape) | `summarizeChart`, `describeChart`, `recommendChartTypes`, `chartFromTable` | Via core | Via core | `summarizeChart`, `describeChart`, `recommendChartTypes` & `chartFromTable` |
 | 3-D View (`view3d`: azimuth, elevation and depth as Office's view3D; set, merged and cleared through `update_chart`; Office 3-D bar, line and area charts import with their view instead of being drawn flat, and are written back flat with a note; drawing in 3-D comes with `@pixerate/editor/three`) | `ChartView3d`, `CHART_VIEW3D_DEFAULTS` (`/chart`), `update_chart` `view3d` | ✅ (`update_chart` and `ChartController.update`) | ✅ (`update_chart` and `ChartController.update`) | ✅ (`ChartView3d`, `update_chart`, Office import); drawing in 3-D: Planned (#533) |
+| 3-D Charts with three.js (optional `@pixerate/editor/three` entry, three.js an optional peer: `layoutChart3d` lays out bars as boxes and lines / areas as ribbons in world units, pure and testable; `createChart3dScene` builds the scene and a camera fitted to the chart's `view3d`, without WebGL; `renderChart3d` draws it on demand with overlay labels in CSS px; `renderChart3dImage` makes a PNG with labels; `render_chart` png draws 3-D through the host's `render3d` hook) | `layoutChart3d`, `CHART_3D_TYPES` (`/chart`), `createChart3dScene`, `renderChart3d`, `renderChart3dImage` (`/three`), `render3d` tool option | ✅ (`useChartToolProvider` `render3d`; draw with `renderChart3d`) | ✅ (`createChartToolProvider` `render3d`; draw with `renderChart3d`) | Planned (#533) |
 
 </details>
 

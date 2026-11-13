@@ -148,7 +148,8 @@ the pitfalls, and uses the tools below.
   draws a bar, line or area chart in 3-D where the host renders it, and `view3d: null` flattens
   it again. Perspective distorts lengths, so prefer flat charts for comparison; keep 3-D for
   a look the user wants or an Office chart that came in 3-D (it imports with its view, and is
-  written back flat).
+  written back flat). Check it with `render_chart` `format: "png"`: hosts that draw 3-D return
+  the 3-D picture; the SVG is always flat.
 - **Highlight instead of recolouring.** To show one bar or series against the rest, use
   `highlight_chart` (it mutes the rest and keeps the palette) rather than greying series by
   hand. Name categories to pick bars or points, series to pick whole lines. Clear it with

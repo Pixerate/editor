@@ -19,7 +19,8 @@
     "lottie-web": "5.13.0",
     "lucide-react": "^1.70.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "three": "0.186.1"
   },
   "devDependencies": {
     "@pixerate/flair": "^0.103.0",
