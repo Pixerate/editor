@@ -357,15 +357,24 @@ struct VectorCommitField: View {
     }
 }
 
-/// A slider whose drag is one undo step (`beginLiveEdit` / `endLiveEdit`).
+/// A slider whose drag is one undo step (`beginLiveEdit` / `endLiveEdit`); it sets the style
+/// `key` rounded to `1 / scale`.
+///
+/// It calls `model.setStyle` itself rather than taking a `@MainActor @Sendable` closure: handing
+/// such a stored closure to `Binding(set:)` crashes Swift 6.3's IR generation (see GOTCHAS).
 struct VectorStyleSlider: View {
     let model: VectorEditorModel
     let value: Double
     let range: ClosedRange<Double>
-    let set: @MainActor @Sendable (Double) -> Void
+    let key: String
+    let scale: Double
 
     var body: some View {
-        Slider(value: Binding(get: { value }, set: set), in: range) { (editing: Bool) in
+        let binding: Binding<Double> = Binding(get: { () -> Double in value }, set: { (v: Double) -> Void in
+            let rounded: Double = (v * scale).rounded() / scale
+            model.setStyle([key: .number(rounded)])
+        })
+        Slider(value: binding, in: range) { (editing: Bool) in
             if editing { model.beginLiveEdit() } else { model.endLiveEdit() }
         }
     }
@@ -408,13 +417,13 @@ struct VectorPaintFields: View {
             VectorColorRow(label: "Stroke", color: stroke, gradient: isVectorGradient(node.stroke)) { (v: JSONValue) in model.setStyle(["stroke": v]) }
             LabeledContent("Width") {
                 HStack {
-                    VectorStyleSlider(model: model, value: width, range: 0...40) { (v: Double) in model.setStyle(["strokeWidth": .number((v * 10).rounded() / 10)]) }
+                    VectorStyleSlider(model: model, value: width, range: 0...40, key: "strokeWidth", scale: 10)
                     Text(String(format: "%.1f", width)).font(.caption.monospacedDigit()).frame(width: 34)
                 }
             }
             LabeledContent("Opacity") {
                 HStack {
-                    VectorStyleSlider(model: model, value: opacity, range: 0...1) { (v: Double) in model.setStyle(["opacity": .number((v * 100).rounded() / 100)]) }
+                    VectorStyleSlider(model: model, value: opacity, range: 0...1, key: "opacity", scale: 100)
                     Text("\(Int((opacity * 100).rounded()))%").font(.caption.monospacedDigit()).frame(width: 34)
                 }
             }

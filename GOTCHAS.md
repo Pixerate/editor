@@ -135,6 +135,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The spray's spacing and scatter were fractions of the sticker's diameter, so both grew without limit with the size.
 - **Solution / Workaround**: Both scale with `min(diameter, STICKER_REACH)` (64 px), and `PenDabWalker.layEnd` lays a last sticker at the stroke's end. Keep any change to these in step in `paint-editor/stickers.ts` and `Stickers/Stickers.swift`: the conformance scenario `sticker-large-sizes` records the positions.
 
+### [swift/ui] Swift 6.3 Crashes Compiling a Stored `@MainActor @Sendable` Closure Passed to `Binding(set:)`
+
+- **Issue / Symptom**: CI (Swift 6.3.3) failed every Swift job with `fatal error encountered during compilation` / `SmallVector unable to grow` / `compile command failed due to signal 6`, in IR generation for `VectorPanels.swift`, while emitting a reabstraction thunk from an `@isolated(any) @Sendable (Double, Actor?) -> ()` closure. Swift 6.4 locally built and ran it fine.
+- **Root Cause**: `VectorStyleSlider` stored `let set: @MainActor @Sendable (Double) -> Void` and passed it straight to `Binding(get:set:)`. The conversion to the `@isolated(any)` closure type crashes 6.3's IRGen.
+- **Solution / Workaround**: Don't hand a stored global-actor-isolated `@Sendable` closure to SwiftUI API that takes a closure. Write the closure inline at the call (`Binding(get: { … }, set: { (v: Double) -> Void in … })`) and pass data (a key, a scale), not closures, into the view. A local build cannot catch this; CI's Swift version can (see the entry below on older CI compilers).
+
 ### [swift] CI Fails With "Unable to Type-Check This Expression in Reasonable Time" When Local Builds Pass
 
 - **Issue / Symptom**: `swift build` passes locally, but a CI job (Swift macOS, iOS simulator or the demo app) fails with `error: the compiler is unable to type-check this expression in reasonable time`. Seen on a one-line `PenPoint(...)` map in a test, a byte-assembly `|`/`<<` chain in `Deserialize.swift`, and a ternary of two `map`s in `ChartRasterizer.swift`.
