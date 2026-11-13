@@ -201,6 +201,12 @@ public final class PaintEditorController {
     }
     var undoStack: [HistoryEntry] = []
     var redoStack: [HistoryEntry] = []
+    /**
+     Bumped on every change to the painting (a committed step, undo, redo, opening a document), not
+     on wet-paint frames or view changes (`documentRevision` in `controller.ts`). It moves before the
+     document is assigned, so the change's emit sees it; `createPaintEditorDocument` counts those emits.
+     */
+    public internal(set) var documentRevision = 0
     let historyLimit: Int
     public let brushLibrary: BrushLibrary
     lazy var stickers = StickersSlot(nil, fallback: editorStickerLibrary)
@@ -456,6 +462,7 @@ public final class PaintEditorController {
         if grouping != nil {
             // Inside `group`: the change joins the group's one step.
             grouping!.changed = true
+            documentRevision += 1
             doc = next
             return
         }
@@ -467,6 +474,7 @@ public final class PaintEditorController {
         undoStack.append(entry)
         if undoStack.count > historyLimit { undoStack.removeFirst() }
         redoStack = []
+        documentRevision += 1
         doc = next
         trimWetHistory()
     }
@@ -479,6 +487,7 @@ public final class PaintEditorController {
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
         let paper = doc.paper
+        documentRevision += 1
         doc = e.before
         // Only a step that changed the age (bake_age) moves it; set_age is not an undo step, so the
         // restored document takes the current age and a save after undo keeps it.
@@ -500,6 +509,7 @@ public final class PaintEditorController {
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
         let paper = doc.paper
+        documentRevision += 1
         doc = e.after
         if e.before.age != e.after.age { age = e.after.age ?? DEFAULT_AGE } else { doc = withAge(doc) }
         if let g = e.guides { guides = g.after }
@@ -2356,10 +2366,25 @@ public final class PaintEditorController {
         return out
     }
 
-    /// The saved document in the `pixerate.editor-document` envelope, with images kept as asset references.
-    public func editorDocument() -> JSONValue {
-        let registry = EditorAssetRegistry()
-        return ["format": .string(editorDocumentFormat), "kind": "paint", "formatVersion": 1, "document": externalizeAssets(.object(toJSON()), registry)]
+    /**
+     The saved document in the `pixerate.editor-document` envelope (`toEditorDocumentFile(createPaintEditorDocument(controller))`),
+     with images kept as asset references in `assets`. Pass the same registry to `openEditorDocument`
+     to reopen it, or write the assets with `persistEditorAssets` and read them back with `preloadEditorAssets`.
+     */
+    public func editorDocument(assets: EditorAssetRegistry = EditorAssetRegistry(), name: String? = nil) -> JSONValue {
+        EditorDocumentFile(kind: "paint", formatVersion: 1, name: name, document: externalizeAssets(.object(toJSON()), assets)).json
+    }
+
+    /**
+     Opens a `pixerate.editor-document` file of kind `paint` (or a raw painting) whose asset
+     references are in `assets` (`createPaintEditorDocument(controller, { assets }).loadDocument(input)`).
+     Clears the history. Throws `EditorDocumentLoadError` and changes nothing when it does not fit.
+     */
+    @discardableResult
+    public func openEditorDocument(_ input: JSONValue, assets: EditorAssetRegistry) throws -> LoadReport {
+        let document = try createPaintEditorDocument(self, assets: assets)
+        defer { document.destroy() }
+        return try document.loadDocument(input)
     }
 }
 

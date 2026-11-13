@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint] The Paint Document's `revision` Counts Emits, and Swift's `doc` Emits on Every Assignment
+
+- **Issue / Symptom**: `get_paint_document` / `load_paint_document` return a `revision` that must match the TS recording. Bumping the Swift controller's `documentRevision` after `doc = next` (where the TS core writes `this.docRevision++`) leaves every change one revision late.
+- **Root Cause**: `createPaintEditorDocument` counts the controller's emits that come after a `documentRevision` change. In TS, `commit` bumps `docRevision` and emits at the end; in Swift, `doc` has a `didSet` that emits on the assignment itself, so the emit happens before a bump written after it. For the same reason a live culture growth flush followed by a commit in one call emits twice in Swift (two revisions) and once in TS (one).
+- **Solution / Workaround**: Bump `documentRevision` before assigning `doc` (commit, undo, redo, opening, heat, culture options, the culture flush). Scenarios that check revisions keep culture growth out of the steps between document reads.
+
+### [swift/paint] External Asset Stores Cache References Per Store Object, Twice
+
+- **Issue / Symptom**: `toJSONExternal` puts a PNG that is both a layer's pixels and an extension field's image into the store twice (under the layer id and under `ext-<fnv1a>-<length>`), then never again for that store.
+- **Root Cause**: The TS core keeps two `WeakMap`s keyed by the store (`externalRefs` for layer assets in the image editor's serializer, `storedPngs` for extension PNGs), each from data URL to the store's reference.
+- **Solution / Workaround**: The Swift port keeps the same two caches in `WeakObjectMap`s keyed by the store object (`PaintAssetStore` is `AnyObject`), so the number of `put` calls matches; keep one store object across saves to skip uploads.
+
 ### [monorepo] A Stacked PR Merged After Its Base Never Reaches `main`
 
 - **Issue / Symptom**: The smart object UI (`<SmartObjectPanel>`, the layer badges and the Edit Contents bar) was reviewed and merged as PR 3 of a stack (#225), but none of it was on `main`: the files had never existed there, while the core model and tools from PR 2 had.
@@ -4738,3 +4750,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: In the Swift Effects panel on iPad, a shader's controls read "UScale", "UBackgroundAlpha"; the effect paint's repeat menu wrapped to "Re-peat" beside the length field; and pickers such as a layer style's blend mode showed only their value, with nothing saying what it set.
 - **Root Cause**: (1) `EffectValuesView` capitalised the control's name instead of using the label the web panels use (`parameterLabel`: the schema `title`, else `humanizeParameterId`). (2) Outside a `Form`, a menu-style `Picker` shows its label on macOS but not on iPadOS, and a menu picker squeezed into a row with other controls wraps its value.
 - **Solution / Workaround**: Label controls with `effectControlLabel(name, schema)` and choice options with `humanizeParameterId`. Put a choice in `PaintPickerRow` (label on the left, a `Menu` holding an inline `Picker` on the right, so the value takes the row's font), one per row. Check panel changes at iPad width, not only in the macOS demo.
+
+### [react|svelte/canvas] A Drag on a Scene Mark Is Followed by a Click
+
+- **Issue / Symptom**: Dropping a dragged Gantt bar or quadrant point also selected it (or cleared the selection when the drop ended over the background).
+- **Root Cause**: The browser fires `click` after `pointerup` on the element under the pointer, whether or not the pointer moved in between.
+- **Solution / Workaround**: `MermaidFamilyScene` sets a `dragged` flag once the pointer travels past `DIAGRAM_DRAG_THRESHOLD` and swallows the next click. Drag coordinates go through `svg.getScreenCTM().inverse()`, so they stay right when the scene is drawn scaled; jsdom has no `getScreenCTM`, so tests fall back to client coordinates.

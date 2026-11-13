@@ -81,6 +81,12 @@ the pitfalls, and uses the tools below.
 - **Style sparingly.** `set_diagram_node_style` to highlight the one or two nodes the
   reader should look at (the error path, the changed step), not to decorate every node.
   Keep enough contrast between fill and text, and do not rely on colour alone.
+- **Everything a person drags, you can call.** People edit the family pictures by dragging; each
+  drag has a tool. Dates, durations, scores and quadrant coordinates: `set_diagram_node_data`.
+  Order of participants, journey tasks, timeline periods and Gantt tasks:
+  `reorder_diagram_node`. Into or out of a group, box, section or boundary:
+  `set_diagram_node_parent`. A Gantt dependency, a sequence message or a gitGraph merge:
+  `connect_diagram_nodes`. A mindmap topic under another parent: `reconnect_diagram_edge`.
 - **Title it** (`set_diagram_title`) with what the diagram shows.
 
 ## Tool reference
@@ -122,6 +128,8 @@ text-only families.
 | `set_diagram_settings` | Set diagram-level fields (`data`): pie `showData`, Gantt `dateFormat` and `excludes`, quadrant axis labels, XY categories and axis range, sequence autonumbering. Keys from `fields.diagram`; `null` clears. |
 | `group_diagram_nodes` | Put `nodeIds` into a new group with `label` (optional `id`, default the next `G<number>`): a flowchart subgraph, composite state, class namespace, or the family's own group kind. Refused by families without groups (ER, pie, mindmap, quadrant, XY, radar). |
 | `ungroup_diagram_group` | Remove a group by `id`; its nodes move to the group's parent. |
+| `set_diagram_node_parent` | Move existing nodes (`ids`) into an existing group (`parentId` from `get_diagram`'s `groups`: a subgraph, composite state, namespace, C4 boundary, architecture group, sequence box or section), or out of every group with `parentId: null`. The same as dropping them into or out of the group on the canvas. Returns the nodes with their parents. For a new group use `group_diagram_nodes`; refused by families without groups. |
+| `reorder_diagram_node` | Move a sequence participant, journey task, timeline period or Gantt task (`id`) to just before another node (`before`), or to the end with `before: null`. Placing it next to a node in another section or box moves it there. The same as dragging it sideways (up or down in a Gantt chart). Returns the new `order` of node ids and the node's `parentId`. Refused by families whose nodes have no order (use `move_diagram_nodes` to place those). |
 | `move_diagram_nodes` | Place nodes or groups on the canvas: `moves` of `{ id, x, y }` (top-left, canvas px). Stored in the `%% @pixerate` comment only; Mermaid statements and other renderers are unaffected. |
 | `undo_diagram` | Undo the last diagram edit; returns its label. |
 | `redo_diagram` | Redo the last undone diagram edit. |
@@ -148,6 +156,9 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A diagr
   and nothing changes.
 - Shapes only apply to flowchart and state nodes; class and ER have none. A shape name not
   in `get_diagram`'s `shapes` is refused.
+- Order is not canvas position. In sequence, journey, timeline and Gantt diagrams the layout
+  follows the statements, so `move_diagram_nodes` does not change the order there; use
+  `reorder_diagram_node`, and read the returned `order` rather than assuming it.
 - Data tools check keys and types against the family's fields before changing anything.
   Read `fields` first rather than guessing keys.
 - Moving one node of an auto-laid diagram can shift the others when the host does not pin

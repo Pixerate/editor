@@ -25,7 +25,7 @@ struct LoadedPaintDocument {
 private let KNOWN_FIELDS: Set<String> = ["format", "version", "width", "height", "dpi", "paper", "layers", "assets", "activeLayerId", "strokes", "guides", "swatches", "mixingPad", "wet", "wetEvents", "paintEvents", "origin"]
 
 /// Top-level fields with no PNGs of their own (`NO_EXTENSION_PNGS`): the rest may refer to `asset:<id>`.
-private let NO_EXTENSION_PNGS: Set<String> = ["format", "version", "width", "height", "dpi", "paper", "layers", "assets", "activeLayerId", "strokes", "wetEvents", "paintEvents", "origin"]
+let NO_EXTENSION_PNGS: Set<String> = ["format", "version", "width", "height", "dpi", "paper", "layers", "assets", "activeLayerId", "strokes", "wetEvents", "paintEvents", "origin"]
 
 /// How an extension field refers to a PNG in `assets` (`EXTENSION_ASSET_REF`).
 let EXTENSION_ASSET_REF = "asset:"

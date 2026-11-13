@@ -68,15 +68,38 @@ public struct EditorDocumentFile: Equatable {
     }
 }
 
+/// What can be undone and redone, as `EditorDocumentHistory.getState()` reports it.
+public struct EditorDocumentHistoryState: Equatable, Sendable {
+    public var canUndo: Bool
+    public var canRedo: Bool
+    /// The name of the step `undo` would undo, when it has one.
+    public var undoName: String?
+    /// The name of the step `redo` would redo, when it has one.
+    public var redoName: String?
+    public init(canUndo: Bool, canRedo: Bool, undoName: String? = nil, redoName: String? = nil) {
+        self.canUndo = canUndo
+        self.canRedo = canRedo
+        self.undoName = undoName
+        self.redoName = redoName
+    }
+}
+
 /// Undo / redo of an editor, as `EditorDocumentHistory`.
 public protocol EditorDocumentHistory: AnyObject {
     /// `false` when there was nothing to undo.
     @discardableResult func undo() -> Bool
     /// `false` when there was nothing to redo.
     @discardableResult func redo() -> Bool
+    /// What can be undone and redone now (`getState()`).
+    func documentHistoryState() -> EditorDocumentHistoryState
 }
 
-extension HistoryManager: EditorDocumentHistory {}
+extension HistoryManager: EditorDocumentHistory {
+    public func documentHistoryState() -> EditorDocumentHistoryState {
+        let s = state
+        return EditorDocumentHistoryState(canUndo: s.canUndo, canRedo: s.canRedo, undoName: s.undoName.isEmpty ? nil : s.undoName, redoName: s.redoName.isEmpty ? nil : s.redoName)
+    }
+}
 
 /// How `loadDocument` treats the undo history: `reset` (default) clears it, `record` makes the load one undo step.
 public enum EditorDocumentLoadHistory: String, Sendable {
@@ -100,8 +123,18 @@ public struct EditorDocumentSpec {
     public var history: EditorDocumentHistory
     /// Why the document cannot be changed (a sentence), or `nil`.
     public var readOnly: () -> String?
+    /**
+     Calls its listener after each document change (not selection or view changes), until the
+     returned handle is cancelled. Without it, the editor calls `EditorDocument.changed()` itself.
+     */
+    public var subscribe: ((@escaping () -> Void) -> Cancellable)?
+    /**
+     Keeps inline binary data (PNG data URLs, long base64) out of the document: `get` results are
+     externalized into it, and `load` receives the data back in place of the references.
+     */
+    public var assets: EditorAssetRegistry?
 
-    public init(kind: String, formatVersion: Int = 1, recordsLoads: Bool = true, get: @escaping () -> JSONValue, load: @escaping (JSONValue, EditorDocumentLoadHistory) throws -> [SectionProblem], migrations: [Int: (JSONValue) throws -> JSONValue] = [:], history: EditorDocumentHistory, readOnly: @escaping () -> String? = { nil }) {
+    public init(kind: String, formatVersion: Int = 1, recordsLoads: Bool = true, get: @escaping () -> JSONValue, load: @escaping (JSONValue, EditorDocumentLoadHistory) throws -> [SectionProblem], migrations: [Int: (JSONValue) throws -> JSONValue] = [:], history: EditorDocumentHistory, readOnly: @escaping () -> String? = { nil }, subscribe: ((@escaping () -> Void) -> Cancellable)? = nil, assets: EditorAssetRegistry? = nil) {
         self.kind = kind
         self.formatVersion = formatVersion
         self.recordsLoads = recordsLoads
@@ -110,22 +143,28 @@ public struct EditorDocumentSpec {
         self.migrations = migrations
         self.history = history
         self.readOnly = readOnly
+        self.subscribe = subscribe
+        self.assets = assets
     }
 }
 
 /**
  The save / load / undo contract of an editor (as `defineEditorDocument` builds it): counts
  revisions, unwraps and migrates files, and turns load failures into `EditorDocumentLoadError`.
- The editor calls `changed()` after every document change.
+ The editor calls `changed()` after every document change, or the spec's `subscribe` does.
  */
 public final class EditorDocument {
     public let kind: String
     public let formatVersion: Int
     public var recordsLoads: Bool { spec.recordsLoads }
     public var history: EditorDocumentHistory { spec.history }
+    /// Where the document's binary data lives: `getDocument()` holds references instead of it.
+    public var assets: EditorAssetRegistry? { spec.assets }
     private let spec: EditorDocumentSpec
     private var listeners: [UUID: () -> Void] = [:]
-    public private(set) var revision = 0
+    private var connection: Cancellable?
+    private var connected = false
+    private var counted = 0
 
     public init(_ spec: EditorDocumentSpec) throws {
         guard spec.kind.range(of: "^[a-z][a-z0-9_]*$", options: .regularExpression) != nil else {
@@ -134,10 +173,37 @@ public final class EditorDocument {
         self.spec = spec
         kind = spec.kind
         formatVersion = spec.formatVersion
+        connect()
+    }
+
+    /// Listens to the editor through the spec's `subscribe`, when it has one.
+    private func connect() {
+        guard connection == nil, let subscribe = spec.subscribe else { return }
+        // Changes made while disconnected were not counted, so a reconnect is a new revision.
+        if connected { counted += 1 }
+        connected = true
+        connection = subscribe { [weak self] in self?.changed() }
+    }
+
+    /// Bumped on every document change, including undo, redo and load (not on selection).
+    public var revision: Int {
+        connect()
+        return counted
+    }
+
+    /// Stops listening to the editor; `subscribe` or `revision` reconnects.
+    public func destroy() {
+        connection?.cancel()
+        connection = nil
     }
 
     /// Plain JSON snapshot of the whole document; `loadDocument(getDocument())` changes nothing.
-    public func getDocument() -> JSONValue { spec.get() }
+    /// With `assets`, inline binary data is replaced by references kept there.
+    public func getDocument() -> JSONValue {
+        let document = spec.get()
+        guard let assets = spec.assets else { return document }
+        return externalizeAssets(document, assets)
+    }
 
     /// The current document as a file.
     public func file(name: String? = nil) -> EditorDocumentFile {
@@ -149,12 +215,13 @@ public final class EditorDocument {
 
     /// The editor's change signal: bumps the revision and tells listeners.
     public func changed() {
-        revision += 1
-        for listener in listeners.values { listener() }
+        counted += 1
+        for listener in Array(listeners.values) { listener() }
     }
 
     /// Calls `listener` after every document change.
     public func subscribe(_ listener: @escaping () -> Void) -> Cancellable {
+        connect()
         let id = UUID()
         listeners[id] = listener
         return Cancellable { [weak self] in self?.listeners[id] = nil }
@@ -186,7 +253,9 @@ public final class EditorDocument {
         var (document, report) = try unwrap(input)
         if document == .null { throw EditorDocumentLoadError("No \(kind) document was given.") }
         do {
-            report.problems += try spec.load(document, history)
+            // Asset references are read back first: one that is not loaded refuses the load.
+            let input = try spec.assets.map { try internalizeAssets(document, $0) } ?? document
+            report.problems += try spec.load(input, history)
         } catch let error as EditorDocumentLoadError {
             throw error
         } catch {

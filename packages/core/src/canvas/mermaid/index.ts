@@ -13,6 +13,7 @@ export * from './toFlow.js';
 export * from './view.js';
 export * from './stream.js';
 export * from './scene.js';
+export * from './drag.js';
 export * from './families/index.js';
 
 export interface MermaidCanvasOptions extends DiagramLayoutOptions {
