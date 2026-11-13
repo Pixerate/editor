@@ -89,6 +89,8 @@ export interface StyleFinding {
 	target?: unknown;
 	/** The layer whose profile asked for the check. */
 	layer?: string;
+	/** A certain fix a write tool can apply: the colour to use, and the contrast it reaches (`min-contrast`). */
+	suggestion?: { color: string; ratio: number };
 }
 
 /**
