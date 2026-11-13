@@ -232,6 +232,7 @@ final class LitCache {
         let ck = hasCracks ? "\(ageKey(age!))|\(layerCount)|\(offset.x),\(offset.y)" : ""
         var out = color.tiles
         var keys = Set<TileKey>()
+        var work: [(key: TileKey, tile: Tile, material: Tile?, film: Tile?, inputs: [ObjectIdentifier?])] = []
         for (key, tile) in color.tiles {
             keys.insert(key)
             let (tx, ty) = tileCoord(key)
@@ -254,20 +255,33 @@ final class LitCache {
                 out.set(key, cached.tile)
                 continue
             }
-            let cd = expandTile(tile, 4)
-            func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
-                let nk = tileKey(ntx, nty)
-                let ht = ch.height.tiles.get(nk)
-                let baseH = ht.map { expandTile($0, 1) }
-                if !hasCracks { return baseH }
-                let ct: [UInt8]? = ntx == tx && nty == ty ? cd : color.tiles.get(nk).map { expandTile($0, 4) }
-                return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount)
+            work.append((key, tile, m, f, inputs))
+        }
+        // Each tile is lit from the surfaces alone (its own tiles and the heights around it): light the stale ones on every core.
+        var litTiles = [Tile?](repeating: nil, count: work.count)
+        litTiles.withUnsafeMutableBufferPointer { buf in
+            nonisolated(unsafe) let buf = buf
+            paintParallel(work.count) { i in
+                let w = work[i]
+                let (tx, ty) = tileCoord(w.key)
+                let cd = expandTile(w.tile, 4)
+                func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+                    let nk = tileKey(ntx, nty)
+                    let ht = ch.height.tiles.get(nk)
+                    let baseH = ht.map { expandTile($0, 1) }
+                    if !hasCracks { return baseH }
+                    let ct: [UInt8]? = ntx == tx && nty == ty ? cd : color.tiles.get(nk).map { expandTile($0, 4) }
+                    return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount)
+                }
+                let hd = hasHeight ? heightTileAt(tx, ty) : nil
+                let data = lightTile(cd, hd, { dx, dy in heightTileAt(tx + dx, ty + dy) }, w.material.map { expandTile($0, 4) }, light, w.film.map { expandTile($0, 4) }, viewTilt)
+                buf[i] = Tile(data: data, uniform: nil)
             }
-            let hd = hasHeight ? heightTileAt(tx, ty) : nil
-            let data = lightTile(cd, hd, { dx, dy in heightTileAt(tx + dx, ty + dy) }, m.map { expandTile($0, 4) }, light, f.map { expandTile($0, 4) }, viewTilt)
-            let litTile = Tile(data: data, uniform: nil)
-            tiles[key] = (inputs, light, viewTilt, ck, litTile)
-            out.set(key, litTile)
+        }
+        for (i, w) in work.enumerated() {
+            let litTile = litTiles[i]!
+            tiles[w.key] = (w.inputs, light, viewTilt, ck, litTile)
+            out.set(w.key, litTile)
         }
         for key in Array(tiles.keys) where !keys.contains(key) { tiles[key] = nil }
         return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)

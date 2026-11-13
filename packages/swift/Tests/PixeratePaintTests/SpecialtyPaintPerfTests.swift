@@ -402,4 +402,113 @@ final class SpecialtyPaintPerfTests: XCTestCase {
         }
         XCTAssertGreaterThan(onePattern.tiles.values.reduce(0) { $0 + $1.v.filter { $0 > PATTERN_V_EPS }.count }, 500)
     }
+
+    // MARK: Pattern relief
+
+    /// `LivePatternField.applyReliefHeight` as it was: every pattern tile, every pixel, every call.
+    private func referenceRelief(_ field: LivePatternField, _ currentHeight: TiledSurface) -> TiledSurface {
+        let relief = field.settings.relief
+        if !field.enabled || relief <= 0 || field.tiles.isEmpty { return currentHeight }
+        var nextTiles: OrderedMap<TileKey, Tile>? = nil
+        for (key, pTile) in field.tiles {
+            let (tx, ty) = tileCoord(key)
+            let w = Swift.min(TILE, field.width - tx * TILE)
+            let h = Swift.min(TILE, field.height - ty * TILE)
+            if w <= 0 || h <= 0 { continue }
+            var maxTileV = 0.0
+            for i in 0..<PATTERN_CELLS where pTile.v[i] > maxTileV { maxTileV = pTile.v[i] }
+            if maxTileV < PATTERN_V_EPS { continue }
+            let existing = currentHeight.tiles.get(key)
+            var buf: [UInt8]
+            if let existing {
+                buf = !existing.data.isEmpty ? existing.data : [UInt8](repeating: UInt8(truncatingIfNeeded: existing.uniform ?? 0), count: TILE * TILE)
+            } else {
+                buf = [UInt8](repeating: 0, count: TILE * TILE)
+            }
+            var tileChanged = false
+            for y in 0..<h {
+                let row = (y >> 1) * PATTERN_TILE
+                for x in 0..<w {
+                    let vVal = pTile.v[row + (x >> 1)]
+                    if vVal < PATTERN_V_EPS { continue }
+                    let ridge = JS.u8c(Swift.min(255, JS.round(Swift.min(1, vVal * 2.2) * relief * 255)))
+                    let p = y * TILE + x
+                    if ridge > buf[p] {
+                        buf[p] = ridge
+                        tileChanged = true
+                    }
+                }
+            }
+            if tileChanged {
+                if nextTiles == nil { nextTiles = currentHeight.tiles }
+                if let finished = finishTile(buf, 1, 0) { nextTiles!.set(key, finished) } else { _ = nextTiles!.delete(key) }
+            }
+        }
+        return nextTiles.map { TiledSurface(channels: 1, tiles: $0, defaultValue: 0) } ?? currentHeight
+    }
+
+    func testPatternReliefSkipsOnlyWhatWouldNotChange() {
+        let wet: WetCellPredicate = { tx, _, _, _ in tx < 2 }
+        let field = seededField()
+        field.configure(["relief": 0.6])
+        // The canvas ends inside the last tiles (700 × 600), and one height tile is already high in places.
+        var start = [UInt8](repeating: 0, count: 300 * 300)
+        for i in 0..<start.count where (i / 300 + i % 300) % 11 < 4 { start[i] = 200 }
+        var height = surfaceFromPixels(width: 300, height: 300, data: start, channels: 1, x: 150, y: 130)
+        var expected = height
+        func apply(_ message: String, file: StaticString = #filePath, line: UInt = #line) {
+            let before = height
+            expected = referenceRelief(field, expected)
+            height = field.applyReliefHeight(height)
+            assertSameSurface(height, expected, message, file: file, line: line)
+            // What the old code left unchanged is still the same object.
+            XCTAssertEqual(height === before, referenceRelief(field, before) === before, "\(message): identity", file: file, line: line)
+        }
+        apply("first relief")
+        let settled = height
+        apply("nothing changed")
+        XCTAssertTrue(height === settled)
+        for round in 0..<3 {
+            XCTAssertTrue(field.step(2, isWetCell: wet))
+            apply("after step \(round)")
+        }
+        field.seedDisc(cx: 600, cy: 100, radius: 40, seed: 77)
+        apply("after a seed")
+        // The relief is flattened (or undone) under the pattern: the ridges come back, as before.
+        height = emptySurface(1, 0)
+        expected = height
+        apply("after flattening")
+        XCTAssertFalse(height.tiles.isEmpty)
+        // One height tile is replaced by something lower: only the pattern knows it has to be raised again.
+        let key = height.tiles.keys[0]
+        var tiles = height.tiles
+        tiles.set(key, Tile(data: height.tiles.get(key)!.data.map { $0 / 3 }, uniform: nil))
+        height = TiledSurface(channels: 1, tiles: tiles, defaultValue: 0)
+        expected = height
+        apply("after one tile was lowered")
+        // The tiles are replaced from outside, and the settings change.
+        var replaced = field.tiles
+        var t = replaced.get(key)!
+        for i in 0..<400 { t.v[i * 17] = 0.9 }
+        replaced.set(key, t)
+        field.tiles = replaced
+        apply("after the tiles were replaced")
+        field.configure(["relief": 1])
+        apply("after the relief was raised")
+        field.restore(field.snapshot())
+        apply("after a restore")
+        XCTAssertTrue(height === field.applyReliefHeight(height))
+    }
+
+    func testThickPaintLightsTheSameWithAWarmCache() throws {
+        let c = try PaintEditorController(width: 600, height: 300, color: "#2255aa")
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "turing-wash", seed: 3), points: [PenPoint(x: 40, y: 60, pressure: 0.7), PenPoint(x: 560, y: 240, pressure: 0.7)])
+        _ = try c.setLivePatterns(nil, ["relief": 0.8])
+        _ = try c.advanceWet(steps: 60, seconds: nil)
+        XCTAssertFalse(c.doc.thick?.values.first?.height.tiles.isEmpty ?? true)
+        let first = c.compositePixels(wet: "display")
+        XCTAssertTrue(c.compositePixels(wet: "display").data == first.data)
+        c.litCaches = [:]
+        XCTAssertTrue(c.compositePixels(wet: "display").data == first.data)
+    }
 }
