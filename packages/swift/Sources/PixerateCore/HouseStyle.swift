@@ -118,3 +118,82 @@ public func mergeStyleProfile(_ target: inout JSONObject, _ value: JSONObject) {
     }
 }
 
+
+/**
+ * A domain's resolved house style for one `layer` holding one skill (the conformance hosts'
+ * setup): the skill's `<domain>.json` and `brand.json`, as `resolve` merges them. The domain
+ * starts from what it derives from the brand (`themeFromBrand`), its own profile merges over
+ * that, and the brand's checks run after the profile's own (`runStyleChecks`).
+ */
+public final class HouseStyle: @unchecked Sendable {
+    /// The merged profile.
+    public var profile: JSONObject
+    /// The layer that set the profile's `checks` (`style.sources.checks`), named on findings.
+    public var layer: String?
+    /// The skill's `brand.json`, when it has a valid, non-empty one.
+    public var brand: JSONObject?
+    /// The layer that set the brand's `checks` (`style.sources['$brand.checks']`).
+    public var brandLayer: String?
+    /// `style.issues`: why a file or the derived profile is left out.
+    public var issues: [JSONValue]
+    /// Whether a style skill applies (`style.skills.length > 0`).
+    public var hasSkills: Bool
+
+    /// No house style.
+    public init() {
+        profile = JSONObject()
+        issues = []
+        hasSkills = false
+    }
+
+    /**
+     * `skill` in `layer`, with `profileJson` as its `<domain>.json` and `brandJson` as its
+     * `brand.json` (either may be absent). `schema` is the domain's `profileSchema`, `checks` the
+     * option schemas its `checks` list is validated against (`styleChecksOf`).
+     */
+    public init(
+        domain: String,
+        skill: String,
+        layer: String,
+        profileJson: JSONValue?,
+        brandJson: JSONValue?,
+        schema: JSONValue,
+        checks: [(id: String, schema: JSONValue)],
+        themeFromBrand: ((JSONObject) -> JSONObject)? = nil
+    ) {
+        var issues: [JSONValue] = []
+        func issue(_ message: String) {
+            issues.append(.object(JSONObject([("skill", .string(skill)), ("layer", .string(layer)), ("message", .string(message))])))
+        }
+        // Profiles load in domain order: the domain's, then the brand (added last).
+        var own: JSONObject?
+        if let profileJson {
+            let loaded = loadStyleProfile(profileJson, file: "\(domain).json", schema: schema, checks: checks)
+            if let error = loaded.error { issue(error) }
+            own = loaded.profile
+        }
+        var brand: JSONObject?
+        if let brandJson {
+            let loaded = loadBrandProfile(brandJson)
+            if let error = loaded.error { issue(error) }
+            if let p = loaded.profile, !p.isEmpty { brand = p }
+        }
+        var profile = JSONObject()
+        if let brand, let themeFromBrand {
+            let derived = themeFromBrand(brand)
+            let errors = validateJSONSchema(.object(derived), schema).map { "\($0.path.isEmpty ? "(profile)" : $0.path): \($0.message)" }
+            if errors.isEmpty {
+                profile = derived
+            } else {
+                issues.append(.object(JSONObject([("message", .string("The \(domain) style derived from the brand is left out: \(errors.joined(separator: " "))"))])))
+            }
+        }
+        if let own { mergeStyleProfile(&profile, own) }
+        self.profile = profile
+        self.layer = own?["checks"] != nil ? layer : nil
+        self.brand = brand
+        self.brandLayer = brand?["checks"] != nil ? layer : nil
+        self.issues = issues
+        self.hasSkills = true
+    }
+}
