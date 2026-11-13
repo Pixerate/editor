@@ -105,6 +105,32 @@ describe('set_smart_object_transform', () => {
   });
 });
 
+describe('set_active_layer target filter-mask', () => {
+  it('makes the smart filter mask the paint target, and refuses layers without one', async () => {
+    const { c, registry, id } = await converted();
+    let res = await registry.callTool('set_active_layer', { layerId: id, target: 'filter-mask' });
+    expect(res.isError).toBe(true);
+    expect(errorText(res)).toMatch(/no smart filter mask; add one with set_smart_filter_mask/);
+    await registry.callTool('add_smart_filter', { layerId: id, kind: 'blur', radius: 2 });
+    await registry.callTool('set_smart_filter_mask', { layerId: id, from: 'reveal-all' });
+    await registry.callTool('set_active_layer', { layerId: id, target: 'pixels' });
+    const before = steps(c);
+    res = await registry.callTool('set_active_layer', { layerId: id, target: 'filter-mask' });
+    expect(res.isError).toBeFalsy();
+    expect(out(res)).toMatchObject({ activeTarget: 'filter-mask', layer: { id, active: true } });
+    expect(c.getState().activeTarget).toBe('filter-mask');
+    expect(out(await registry.callTool('list_layers', {})).activeTarget).toBe('filter-mask');
+    // View state, not an undo step.
+    expect(steps(c)).toBe(before);
+    const bg = out(await registry.callTool('list_layers', {})).layers[0].id;
+    res = await registry.callTool('set_active_layer', { layerId: bg, target: 'filter-mask' });
+    expect(res.isError).toBe(true);
+    expect(errorText(res)).toMatch(/not a smart object/);
+    res = await registry.callTool('set_active_layer', { layerId: id, target: 'nowhere' });
+    expect(res.isError).toBe(true);
+  });
+});
+
 describe('smart filter tools', () => {
   it('adds, updates, moves, disables and removes filters, returning the stack', async () => {
     const { c, registry, id } = await converted();

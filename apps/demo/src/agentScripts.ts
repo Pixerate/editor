@@ -777,6 +777,53 @@ export const IMAGE_SCRIPTS: AgentScript[] = [
     ],
   },
   {
+    id: "image-smart-object",
+    prompt: "Make the centre a smart object, shrink and tilt it, soften it, then set it back",
+    steps: [
+      { say: "Selecting everything to read the image size.", tool: "image__select_all", args: {} },
+      { tool: "image__get_selection", args: {}, as: "sel" },
+      {
+        say: "A rectangle over the centre.",
+        tool: "image__select_rect",
+        args: (ctx) => {
+          const { width, height } = imageSize(ctx.results.sel);
+          return { x: width * 0.3, y: height * 0.3, width: width * 0.4, height: height * 0.4 };
+        },
+      },
+      { tool: "image__list_layers", args: {}, as: "stack" },
+      {
+        say: "Layer via Copy puts the centre on its own layer.",
+        tool: "image__layer_via_copy",
+        args: (ctx) => ({ layerId: ctx.results.stack.layers[0].id, name: "Postcard" }),
+        as: "copy",
+      },
+      { tool: "image__deselect", args: {} },
+      {
+        say: "Converting it to a smart object: from now on transforms re-render from the original pixels.",
+        tool: "image__convert_to_smart_object",
+        args: (ctx) => ({ layerIds: [ctx.results.copy.layer.id] }),
+        as: "smart",
+      },
+      {
+        say: "Shrinking it to 40 % and tilting it, absolutely (percent of the contents' own size).",
+        tool: "image__set_smart_object_transform",
+        args: (ctx) => ({ layerId: ctx.results.smart.layer.id, scaleX: 40, scaleY: 40, rotate: -10 }),
+      },
+      {
+        say: "A blur as a smart filter, at 60 %, so it stays adjustable.",
+        tool: "image__add_smart_filter",
+        args: (ctx) => ({ layerId: ctx.results.smart.layer.id, kind: "blur", radius: 3, opacity: 0.6 }),
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+      {
+        say: "Back to 100 % and straight: nothing was lost on the way, the contents are re-rendered.",
+        tool: "image__set_smart_object_transform",
+        args: (ctx) => ({ layerId: ctx.results.smart.layer.id, scaleX: 100, scaleY: 100, rotate: 0 }),
+      },
+      { say: "Rendering a preview.", tool: "image__render_preview", args: { maxSide: 360 } },
+    ],
+  },
+  {
     id: "image-color",
     prompt: "Check how this prints on a coated press and give me the CMYK of the brand blue",
     steps: [

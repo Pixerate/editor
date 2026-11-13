@@ -235,7 +235,7 @@ in the source frame at the document's bit depth, colour mode and profile. Read
 | `flip_image` | Mirror the image `horizontal` (left-right) or `vertical`. Avoid flipping images with text, logos or recognisable places. |
 | `undo_image` | Undo the last edit (one tool call is one step). Returns `canUndo` / `canRedo`. |
 | `redo_image` | Redo the edit you just undid. |
-| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels`, `mask`, or a smart object's `filter-mask`). Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer. |
+| `set_active_layer` | Make a layer active (`layerId`) and choose the paint `target` (`pixels`, `mask`, or a smart object's `filter-mask`). `mask` needs a layer mask and `filter-mask` a smart filter mask (`set_smart_filter_mask` first); otherwise it is refused. Base sliders then edit that pixel layer's develop filter. Not an undo step. Returns the layer and the resulting `activeTarget`. |
 | `add_pixel_layer` | Add a pixel layer above the active layer (or at `aboveId` / `belowId` / `parentId` / `index`): empty, `color` `#rrggbb[aa]` over the canvas, or `image` (PNG data URL or base64; other formats only in a browser) at `x`, `y`; with `name`, `opacity`, `blend`. Returns the layer with its id and bounds. |
 | `duplicate_layer` | Copy a layer (groups with their children) directly above it, e.g. before a destructive change. Returns the copy. |
 | `remove_layer` | Delete a layer or group (refused when locked). Prefer hiding with `set_layer_properties`. Deleting the active layer makes the nearest paintable pixel layer below it active. Returns the remaining top-level ids and the new `activeLayerId`. |

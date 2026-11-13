@@ -181,7 +181,7 @@ function ImageEditorView({ image, onPickImage }: { image: string; onPickImage: (
           }}
         />
       </div>
-      <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
+      <AgentScriptPanel scripts={scripts} hint="Plays a scripted agent turn with the image__* tools: adjustments and layers as single undo steps, selections, masks, Free Transform, smart objects and smart filters, and a rendered preview. The editor acts each call out with the agent's cursor and opens the panel it works in." />
 
       <EditorPanel id="stickers" label="Stickers" icon={StickerIcon}>
         <StickerInsertPanel provider={demoStickers} host={stickerHost} />

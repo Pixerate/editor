@@ -161,7 +161,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'list_layers',
     title: 'List image layers',
     description:
-      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, shape, type, smart, annotation), name, document bounds (pixel, shape, type and smart layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), a shape summary (component operations and kinds, fill and stroke paint types; details from get_shape_layer), a text summary (the text, point or box frame, run count, live or stored pixels, missing fonts; details from get_text_layer), children (groups) and which layer is active. Also returns the active layer id and target (pixels or mask) and the canvas size.',
+      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, shape, type, smart, annotation; smart objects also give their contents, smart filters and filter mask), name, document bounds (pixel, shape, type and smart layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), a shape summary (component operations and kinds, fill and stroke paint types; details from get_shape_layer), a text summary (the text, point or box frame, run count, live or stored pixels, missing fonts; details from get_text_layer), children (groups) and which layer is active. Also returns the active layer id and target (pixels, mask or filter-mask) and the canvas size.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'List image layers', ...READ },
     handler: () => {
@@ -179,12 +179,12 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'set_active_layer',
     title: 'Set the active layer',
     description:
-      'Makes a layer active (the base sliders of set_adjustments then edit its develop filter when it is a pixel layer) and chooses whether painting targets its pixels or its mask. View state, not an undo step. Returns the active layer.',
+      'Makes a layer active (the base sliders of set_adjustments then edit its develop filter when it is a pixel layer) and chooses whether painting targets its pixels, its mask or, on a smart object, its smart filter mask. View state, not an undo step. Returns the active layer and the resulting activeTarget.',
     inputSchema: {
       type: 'object',
       properties: {
         layerId: { ...LAYER_ID, description: 'Layer to activate (from list_layers).' },
-        target: { type: 'string', enum: ['pixels', 'mask'], description: 'Paint target (default pixels; mask needs a mask).' },
+        target: { type: 'string', enum: ['pixels', 'mask', 'filter-mask'], description: 'Paint target (default pixels; mask needs a layer mask; filter-mask needs a smart object with a smart filter mask).' },
       },
       required: ['layerId'],
       additionalProperties: false,
@@ -194,7 +194,14 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
       const id = exists(layerId);
       const layer = controller.getLayer(id)!;
       if (target === 'mask' && !layer.mask) throw new LayerOperationError(`Layer "${layer.name || id}" has no mask; add one with add_layer_mask.`);
-      controller.setActiveLayer(id, (target as 'pixels' | 'mask' | undefined) ?? 'pixels');
+      if (target === 'filter-mask' && !(layer.type === 'smart' && layer.smartFilters?.mask)) {
+        throw new LayerOperationError(
+          layer.type === 'smart'
+            ? `Smart object "${layer.name || id}" has no smart filter mask; add one with set_smart_filter_mask.`
+            : `Layer "${layer.name || id}" is not a smart object, so it has no smart filter mask; use target pixels or mask.`
+        );
+      }
+      controller.setActiveLayer(id, (target as 'pixels' | 'mask' | 'filter-mask' | undefined) ?? 'pixels');
       return { layer: describe(id), activeTarget: controller.getState().activeTarget };
     },
   };
