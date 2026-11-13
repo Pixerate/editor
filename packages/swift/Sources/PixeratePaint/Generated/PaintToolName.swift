@@ -199,6 +199,11 @@ public enum PaintToolName: String, CaseIterable, Sendable {
     case checkBrushStyle = "check_brush_style"
     case getPaintDocument = "get_paint_document"
     case loadPaintDocument = "load_paint_document"
+    case savePaintDocument = "save_paint_document"
+    case listSavedPaintDocuments = "list_saved_paint_documents"
+    case openSavedPaintDocument = "open_saved_paint_document"
+    case findUnreferencedPaintAssets = "find_unreferenced_paint_assets"
+    case deleteUnreferencedPaintAssets = "delete_unreferenced_paint_assets"
 
     /// The provider that offers the tool.
     public var provider: String {
@@ -210,7 +215,7 @@ public enum PaintToolName: String, CaseIterable, Sendable {
         case .proposePaint, .listPaintProposals, .acceptPaintProposal, .rejectPaintProposal: "paint-proposals"
         case .checkPaintStyle, .fixPaintStyle: "paint-style"
         case .checkBrushStyle: "brush-style"
-        case .getPaintDocument, .loadPaintDocument: "paint-document"
+        case .getPaintDocument, .loadPaintDocument, .savePaintDocument, .listSavedPaintDocuments, .openSavedPaintDocument, .findUnreferencedPaintAssets, .deleteUnreferencedPaintAssets: "paint-document"
         }
     }
 }

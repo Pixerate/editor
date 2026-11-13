@@ -51,9 +51,41 @@ final class PaintDocumentStoreTests: XCTestCase {
         for m in mismatches { XCTFail(m.description) }
     }
 
+    func testTheDocumentStoreScenarioMatchesTheTypeScriptRecording() async throws {
+        guard let scenario = try ConformanceScenario.load(domain: "paint").first(where: { $0.id == "document-store" }) else { return XCTFail("no document-store scenario") }
+        XCTAssertNil(scenario.skip["swift"])
+        let outputs = try await runConformanceScenario(scenario, host: PaintConformanceHost(setup: scenario.setup))
+        let mismatches = compareConformance(scenario, outputs) { try decodeConformancePNG(Data(contentsOf: $0)) }
+        for m in mismatches { XCTFail(m.description) }
+    }
+
+    func testASavedPaintingReopensInAnotherEditorThroughTheStore() async throws {
+        let c = try await painted()
+        let storage = MemoryEditorStorage()
+        let store = createEditorDocumentStore(EditorDocumentStoreOptions(storage: storage))
+        let registry = ToolRegistry(validateArguments: true)
+        _ = try registry.register(createPaintDocumentToolProvider(c, store: store))
+        let saved = await registry.callTool("save_paint_document", ["name": "Sketch"])
+        XCTAssertEqual(saved.structuredContent?["key"], "paint/sketch")
+        XCTAssertEqual(storage.orderedKeys.filter { $0.hasPrefix("pixerate.assets:") }.count, 1)
+
+        // Another editor with a registry of its own reads the layer pixels back from storage.
+        let d = try PaintEditorController(width: 8, height: 8)
+        let other = ToolRegistry(validateArguments: true)
+        _ = try other.register(createPaintDocumentToolProvider(d, store: store))
+        let session = try d.beginStroke()
+        let busy = await other.callTool("open_saved_paint_document", ["key": "paint/sketch"])
+        XCTAssertEqual(busy.structuredContent?["error"]?["message"], "A stroke is in progress; end or cancel it first. Read tools still work; write tools are refused.")
+        session.cancel()
+        let opened = await other.callTool("open_saved_paint_document", ["key": "paint/sketch"])
+        XCTAssertEqual(opened.structuredContent, ["key": "paint/sketch", "name": "Sketch", "revision": 1, "undoable": false])
+        XCTAssertEqual(d.toJSON(), c.toJSON())
+    }
+
     func testTheProviderListsTheContractsTools() throws {
         let c = try PaintEditorController(width: 16, height: 16)
-        let provider = try createPaintDocumentToolProvider(c)
+        // The contract lists the tools of a host with a document store (as the TS demo's paint tab).
+        let provider = try createPaintDocumentToolProvider(c, store: PaintConformanceHost.documentStore())
         guard let contract = try PaintContracts.toolProviders().first(where: { $0.id == "paint-document" }) else { return XCTFail("no paint-document provider in tools.json") }
         XCTAssertEqual(provider.id, contract.id)
         XCTAssertEqual(provider.title, contract.title)

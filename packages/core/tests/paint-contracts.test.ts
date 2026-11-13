@@ -47,7 +47,7 @@ describe('the paint contracts in @pixerate/conformance', () => {
     expect(providers.map((p) => p.id)).toEqual(['paint-editor', 'paint-effects', 'paint-effect-authoring', 'brushes', 'paint-proposals', 'paint-style', 'brush-style', 'paint-document']);
     const names = providers.flatMap((p) => p.tools.map((t) => t.name));
     expect(new Set(names).size).toBe(names.length);
-    expect(names).toEqual(expect.arrayContaining(['paint_stroke', 'set_brush', 'undo_paint', 'apply_effect', 'open_effect_authoring', 'save_authored_effect', 'effect_authoring_set_source', 'create_brush', 'advance_wet_paint', 'check_paint_style', 'fix_paint_style', 'check_brush_style', 'get_paint_document', 'load_paint_document']));
+    expect(names).toEqual(expect.arrayContaining(['paint_stroke', 'set_brush', 'undo_paint', 'apply_effect', 'open_effect_authoring', 'save_authored_effect', 'effect_authoring_set_source', 'create_brush', 'advance_wet_paint', 'check_paint_style', 'fix_paint_style', 'check_brush_style', 'get_paint_document', 'load_paint_document', 'save_paint_document', 'list_saved_paint_documents', 'open_saved_paint_document', 'find_unreferenced_paint_assets', 'delete_unreferenced_paint_assets']));
     for (const t of providers.flatMap((p) => p.tools)) {
       expect(t.title, t.name).toBeTruthy();
       expect(t.description, t.name).toBeTruthy();

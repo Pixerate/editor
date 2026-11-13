@@ -62,8 +62,23 @@ public final class PaintConformanceHost: ConformanceHost {
         }
         _ = try registry.register(createPaintStyleToolProvider(controller, styles.paint, readOnly: { readOnly }))
         _ = try registry.register(createBrushStyleToolProvider(controller.brushLibrary, styles.brushes))
-        // get_paint_document / load_paint_document over a paint editor document of its own.
-        _ = try registry.register(createPaintDocumentToolProvider(controller))
+        // get_paint_document / load_paint_document over a paint editor document of its own, and the
+        // saved-document tools over the host's memory store (`paintDocumentStore` in the TS contract).
+        _ = try registry.register(createPaintDocumentToolProvider(controller, store: Self.documentStore()))
+    }
+
+    /**
+     The document store of a paint host (`paintDocumentStore` in `paint-editor/contract.ts`): memory
+     storage, which lists its keys, and a clock that starts at 2026-01-01T00:00:00.000Z and moves one
+     minute per save, so `savedAt` is the same in every implementation.
+     */
+    public static func documentStore() -> EditorDocumentStore {
+        var saves = 0.0
+        let start = 1_767_225_600_000.0
+        return createEditorDocumentStore(EditorDocumentStoreOptions(storage: MemoryEditorStorage(), now: {
+            defer { saves += 1 }
+            return start + 60000 * saves
+        }))
     }
 
     private static func limits(_ o: JSONObject?) -> AuthoredEffectLimits {

@@ -1,0 +1,623 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "document-store",
+  "description": "With the host's document store: save_paint_document saves the painting and its image assets under a name (the same name replaces that copy, no name saves \"Untitled paint\"), list_saved_paint_documents lists them newest first, open_saved_paint_document opens one by key and refuses unknown keys naming the saved ones, and find_unreferenced_paint_assets / delete_unreferenced_paint_assets find and delete the stored images no saved document or the open painting refers to (refusing references that are not unreferenced, deleting nothing); an image deleted while the editor still holds it is written again by the next save.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "list_saved_paint_documents",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "documents": []
+        }
+      }
+    },
+    {
+      "tool": "open_saved_paint_document",
+      "arguments": {
+        "key": "paint/first-sketch"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no saved document \"paint/first-sketch\". No paint documents are saved yet."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 20,
+            "y": 12,
+            "pressure": 0.8
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.5
+          }
+        ],
+        "seed": 3,
+        "color": "#0a6040"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 49,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 87,
+          "layerId": "@1",
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "save_paint_document",
+      "arguments": {
+        "name": "  First sketch!  "
+      },
+      "expect": {
+        "result": {
+          "key": "paint/first-sketch",
+          "name": "First sketch!",
+          "revision": 1,
+          "savedAt": "<time>"
+        }
+      }
+    },
+    {
+      "tool": "find_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "assets": 1,
+          "kept": 0,
+          "more": 0,
+          "referenced": 1,
+          "refs": [],
+          "unreferenced": 0,
+          "unreferencedChars": 0
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 40,
+            "y": 4,
+            "pressure": 0.6
+          },
+          {
+            "x": 8,
+            "y": 28,
+            "pressure": 0.4
+          }
+        ],
+        "seed": 5,
+        "color": "#a03020"
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 36,
+            "width": 44,
+            "x": 2,
+            "y": -2
+          },
+          "dabs": 81,
+          "layerId": "@1",
+          "strokeId": "s2"
+        }
+      }
+    },
+    {
+      "tool": "save_paint_document",
+      "arguments": {
+        "name": "Second"
+      },
+      "expect": {
+        "result": {
+          "key": "paint/second",
+          "name": "Second",
+          "revision": 2,
+          "savedAt": "<time>"
+        }
+      }
+    },
+    {
+      "tool": "save_paint_document",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "key": "paint/untitled-paint",
+          "name": "Untitled paint",
+          "revision": 2,
+          "savedAt": "<time>"
+        }
+      }
+    },
+    {
+      "tool": "list_saved_paint_documents",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "documents": [
+            {
+              "formatVersion": 1,
+              "key": "paint/untitled-paint",
+              "name": "Untitled paint",
+              "savedAt": "<time>"
+            },
+            {
+              "formatVersion": 1,
+              "key": "paint/second",
+              "name": "Second",
+              "savedAt": "<time>"
+            },
+            {
+              "formatVersion": 1,
+              "key": "paint/first-sketch",
+              "name": "First sketch!",
+              "savedAt": "<time>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "save_paint_document",
+      "arguments": {
+        "name": "First sketch"
+      },
+      "expect": {
+        "result": {
+          "key": "paint/first-sketch",
+          "name": "First sketch",
+          "revision": 2,
+          "savedAt": "<time>"
+        }
+      }
+    },
+    {
+      "tool": "find_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "assets": 2,
+          "kept": 0,
+          "more": 0,
+          "referenced": 1,
+          "refs": [
+            "pixerate-asset:xi-a3g39dw5nz"
+          ],
+          "unreferenced": 1,
+          "unreferencedChars": 1206
+        }
+      }
+    },
+    {
+      "tool": "delete_unreferenced_paint_assets",
+      "arguments": {
+        "refs": [
+          "pixerate-asset:zz-zz"
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "1 of the given asset is not unreferenced in storage now (pixerate-asset:zz-zz): unknown, already deleted, referenced or in use. Nothing was deleted; find the unreferenced assets again."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "delete_unreferenced_paint_assets",
+      "arguments": {
+        "refs": [
+          "not-a-ref"
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must match pattern ^pixerate-asset:.",
+                "path": "/refs/0"
+              }
+            ],
+            "message": "Invalid arguments for tool \"delete_unreferenced_paint_assets\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "open_saved_paint_document",
+      "arguments": {
+        "key": "paint/missing"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "There is no saved document \"paint/missing\". Saved paint documents: paint/first-sketch, paint/untitled-paint, paint/second."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "delete_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "freedChars": 1206,
+          "kept": 0,
+          "remaining": 1,
+          "removed": 1
+        }
+      }
+    },
+    {
+      "tool": "find_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "assets": 1,
+          "kept": 0,
+          "more": 0,
+          "referenced": 1,
+          "refs": [],
+          "unreferenced": 0,
+          "unreferencedChars": 0
+        }
+      }
+    },
+    {
+      "tool": "undo_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "nextRedo": "6B pencil stroke",
+          "nextUndo": "6B pencil stroke",
+          "undone": "6B pencil stroke"
+        }
+      }
+    },
+    {
+      "tool": "save_paint_document",
+      "arguments": {
+        "name": "Third"
+      },
+      "expect": {
+        "result": {
+          "key": "paint/third",
+          "name": "Third",
+          "revision": 3,
+          "savedAt": "<time>"
+        }
+      }
+    },
+    {
+      "tool": "find_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "assets": 2,
+          "kept": 0,
+          "more": 0,
+          "referenced": 2,
+          "refs": [],
+          "unreferenced": 0,
+          "unreferencedChars": 0
+        }
+      }
+    },
+    {
+      "tool": "open_saved_paint_document",
+      "arguments": {
+        "key": "paint/second"
+      },
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "key": "paint/second",
+          "name": "Second",
+          "revision": 4,
+          "undoable": false
+        },
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:1mm-3de9tkktd"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": -1
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#0a6040",
+                "id": "s1",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.3,
+                    "x": 4,
+                    "y": 6
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 20,
+                    "y": 12
+                  },
+                  {
+                    "pressure": 0.5,
+                    "x": 42,
+                    "y": 26
+                  }
+                ],
+                "seed": 3
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "grain": 0.7
+                  },
+                  "dynamics": {
+                    "minSize": 0.5,
+                    "pressureOpacity": true,
+                    "pressureSmoothing": 0.3,
+                    "smoothing": 0.2,
+                    "tiltOpacity": 0.35,
+                    "tiltRoundness": 0.75,
+                    "tiltSize": 1
+                  },
+                  "id": "pencil-6b",
+                  "kind": "mark",
+                  "medium": "dry",
+                  "name": "6B pencil",
+                  "tip": {
+                    "flow": 0.75,
+                    "hardness": 0.55,
+                    "shape": "round",
+                    "size": 7,
+                    "spacing": 0.07
+                  },
+                  "variety": "pencil"
+                },
+                "color": "#a03020",
+                "id": "s2",
+                "layerId": "@1",
+                "points": [
+                  {
+                    "pressure": 0.6,
+                    "x": 40,
+                    "y": 4
+                  },
+                  {
+                    "pressure": 0.4,
+                    "x": 8,
+                    "y": 28
+                  }
+                ],
+                "seed": 5
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/document-store.20.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "6c8eb82dc91c37dc520baf41c1b8310bac795a38aceb469281208989c728660b",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_saved_paint_documents",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "documents": [
+            {
+              "formatVersion": 1,
+              "key": "paint/third",
+              "name": "Third",
+              "savedAt": "<time>"
+            },
+            {
+              "formatVersion": 1,
+              "key": "paint/first-sketch",
+              "name": "First sketch",
+              "savedAt": "<time>"
+            },
+            {
+              "formatVersion": 1,
+              "key": "paint/untitled-paint",
+              "name": "Untitled paint",
+              "savedAt": "<time>"
+            },
+            {
+              "formatVersion": 1,
+              "key": "paint/second",
+              "name": "Second",
+              "savedAt": "<time>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "delete_unreferenced_paint_assets",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "freedChars": 0,
+          "kept": 0,
+          "remaining": 2,
+          "removed": 0
+        }
+      }
+    }
+  ]
+}

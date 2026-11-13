@@ -127,8 +127,12 @@ public final class PaintEditorModel {
         }
     }
 
-    /// A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry` (default a new one).
-    public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil) throws {
+    /**
+     A model over `controller` (default a new 1024 × 768 painting), with its tools in `registry`
+     (default a new one). With the host's `documentStore`, the agent can also save, list and open
+     paintings and clean up their stored images (`save_paint_document`, …), as in the TS demo.
+     */
+    public init(controller: PaintEditorController? = nil, registry: ToolRegistry? = nil, documentStore: EditorDocumentStore? = nil) throws {
         let c = try controller ?? PaintEditorController(width: 1024, height: 768)
         self.controller = c
         let r = registry ?? ToolRegistry()
@@ -141,8 +145,9 @@ public final class PaintEditorModel {
         // Effects written at run time (`open_effect_authoring`, `save_authored_effect`, the `effect_authoring_*` tools); the controller's `authoredEffects` policy decides what they may do.
         subscriptions.append(try r.register(createPaintEffectAuthoringToolProvider(c)))
         subscriptions.append(try r.register(createPaintBrushLibraryToolProvider(c)))
-        // get_paint_document / load_paint_document over a paint editor document (images as asset references).
-        subscriptions.append(try r.register(createPaintDocumentToolProvider(c)))
+        // get_paint_document / load_paint_document over a paint editor document (images as asset
+        // references), and the saved-document tools when the host has a store.
+        subscriptions.append(try r.register(createPaintDocumentToolProvider(c, store: documentStore)))
         gesture = PaintGesture(controller: c) { [unowned self] in self.viewport }
         gesture.onSelectStroke = { [unowned self] id in self.selectedStroke = id }
         subscriptions.append(c.subscribe { [weak self] in
