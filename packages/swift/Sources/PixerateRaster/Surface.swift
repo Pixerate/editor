@@ -37,13 +37,15 @@ public let TILE_SHIFT = 8
 let TILE_PIXELS = TILE * TILE
 private let KEY_OFFSET = 1 << 15
 private let KEY_SPAN = 1 << 16
+/// Tile coordinates whose packed key stays well under 2^53, where `Int` and JS doubles agree.
+private let EXACT_KEY_LIMIT = 1 << 30
 
 /// A tile coordinate packed into one number (tx, ty in −32768..32767).
 public typealias TileKey = Int
 
 public func tileKey(_ tx: Int, _ ty: Int) -> TileKey {
     // Exact in doubles here, as in TS (|key| < 2^53); past it TS rounds (`jsTileKey`).
-    if tx > -(1 << 30) && tx < (1 << 30) && ty > -(1 << 30) && ty < (1 << 30) {
+    if tx > -EXACT_KEY_LIMIT && tx < EXACT_KEY_LIMIT && ty > -EXACT_KEY_LIMIT && ty < EXACT_KEY_LIMIT {
         return (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET)
     }
     return jsTileKey(Double(tx), Double(ty))
