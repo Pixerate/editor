@@ -1,0 +1,80 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-brand-invalid",
+  "description": "A brand.json that fails its schema is left out with the reason (#791); the chart profile still applies.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "North",
+          "values": [
+            100
+          ]
+        }
+      ]
+    },
+    "brand": {
+      "colors": {
+        "primary": 3
+      },
+      "palette": [],
+      "mood": "calm",
+      "checks": [
+        "palette-only",
+        {
+          "id": "min-contrast",
+          "ratio": 40
+        }
+      ]
+    },
+    "style": {
+      "palette": [
+        "#123456"
+      ],
+      "checks": [
+        "palette-only"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Series \"North\" uses #4269d0, which is not in the house palette; use #123456 or another palette colour (#123456).",
+              "severity": "error",
+              "target": {
+                "kind": "series",
+                "seriesId": "s1"
+              }
+            }
+          ],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "brand.json is left out: /colors/primary: Expected string, got integer. /palette: Must have at least 1 items. /mood: Unknown property \"mood\". Allowed: name, colors, palette, fonts, logo. checks[1] (min-contrast)/ratio: Must be <= 21.",
+              "skill": "house"
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}

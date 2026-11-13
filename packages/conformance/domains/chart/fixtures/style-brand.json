@@ -1,0 +1,259 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-brand",
+  "description": "A brand.json beside the chart profile (#791): the chart's palette and theme come from the brand, the brand's checks run after the profile's own (a domain check with the same id wins), and an unknown check names every chart check, fonts-allowed included.",
+  "setup": {
+    "width": 640,
+    "height": 400,
+    "spec": {
+      "type": "bar",
+      "categories": [
+        "Q1",
+        "Q2"
+      ],
+      "series": [
+        {
+          "id": "s1",
+          "name": "North",
+          "values": [
+            100,
+            120
+          ]
+        },
+        {
+          "id": "s2",
+          "name": "South",
+          "values": [
+            80,
+            90
+          ]
+        }
+      ]
+    },
+    "brand": {
+      "name": "Acme",
+      "colors": {
+        "primary": "#0b5fff",
+        "secondary": "#ff6a00",
+        "text": "#1a1a1a",
+        "background": "#ffffff",
+        "border": "#d9d9d9"
+      },
+      "fonts": {
+        "heading": "Inter",
+        "body": "Inter"
+      },
+      "checks": [
+        "palette-only",
+        "fonts-allowed",
+        {
+          "id": "min-contrast",
+          "ratio": 3
+        }
+      ]
+    },
+    "style": {
+      "checks": [
+        "distinguishable",
+        "no-such-check"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Series \"North\" uses #4269d0, which is not in the house palette; use #0b5fff or another palette colour (#0b5fff, #ff6a00).",
+              "severity": "error",
+              "target": {
+                "kind": "series",
+                "seriesId": "s1"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Series \"South\" uses #efb118, which is not in the house palette; use #ff6a00 or another palette colour (#0b5fff, #ff6a00).",
+              "severity": "error",
+              "target": {
+                "kind": "series",
+                "seriesId": "s2"
+              }
+            },
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Series \"South\" (#efb118) has contrast 1.91:1 against the background #ffffff; want at least 3:1, so use a darker or lighter palette colour.",
+              "severity": "warning",
+              "target": {
+                "kind": "series",
+                "seriesId": "s2"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "distinguishable",
+            "palette-only",
+            "fonts-allowed",
+            "min-contrast"
+          ],
+          "skipped": [
+            {
+              "check": "no-such-check",
+              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "apply_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "applied": {
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ]
+          },
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "North",
+                "values": [
+                  100,
+                  120
+                ]
+              },
+              {
+                "id": "s2",
+                "name": "South",
+                "values": [
+                  80,
+                  90
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "check_chart_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [
+            {
+              "check": "min-contrast",
+              "layer": "org",
+              "message": "Series \"South\" (#ff6a00) has contrast 2.87:1 against the background #ffffff; want at least 3:1, so use a darker or lighter palette colour.",
+              "severity": "warning",
+              "target": {
+                "kind": "series",
+                "seriesId": "s2"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "distinguishable",
+            "palette-only",
+            "fonts-allowed",
+            "min-contrast"
+          ],
+          "skipped": [
+            {
+              "check": "no-such-check",
+              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
