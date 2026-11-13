@@ -232,6 +232,7 @@ final class LitCache {
         let ck = hasCracks ? "\(ageKey(age!))|\(layerCount)|\(offset.x),\(offset.y)" : ""
         var out = color.tiles
         var keys = Set<TileKey>()
+        var work: [(key: TileKey, tile: Tile, material: Tile?, film: Tile?, inputs: [ObjectIdentifier?])] = []
         for (key, tile) in color.tiles {
             keys.insert(key)
             let (tx, ty) = tileCoord(key)
@@ -254,20 +255,33 @@ final class LitCache {
                 out.set(key, cached.tile)
                 continue
             }
-            let cd = expandTile(tile, 4)
-            func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
-                let nk = tileKey(ntx, nty)
-                let ht = ch.height.tiles.get(nk)
-                let baseH = ht.map { expandTile($0, 1) }
-                if !hasCracks { return baseH }
-                let ct: [UInt8]? = ntx == tx && nty == ty ? cd : color.tiles.get(nk).map { expandTile($0, 4) }
-                return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount)
+            work.append((key, tile, m, f, inputs))
+        }
+        // Each tile is lit from the surfaces alone (its own tiles and the heights around it): light the stale ones on every core.
+        var litTiles = [Tile?](repeating: nil, count: work.count)
+        litTiles.withUnsafeMutableBufferPointer { buf in
+            nonisolated(unsafe) let buf = buf
+            paintParallel(work.count) { i in
+                let w = work[i]
+                let (tx, ty) = tileCoord(w.key)
+                let cd = expandTile(w.tile, 4)
+                func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+                    let nk = tileKey(ntx, nty)
+                    let ht = ch.height.tiles.get(nk)
+                    let baseH = ht.map { expandTile($0, 1) }
+                    if !hasCracks { return baseH }
+                    let ct: [UInt8]? = ntx == tx && nty == ty ? cd : color.tiles.get(nk).map { expandTile($0, 4) }
+                    return carveAgeCrackHeightTile(ct, baseH, ntx, nty, offset, age!, layerCount)
+                }
+                let hd = hasHeight ? heightTileAt(tx, ty) : nil
+                let data = lightTile(cd, hd, { dx, dy in heightTileAt(tx + dx, ty + dy) }, w.material.map { expandTile($0, 4) }, light, w.film.map { expandTile($0, 4) }, viewTilt)
+                buf[i] = Tile(data: data, uniform: nil)
             }
-            let hd = hasHeight ? heightTileAt(tx, ty) : nil
-            let data = lightTile(cd, hd, { dx, dy in heightTileAt(tx + dx, ty + dy) }, m.map { expandTile($0, 4) }, light, f.map { expandTile($0, 4) }, viewTilt)
-            let litTile = Tile(data: data, uniform: nil)
-            tiles[key] = (inputs, light, viewTilt, ck, litTile)
-            out.set(key, litTile)
+        }
+        for (i, w) in work.enumerated() {
+            let litTile = litTiles[i]!
+            tiles[w.key] = (w.inputs, light, viewTilt, ck, litTile)
+            out.set(w.key, litTile)
         }
         for key in Array(tiles.keys) where !keys.contains(key) { tiles[key] = nil }
         return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
@@ -935,38 +949,101 @@ private func clearMaterial(_ m: Tile?) -> Bool {
     return false
 }
 
-/**
- * Glow, rim and clarity over a layer's (lit) colour, tile by tile (`LightCache.glow`). Tiles with no
- * light and no clear thick paint are the colour tiles themselves.
- */
+/// Glow, rim and clarity over a layer's (lit) colour, tile by tile, computed afresh (`LightCache.glow` keeps the tiles between frames).
 func glowSurface(_ color: TiledSurface, _ light: TiledSurface?, _ thick: ThickChannels?) -> TiledSurface {
-    if (light?.tiles.isEmpty ?? true) && !(thick.map { $0.material.tiles.values.contains(where: clearMaterial) } ?? false) { return color }
-    var out = color.tiles
-    for (key, tile) in color.tiles {
-        let l = light?.tiles.get(key)
-        let m = thick?.material.tiles.get(key)
-        let h = thick?.height.tiles.get(key)
-        if l == nil && !clearMaterial(m) { continue }
-        let ld = l?.data, md = m?.data, hd = h?.data
-        var d = tile.data
-        var i = 0
-        for y in 0..<TILE {
-            for x in 0..<TILE {
-                defer { i += 1 }
-                let j = i * 4
-                if d[j + 3] == 0 { continue }
-                let rim = md.map { Double($0[j + 2]) / 255 } ?? 0
-                let opacity = md.flatMap { $0[j + 3] != 0 ? Double($0[j + 3]) : nil } ?? 255
-                let f = (rim > 0 || opacity < 255) && hd != nil ? facing(hd!, x, y) : 1
-                let g = ld != nil && ld![i] != 0 ? (Double(ld![i]) / 255) * (1 - rim + rim * 2 * JS.pow(1 - f, 3)) : 0
-                if g > 0 {
-                    for ch in 0..<3 { d[j + ch] = JS.u8c(JS.round(colourFromLinear(Swift.min(1, colourToLinear(Double(d[j + ch]) / 255) * (1 + GLOW * g))) * 255)) }
-                }
-                // Clarity: the middle of a bead (facing the viewer) turns clear; its edges stay solid.
-                if opacity < 255 { d[j + 3] = JS.u8c(JS.round(Double(d[j + 3]) * (1 - ((255 - opacity) / 254) * f))) }
-            }
-        }
-        out.set(key, Tile(data: d, uniform: nil))
+    LightCache().glow(color, light, thick)
+}
+
+/**
+ * A layer's glow and spill between frames (`LightCache` in `paint-editor/light.ts`), cached by the
+ * identity of their inputs: a glowed tile is kept while its colour, light, material and height
+ * tiles are the same objects, and the spill while the colour and light surfaces and the spill
+ * settings are. Without it every frame of a lit layer shaded all its lit tiles and blurred its
+ * whole spill again, whether or not anything had changed.
+ */
+final class LightCache {
+    private struct GlowTile {
+        let color: Tile
+        let light: Tile?
+        let material: Tile?
+        let height: Tile?
+        let tile: Tile
     }
-    return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
+
+    private var tiles: [TileKey: GlowTile] = [:]
+    private var glowed: (color: TiledSurface, light: TiledSurface?, material: TiledSurface?, height: TiledSurface?, surface: TiledSurface)?
+    private var spilled: (color: TiledSurface, light: TiledSurface, spill: LightSpill, surface: TiledSurface?)?
+
+    /// Glow, rim and clarity over a layer's (lit) colour. Tiles with no light and no clear thick paint are the colour tiles themselves.
+    func glow(_ color: TiledSurface, _ light: TiledSurface?, _ thick: ThickChannels?) -> TiledSurface {
+        if (light?.tiles.isEmpty ?? true) && !(thick.map { $0.material.tiles.values.contains(where: clearMaterial) } ?? false) { return color }
+        // The same surfaces as last time give the same tiles: the surface itself, so the compositor sees no change.
+        if let g = glowed, g.color === color, g.light === light, g.material === thick?.material, g.height === thick?.height { return g.surface }
+        var out = color.tiles
+        var seen = Set<TileKey>()
+        var work: [(key: TileKey, color: Tile, light: Tile?, material: Tile?, height: Tile?)] = []
+        for (key, tile) in color.tiles {
+            let l = light?.tiles.get(key)
+            let m = thick?.material.tiles.get(key)
+            let h = thick?.height.tiles.get(key)
+            if l == nil && !clearMaterial(m) { continue }
+            seen.insert(key)
+            if let c = tiles[key], c.color === tile, c.light === l, c.material === m, c.height === h {
+                out.set(key, c.tile)
+                continue
+            }
+            work.append((key, tile, l, m, h))
+        }
+        // Each tile reads only its own inputs: shade them on every core.
+        var shaded = [Tile?](repeating: nil, count: work.count)
+        shaded.withUnsafeMutableBufferPointer { buf in
+            nonisolated(unsafe) let buf = buf
+            paintParallel(work.count) { i in buf[i] = glowTile(work[i].color, work[i].light, work[i].material, work[i].height) }
+        }
+        for (i, w) in work.enumerated() {
+            let t = shaded[i]!
+            tiles[w.key] = GlowTile(color: w.color, light: w.light, material: w.material, height: w.height, tile: t)
+            out.set(w.key, t)
+        }
+        if tiles.count != seen.count { tiles = tiles.filter { seen.contains($0.key) } }
+        let surface = TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
+        glowed = (color, light, thick?.material, thick?.height, surface)
+        return surface
+    }
+
+    /**
+     * The layer's spill (layer space, RGBA for Linear Dodge (Add)): `light × colour` blurred by
+     * `radius` px at a reduced resolution, times `strength`; nil without light or spill.
+     */
+    func spill(_ color: TiledSurface, _ light: TiledSurface?, _ spill: LightSpill) -> TiledSurface? {
+        guard let light else { return nil }
+        if let s = spilled, s.color === color, s.light === light, s.spill == spill { return s.surface }
+        let surface = computeSpill(color, light, spill)
+        spilled = (color, light, spill, surface)
+        return surface
+    }
+}
+
+/// One tile's glow, rim and clarity (the body of `LightCache.glow`'s loop).
+private func glowTile(_ tile: Tile, _ l: Tile?, _ m: Tile?, _ h: Tile?) -> Tile {
+    let ld = l?.data, md = m?.data, hd = h?.data
+    var d = tile.data
+    var i = 0
+    for y in 0..<TILE {
+        for x in 0..<TILE {
+            defer { i += 1 }
+            let j = i * 4
+            if d[j + 3] == 0 { continue }
+            let rim = md.map { Double($0[j + 2]) / 255 } ?? 0
+            let opacity = md.flatMap { $0[j + 3] != 0 ? Double($0[j + 3]) : nil } ?? 255
+            let f = (rim > 0 || opacity < 255) && hd != nil ? facing(hd!, x, y) : 1
+            let g = ld != nil && ld![i] != 0 ? (Double(ld![i]) / 255) * (1 - rim + rim * 2 * JS.pow(1 - f, 3)) : 0
+            if g > 0 {
+                for ch in 0..<3 { d[j + ch] = JS.u8c(JS.round(colourFromLinear(Swift.min(1, colourToLinear(Double(d[j + ch]) / 255) * (1 + GLOW * g))) * 255)) }
+            }
+            // Clarity: the middle of a bead (facing the viewer) turns clear; its edges stay solid.
+            if opacity < 255 { d[j + 3] = JS.u8c(JS.round(Double(d[j + 3]) * (1 - ((255 - opacity) / 254) * f))) }
+        }
+    }
+    return Tile(data: d, uniform: nil)
 }

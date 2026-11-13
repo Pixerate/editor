@@ -455,6 +455,32 @@ public final class WetWorld {
         )
     }
 
+    /// `isPatternCellWet` for the first `w` × `h` cells of a pattern tile: marks the wet ones in `mask` and returns whether any is.
+    private func patternTileWet(_ lane: WetLane, _ tx: Int, _ ty: Int, _ w: Int, _ h: Int, _ mask: UnsafeMutablePointer<UInt8>) -> Bool {
+        if tx < 0 || ty < 0 || tx >= layout.tilesX || ty >= layout.tilesY { return false }
+        let slot = slotOf(lane.index * layout.perLane + ty * layout.tilesX + tx)
+        if slot < 0 { return false }
+        let cur = slotPtr(slot) + parity * SET_PLANES * PL
+        let rho = cur + P_RHO * PL
+        let sw = cur + P_SW * PL
+        var any = false
+        for ly in 0..<h {
+            let c0 = (ly * 2 + 1) * S + 1
+            for lx in 0..<w {
+                let c00 = c0 + lx * 2
+                let c01 = c00 + S
+                if Double(rho[c00]) + Double(sw[c00]) > DRY_EPS ||
+                    Double(rho[c00 + 1]) + Double(sw[c00 + 1]) > DRY_EPS ||
+                    Double(rho[c01]) + Double(sw[c01]) > DRY_EPS ||
+                    Double(rho[c01 + 1]) + Double(sw[c01 + 1]) > DRY_EPS {
+                    mask[ly * PATTERN_TILE + lx] = 1
+                    any = true
+                }
+            }
+        }
+        return any
+    }
+
     private func touchLane(_ lane: WetLane) {
         for key in active where laneIndexOf(key) == lane.index {
             slotStamp[key] += 1
@@ -843,10 +869,14 @@ public final class WetWorld {
             let changed = lane.livePatterns.step(
                 n,
                 isWetCell: { tx, ty, lx, ly in self.isPatternCellWet(lane, tx, ty, lx, ly) },
-                canWakeTile: { tx, ty in self.slotOf(lane.index * perLane + ty * tilesX + tx) >= 0 }
+                canWakeTile: { tx, ty in self.slotOf(lane.index * perLane + ty * tilesX + tx) >= 0 },
+                wetTile: { tx, ty, w, h, mask in self.patternTileWet(lane, tx, ty, w, h, mask) },
+                threads: threads
             )
             if changed {
-                for key in active where laneIndexOf(key) == lane.index {
+                // Only the tiles the pattern advanced in can show something new (a tile's shading reads its own pattern tile).
+                let stepped = Set(lane.livePatterns.steppedTiles)
+                for key in active where laneIndexOf(key) == lane.index && stepped.contains(tileKeyOf(key)) {
                     slotStamp[key] += 1
                 }
             }
