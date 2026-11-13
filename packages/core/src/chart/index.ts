@@ -36,3 +36,4 @@ export * from './playback.js';
 export * from './editorDocument.js';
 export * from './style.js';
 export * from './contract.js';
+export * from './ui-components.js';
