@@ -44,7 +44,9 @@ This skill is the method. `pixerate-diagram` has the full tool reference.
    edges (`app1 -->|SQL| db`).
    **Check:** `get_diagram`: store shapes, groups and each node's `parentId`, every edge's
    `label`.
-5. **Boundaries.** `group_diagram_nodes` for tiers and trust boundaries in an existing diagram.
+5. **Boundaries.** `group_diagram_nodes` for tiers and trust boundaries in an existing diagram;
+   `set_diagram_node_parent` to move a component into a boundary that already exists, or out
+   of one (`parentId: null`).
    **Check:** components sit in the right group; nothing internal is left outside.
 6. **Label flows.** `set_diagram_edge_label` with the protocol or content on each edge.
    **Check:** no edge without a label (other than obvious containment).
@@ -98,7 +100,7 @@ and `{ nodeIds: ["lb", "api", "db"], label: "Private network" }`.
 - `add_diagram_node`, `connect_diagram_nodes`, `reconnect_diagram_edge`: change parts and flows
 - `set_diagram_node_shape`, `set_diagram_node_style`, `rename_diagram_node`: shapes, styles and names
 - `set_diagram_edge_label`: protocols on flows
-- `group_diagram_nodes`, `ungroup_diagram_group`: tiers and boundaries
+- `group_diagram_nodes`, `ungroup_diagram_group`, `set_diagram_node_parent`: tiers and boundaries, and moving components between them
 - `move_diagram_nodes`: canvas positions, to untangle crossing lines
 - `set_diagram_direction`, `set_diagram_title`: layout and title
 - `undo_diagram`: take back a step

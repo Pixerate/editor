@@ -122,7 +122,8 @@ export const DIAGRAM_MARKER_IDS = { arrow: 'pd-arrow-open', arrowclosed: 'pd-arr
 export function diagramMarksToSvg(marks: readonly DiagramMark[], theme: Pick<DiagramSceneTheme, 'selection'> = DIAGRAM_SCENE_LIGHT_THEME): string {
 	const out: string[] = [];
 	for (const m of marks) {
-		const common = `${m.target ? ` data-target="${esc(m.target)}"` : ''}${m.opacity !== undefined ? ` opacity="${num(m.opacity)}"` : ''}`;
+		const shift = m.offset && (m.offset[0] || m.offset[1]) ? `translate(${num(m.offset[0])} ${num(m.offset[1])})` : '';
+		const common = `${m.target ? ` data-target="${esc(m.target)}"` : ''}${m.opacity !== undefined ? ` opacity="${num(m.opacity)}"` : ''}${shift && m.kind !== 'text' ? ` transform="${shift}"` : ''}`;
 		const sel = m.selected ? ` stroke="${esc(theme.selection)}" stroke-width="2"` : '';
 		const markers = (mk: { markerEnd?: string; markerStart?: string }) =>
 			`${mk.markerEnd ? ` marker-end="url(#${DIAGRAM_MARKER_IDS[mk.markerEnd as 'arrow']})"` : ''}${mk.markerStart ? ` marker-start="url(#${DIAGRAM_MARKER_IDS[mk.markerStart as 'arrow']})"` : ''}`;
@@ -149,7 +150,7 @@ export function diagramMarksToSvg(marks: readonly DiagramMark[], theme: Pick<Dia
 				break;
 			case 'text':
 				out.push(
-					`<text x="${num(m.x)}" y="${num(m.y)}" text-anchor="${m.anchor}" dominant-baseline="${diagramTextBaseline(m.baseline)}" font-size="${num(m.size)}"${m.weight ? ` font-weight="${m.weight}"` : ''}${m.italic ? ' font-style="italic"' : ''} fill="${esc(m.fill)}"${m.rotate ? ` transform="rotate(${num(m.rotate)} ${num(m.x)} ${num(m.y)})"` : ''}${common}>${esc(m.text)}</text>`
+					`<text x="${num(m.x)}" y="${num(m.y)}" text-anchor="${m.anchor}" dominant-baseline="${diagramTextBaseline(m.baseline)}" font-size="${num(m.size)}"${m.weight ? ` font-weight="${m.weight}"` : ''}${m.italic ? ' font-style="italic"' : ''} fill="${esc(m.fill)}"${shift || m.rotate ? ` transform="${[shift, m.rotate ? `rotate(${num(m.rotate)} ${num(m.x)} ${num(m.y)})` : ''].filter(Boolean).join(' ')}"` : ''}${common}>${esc(m.text)}</text>`
 				);
 				break;
 		}

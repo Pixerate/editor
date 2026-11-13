@@ -54,7 +54,18 @@ interface DiagramMarkBase {
 	/** Mark belongs to the current selection. */
 	selected?: boolean;
 	opacity?: number;
+	/** Drawn shifted by this much (a drag preview); renderers apply it as a translate. */
+	offset?: readonly [number, number];
+	/** What dragging this mark does (set on editable scenes, see `planDiagramDrag`). */
+	drag?: DiagramDragKind;
 }
+
+/**
+ * What dragging a mark does: `move` (anywhere), `move-x` / `move-y` (along one axis, e.g. to
+ * reorder), `resize` (a Gantt bar's duration), `connect` (onto another node: a dependency, a
+ * message, a merge), `score` (a journey face up or down) or `order` (a message up or down).
+ */
+export type DiagramDragKind = 'move' | 'move-x' | 'move-y' | 'resize' | 'connect' | 'score' | 'order';
 
 export interface DiagramRectMark extends DiagramMarkBase {
 	kind: 'rect';
