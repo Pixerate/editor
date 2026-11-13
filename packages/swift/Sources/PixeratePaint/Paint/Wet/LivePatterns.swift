@@ -207,7 +207,8 @@ public typealias WetCellPredicate = (_ tx: Int, _ ty: Int, _ lx: Int, _ ly: Int)
 /**
  * `WetCellPredicate` for a whole pattern tile at once: sets `mask[ly * PATTERN_TILE + lx]` to 1 for
  * every wet cell with `lx < width` and `ly < height` (the mask starts as zeros) and returns whether
- * any cell is wet. It must agree with the predicate cell for cell.
+ * any cell is wet. It must agree with the predicate cell for cell, and `step` may call it for
+ * several tiles at once, each on its own thread.
  */
 public typealias WetTileMask = (_ tx: Int, _ ty: Int, _ width: Int, _ height: Int, _ mask: UnsafeMutablePointer<UInt8>) -> Bool
 
@@ -226,6 +227,46 @@ private func patternParallel(_ count: Int, _ workers: Int, _ body: (Int) -> Void
     }
 }
 
+/**
+ * One pattern tile's ridges over a height tile (`w` × `h` pixels of it are on the canvas): the
+ * height tile's bytes with every ridge that is higher written in, or nil when none is. A pattern
+ * cell covers 2 × 2 pixels, so its ridge is worked out once.
+ */
+private func reliefTile(_ v: [Double], _ existing: Tile?, _ w: Int, _ h: Int, _ relief: Double) -> [UInt8]? {
+    var maxTileV = 0.0
+    for i in 0..<PATTERN_CELLS where v[i] > maxTileV { maxTileV = v[i] }
+    if maxTileV < PATTERN_V_EPS { return nil }
+    var buf: [UInt8]
+    if let existing {
+        buf = !existing.data.isEmpty ? existing.data : [UInt8](repeating: UInt8(truncatingIfNeeded: existing.uniform ?? 0), count: TILE * TILE)
+    } else {
+        buf = [UInt8](repeating: 0, count: TILE * TILE)
+    }
+    var tileChanged = false
+    v.withUnsafeBufferPointer { v in
+        buf.withUnsafeMutableBufferPointer { buf in
+            for ly in 0..<((h + 1) >> 1) {
+                let row = ly * PATTERN_TILE
+                for lx in 0..<((w + 1) >> 1) {
+                    let vVal = v[row + lx]
+                    if vVal < PATTERN_V_EPS { continue }
+                    let ridge = JS.u8c(Swift.min(255, JS.round(Swift.min(1, vVal * 2.2) * relief * 255)))
+                    for y in (ly * 2)..<Swift.min(h, ly * 2 + 2) {
+                        for x in (lx * 2)..<Swift.min(w, lx * 2 + 2) {
+                            let p = y * TILE + x
+                            if ridge > buf[p] {
+                                buf[p] = ridge
+                                tileChanged = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return tileChanged ? buf : nil
+}
+
 /// Per-wet-layer Gray-Scott reaction-diffusion field `(U, V)` stored in `128 × 128` tiles.
 public final class LivePatternField {
     public var width: Int
@@ -234,7 +275,17 @@ public final class LivePatternField {
     public var tilesY: Int
     public var settings: LivePatternsSettings = DEFAULT_LIVE_PATTERNS
     public var enabled = false
-    public var tiles = OrderedMap<TileKey, LivePatternTileState>()
+    public var tiles = OrderedMap<TileKey, LivePatternTileState>() { didSet { if !ownEdit { reliefAll = true } } }
+    /// Set while the field edits `tiles` itself (it notes what changed); any other change makes every tile's relief stale.
+    private var ownEdit = false
+    /// Tiles whose `V` changed since `applyReliefHeight` last read them.
+    private var reliefChanged = Set<TileKey>()
+    /// Every tile's relief may be stale (the tiles were replaced, or the relief settings or the canvas changed).
+    private var reliefAll = true
+    /// The relief amount and canvas size `reliefSeen` was made with.
+    private var reliefKey: (relief: Double, width: Int, height: Int) = (0, 0, 0)
+    /// Per tile, the height tile `applyReliefHeight` last left (nil: none): writing the same `V` into it again changes nothing.
+    private var reliefSeen: [TileKey: Tile?] = [:]
     /// The tiles the last `step` advanced (those with wet cells): only their pattern can have changed.
     public private(set) var steppedTiles: [TileKey] = []
 
@@ -279,13 +330,21 @@ public final class LivePatternField {
         if tx < 0 || ty < 0 || tx >= tilesX || ty >= tilesY { return nil }
         let key = tileKey(tx, ty)
         if !tiles.has(key) {
-            tiles.set(key, LivePatternTileState(
+            setTile(key, LivePatternTileState(
                 u: [Double](repeating: 1, count: PATTERN_CELLS),
                 v: [Double](repeating: 0, count: PATTERN_CELLS),
                 bakedV: [Double](repeating: 0, count: PATTERN_CELLS)
-            ))
+            ), vChanged: true)
         }
         return key
+    }
+
+    /// Stores a tile, noting whether its `V` (what the relief reads) changed.
+    private func setTile(_ key: TileKey, _ tile: LivePatternTileState, vChanged: Bool) {
+        ownEdit = true
+        tiles.set(key, tile)
+        ownEdit = false
+        if vChanged { reliefChanged.insert(key) }
     }
 
     /// Seeds Gray-Scott reagent `V` inside a circle at document coordinates `(cx, cy)` with document `radius` (pixels).
@@ -330,12 +389,12 @@ public final class LivePatternField {
                             tile.u[idx] = Swift.min(tile.u[idx], 0.5)
                         }
                         tile.bakedV[idx] = 0
-                        tiles.set(key, tile)
+                        setTile(key, tile, vChanged: true)
                         seeded += 1
                     } else if tile.v[idx] == 0 && tile.u[idx] == 1 {
                         tile.u[idx] = 0.99 - 0.02 * fine * s
                         tile.bakedV[idx] = 0
-                        tiles.set(key, tile)
+                        setTile(key, tile, vChanged: false)
                     }
                 }
             }
@@ -396,27 +455,32 @@ public final class LivePatternField {
         masks.initialize(repeating: 0, count: count * PATTERN_CELLS)
         defer { masks.deallocate() }
         var hasWet = [Bool](repeating: false, count: count)
-        var anyWet = false
+        let anyWet: Bool
         let maxHalfW = Int(JS.ceil(Double(width) * 0.5))
         let maxHalfH = Int(JS.ceil(Double(height) * 0.5))
-        for i in 0..<count {
-            let (tx, ty) = coords[i]
-            let tileW = Swift.min(PATTERN_TILE, maxHalfW - tx * PATTERN_TILE)
-            let tileH = Swift.min(PATTERN_TILE, maxHalfH - ty * PATTERN_TILE)
-            if tileH <= 0 || tileW <= 0 { continue }
-            let mask = masks + i * PATTERN_CELLS
-            if let wetTile {
-                hasWet[i] = wetTile(tx, ty, tileW, tileH, mask)
-            } else {
-                for ly in 0..<tileH {
-                    for lx in 0..<tileW where isWetCell(tx, ty, lx, ly) {
-                        mask[ly * PATTERN_TILE + lx] = 1
-                        hasWet[i] = true
+        hasWet.withUnsafeMutableBufferPointer { hasWet in
+            nonisolated(unsafe) let hasWet = hasWet
+            nonisolated(unsafe) let masks = masks
+            // The tile reader fills each tile's own mask: on every thread. The cell predicate is asked in order.
+            patternParallel(count, wetTile != nil ? Swift.min(threads, count) : 1) { i in
+                let (tx, ty) = coords[i]
+                let tileW = Swift.min(PATTERN_TILE, maxHalfW - tx * PATTERN_TILE)
+                let tileH = Swift.min(PATTERN_TILE, maxHalfH - ty * PATTERN_TILE)
+                if tileH <= 0 || tileW <= 0 { return }
+                let mask = masks + i * PATTERN_CELLS
+                if let wetTile {
+                    hasWet[i] = wetTile(tx, ty, tileW, tileH, mask)
+                } else {
+                    for ly in 0..<tileH {
+                        for lx in 0..<tileW where isWetCell(tx, ty, lx, ly) {
+                            mask[ly * PATTERN_TILE + lx] = 1
+                            hasWet[i] = true
+                        }
                     }
                 }
             }
-            if hasWet[i] { anyWet = true }
         }
+        anyWet = hasWet.contains(true)
 
         if !anyWet { return false }
 
@@ -546,7 +610,7 @@ public final class LivePatternField {
             if var tile = tiles.get(keys[i]) {
                 tile.u = [Double](UnsafeBufferPointer(start: current[i], count: PATTERN_CELLS))
                 tile.v = [Double](UnsafeBufferPointer(start: current[i] + PATTERN_CELLS, count: PATTERN_CELLS))
-                tiles.set(keys[i], tile)
+                setTile(keys[i], tile, vChanged: true)
             }
             steppedTiles.append(keys[i])
         }
@@ -624,53 +688,59 @@ public final class LivePatternField {
         let key = tileKey(tx, ty)
         if var tile = tiles.get(key) {
             tile.bakedV = tile.v
-            tiles.set(key, tile)
+            setTile(key, tile, vChanged: false)
         }
     }
 
-    /// When `settings.relief > 0`, writes pattern `V` ridges into a 1-channel thick height surface.
+    /**
+     * When `settings.relief > 0`, writes pattern `V` ridges into a 1-channel thick height surface.
+     *
+     * A ridge only ever raises the height, so writing a tile's `V` into the height tile the last
+     * call left changes nothing: tiles whose `V` has not changed since, and whose height tile is
+     * still that object, are skipped. The rest are written on every core (each reads its own
+     * pattern tile and height tile only).
+     */
     public func applyReliefHeight(_ currentHeight: TiledSurface) -> TiledSurface {
         let relief = settings.relief
         if !enabled || relief <= 0 || tiles.isEmpty { return currentHeight }
-        var nextTiles: OrderedMap<TileKey, Tile>? = nil
+        if reliefAll || reliefKey != (relief, width, height) {
+            reliefSeen = [:]
+            reliefChanged = []
+            reliefAll = false
+            reliefKey = (relief, width, height)
+        }
+        var work: [(key: TileKey, pattern: LivePatternTileState, existing: Tile?, w: Int, h: Int)] = []
         for (key, pTile) in tiles {
             let (tx, ty) = tileCoord(key)
             let w = Swift.min(TILE, width - tx * TILE)
             let h = Swift.min(TILE, height - ty * TILE)
             if w <= 0 || h <= 0 { continue }
-            var maxTileV = 0.0
-            for i in 0..<PATTERN_CELLS where pTile.v[i] > maxTileV { maxTileV = pTile.v[i] }
-            if maxTileV < PATTERN_V_EPS { continue }
             let existing = currentHeight.tiles.get(key)
-            var buf: [UInt8]
-            if let existing {
-                buf = !existing.data.isEmpty ? existing.data : [UInt8](repeating: UInt8(truncatingIfNeeded: existing.uniform ?? 0), count: TILE * TILE)
+            if !reliefChanged.contains(key), let seen = reliefSeen[key], seen === existing { continue }
+            work.append((key, pTile, existing, w, h))
+        }
+        reliefChanged = []
+        if work.isEmpty { return currentHeight }
+        // Per tile: nil when the tile stays as it is, else its new bytes.
+        var raised = [[UInt8]?](repeating: nil, count: work.count)
+        raised.withUnsafeMutableBufferPointer { out in
+            nonisolated(unsafe) let out = out
+            paintParallel(work.count) { i in out[i] = reliefTile(work[i].pattern.v, work[i].existing, work[i].w, work[i].h, relief) }
+        }
+        var nextTiles: OrderedMap<TileKey, Tile>? = nil
+        for (i, item) in work.enumerated() {
+            guard let buf = raised[i] else {
+                reliefSeen[item.key] = .some(item.existing)
+                continue
+            }
+            if nextTiles == nil { nextTiles = currentHeight.tiles }
+            let finished = finishTile(buf, 1, 0)
+            if let finished {
+                nextTiles!.set(item.key, finished)
             } else {
-                buf = [UInt8](repeating: 0, count: TILE * TILE)
+                _ = nextTiles!.delete(item.key)
             }
-            var tileChanged = false
-            for y in 0..<h {
-                let ly = y >> 1
-                let row = ly * PATTERN_TILE
-                for x in 0..<w {
-                    let vVal = pTile.v[row + (x >> 1)]
-                    if vVal < PATTERN_V_EPS { continue }
-                    let ridge = JS.u8c(Swift.min(255, JS.round(Swift.min(1, vVal * 2.2) * relief * 255)))
-                    let p = y * TILE + x
-                    if ridge > buf[p] {
-                        buf[p] = ridge
-                        tileChanged = true
-                    }
-                }
-            }
-            if tileChanged {
-                if nextTiles == nil { nextTiles = currentHeight.tiles }
-                if let finished = finishTile(buf, 1, 0) {
-                    nextTiles!.set(key, finished)
-                } else {
-                    _ = nextTiles!.delete(key)
-                }
-            }
+            reliefSeen[item.key] = .some(finished)
         }
         return nextTiles.map { TiledSurface(channels: 1, tiles: $0, defaultValue: 0) } ?? currentHeight
     }
