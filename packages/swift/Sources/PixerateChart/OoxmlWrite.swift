@@ -205,14 +205,13 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
         let verb = (annotations.count == 1 && !annotations[0].hasSuffix("s")) ? "is" : "are"
         issues.append("\(capitalized) \(verb) not written: DrawingML has no equivalent.")
     }
-    if spec.view3d != nil { issues.append("The 3-D view is not written: the chart is saved flat.") }
     if visible.count < spec.series.count {
         let diff = spec.series.count - visible.count
         issues.append("\(diff) hidden series \(diff == 1 ? "is" : "are") left out.")
     }
 
     let grouping = spec.stacking == .stacked ? "stacked" : (spec.stacking == .percent ? "percentStacked" : "standard")
-    let ids = (cat: 500_000_001, val: 500_000_002, cat2: 500_000_003, val2: 500_000_004)
+    let ids = (cat: 500_000_001, val: 500_000_002, cat2: 500_000_003, val2: 500_000_004, ser: 500_000_005)
     let xy = family == .xy || type == .scatter || type == .bubble
     let pieLike = type == .pie || type == .donut
     func typed(_ s: ChartSeries) -> String {
@@ -240,6 +239,16 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
     }
     if pieLike && visible.count > 1 {
         issues.append("Only the first series of a pie is drawn; the others are kept in the part.")
+    }
+    // A 3-D view is written as Office's bar3D / line3D / area3D chart (#795): one group on one value axis.
+    let view: ChartView3d? = {
+        guard let v = spec.view3d, !xy, !pieLike, groups.count == 1, ["bar", "line", "area"].contains(groups[0].kind), !groups[0].secondary else { return nil }
+        return v
+    }()
+    if spec.view3d != nil && view == nil {
+        issues.append(groups.count > 1 || groups.contains(where: { $0.secondary })
+            ? "The 3-D view is not written: Office draws one 3-D group on one value axis, so a chart with mixed series types or a secondary axis is saved flat."
+            : "The 3-D view is not written: the chart is saved flat.")
     }
 
     let catLit = strLit(spec.categories)
@@ -338,6 +347,17 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
             ? "<c:axId val=\"\(ids.cat2)\"/><c:axId val=\"\(ids.val2)\"/>"
             : "<c:axId val=\"\(ids.cat)\"/><c:axId val=\"\(ids.val)\"/>"
         let sers = g.series.map { serXml(g.kind, $0.s, $0.index) }.joined()
+        if view != nil && g.kind == "bar" {
+            let gapPct = Int(JS.round(Swift.min(500.0, (spec.gapWidth / Swift.max(0.01, 1.0 - spec.gapWidth)) * 100.0)))
+            let barGrouping = spec.stacking == .none ? "clustered" : grouping
+            return "<c:bar3DChart><c:barDir val=\"\(spec.orientation == .horizontal ? "bar" : "col")\"/><c:grouping val=\"\(barGrouping)\"/><c:varyColors val=\"\(vary)\"/>\(sers)\(dLbls)<c:gapWidth val=\"\(gapPct)\"/><c:shape val=\"box\"/>\(axes)</c:bar3DChart>"
+        }
+        if view != nil && g.kind == "line" {
+            return "<c:line3DChart><c:grouping val=\"standard\"/><c:varyColors val=\"\(vary)\"/>\(sers)\(dLbls)\(axes)<c:axId val=\"\(ids.ser)\"/></c:line3DChart>"
+        }
+        if view != nil && g.kind == "area" {
+            return "<c:area3DChart><c:grouping val=\"\(grouping)\"/><c:varyColors val=\"\(vary)\"/>\(sers)\(dLbls)\(axes)</c:area3DChart>"
+        }
         switch g.kind {
         case "bar":
             let n = Double(g.series.count)
@@ -408,6 +428,10 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
         if groups.contains(where: { $0.secondary }) {
             axes += catAx(ids.cat2, ids.val2, spec.xAxis, catPos, true) + valAx(ids.val2, ids.cat2, spec.yAxis2, horizontal ? "t" : "r", "max")
         }
+        // A 3-D line chart has a third (series) axis; it is hidden, as Office draws the series in depth.
+        if view != nil && groups[0].kind == "line" {
+            axes += "<c:serAx><c:axId val=\"\(ids.ser)\"/><c:scaling><c:orientation val=\"minMax\"/></c:scaling><c:delete val=\"1\"/><c:axPos val=\"b\"/><c:majorTickMark val=\"out\"/><c:minorTickMark val=\"none\"/><c:tickLblPos val=\"nextTo\"/><c:crossAx val=\"\(ids.val)\"/><c:crosses val=\"autoZero\"/></c:serAx>"
+        }
     }
 
     let legendPos = LEGEND_OUT[spec.legend.position] ?? "r"
@@ -418,13 +442,21 @@ public func chartToOoxml(_ inputSpec: ChartSpec) -> ChartOoxmlWriteResult {
     if !spec.subtitle.isEmpty {
         issues.append("The subtitle is left out: DrawingML charts have one title.")
     }
+    // CT_View3D: rotX (eye height), rotY (turn), depthPercent; Office stores whole numbers.
+    var view3dXml = ""
+    if let view {
+        let rotX = Int(JS.round(view.elevation))
+        let rotY = Int(JS.round(view.azimuth)) % 360
+        let depthPercent = Int(JS.max(20, JS.min(2000, JS.round(view.depth * 100))))
+        view3dXml = "<c:view3D><c:rotX val=\"\(rotX)\"/><c:rotY val=\"\(rotY)\"/><c:depthPercent val=\"\(depthPercent)\"/><c:rAngAx val=\"0\"/></c:view3D>"
+    }
     if family == .radar && spec.series.contains(where: { !($0.trendlines ?? []).isEmpty }) {
         issues.append("Trendlines on a radar chart are left out.")
     }
 
     let xml = "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
         "<c:chartSpace xmlns:c=\"\(CHART_OOXML_NS)\" xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">" +
-        "<c:roundedCorners val=\"0\"/><c:chart>\(titleXml)<c:plotArea><c:layout/>\(groupXml.joined())\(axes)</c:plotArea>\(legend)<c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart>" +
+        "<c:roundedCorners val=\"0\"/><c:chart>\(titleXml)\(view3dXml)<c:plotArea><c:layout/>\(groupXml.joined())\(axes)</c:plotArea>\(legend)<c:plotVisOnly val=\"1\"/><c:dispBlanksAs val=\"gap\"/></c:chart>" +
         "<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz=\"\(Int(JS.round(10.0 * 100.0)))\"/></a:pPr><a:endParaRPr lang=\"en-US\"/></a:p></c:txPr></c:chartSpace>"
     return ChartOoxmlWriteResult(xml: xml, issues: uniqueStrings(issues))
 }

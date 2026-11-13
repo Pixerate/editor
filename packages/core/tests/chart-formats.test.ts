@@ -220,8 +220,25 @@ describe("Office (OOXML) charts", () => {
     const below = chartFromOoxml(c(`<c:view3D><c:rotX val="-20"/></c:view3D><c:plotArea><c:area3DChart><c:ser><c:tx><c:v>S</c:v></c:tx><c:val><c:numRef>${num([1, 2])}</c:numRef></c:val></c:ser></c:area3DChart></c:plotArea>`));
     expect(below.spec.view3d?.elevation).toBe(0);
     expect(below.unsupported).toEqual(["a 3-D view from below the floor (drawn from floor level)"]);
-    // Writing it back is flat, and says so.
-    expect(chartToOoxml(bar.spec).issues).toContain("The 3-D view is not written: the chart is saved flat.");
+    // Written back as Office 3-D charts, the view round-trips (Office keeps whole degrees).
+    const roundTrip = (spec: Parameters<typeof chartToOoxml>[0]) => {
+      const written = chartToOoxml(spec);
+      return { written, read: chartFromOoxml(written.xml) };
+    };
+    const back = roundTrip({ ...bar.spec, view3d: { azimuth: 35.4, elevation: 22.6, depth: 1.5 } });
+    expect(back.written.xml).toContain('<c:view3D><c:rotX val="23"/><c:rotY val="35"/><c:depthPercent val="150"/><c:rAngAx val="0"/></c:view3D>');
+    expect(back.written.xml).toContain("<c:bar3DChart>");
+    expect(back.written.issues).toEqual([]);
+    expect(back.read).toMatchObject({ lossless: true, spec: { type: "bar", view3d: { azimuth: 35, elevation: 23, depth: 1.5 } } });
+    const line = roundTrip(turned.spec);
+    expect(line.written.xml).toMatch(/<c:line3DChart>.*<c:axId val="500000005"\/><\/c:line3DChart>/);
+    expect(line.written.xml).toContain("<c:serAx>");
+    expect(line.read.spec).toMatchObject({ type: "line", view3d: { azimuth: 320, elevation: 30, depth: 2.5 } });
+    expect(roundTrip({ ...below.spec, stacking: "stacked" }).written.xml).toContain('<c:area3DChart><c:grouping val="stacked"/>');
+    // Office draws one 3-D group on one value axis: a mixed chart is saved flat, and says why.
+    const mixed = createChartSpec({ type: "bar", categories: ["a"], series: [{ name: "A", values: [1] }, { name: "B", type: "line", values: [2] }], view3d: {} } as never);
+    expect(chartToOoxml(mixed).issues).toContain("The 3-D view is not written: Office draws one 3-D group on one value axis, so a chart with mixed series types or a secondary axis is saved flat.");
+    expect(chartToOoxml(mixed).xml).not.toContain("view3D");
   });
 
   it("says what it could not write", () => {
