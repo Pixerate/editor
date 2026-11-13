@@ -38,7 +38,7 @@
         {
           "name": "render_chart",
           "title": "Render the chart",
-          "description": "Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format \"png\" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper.",
+          "description": "Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format \"png\" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper. A chart with a 3-D view (view3d) comes back in 3-D as png when the host draws 3-D, and flat otherwise.",
           "inputSchema": {
             "type": "object",
             "properties": {

@@ -14,6 +14,8 @@ import {
   createChartEditorDocument,
   createChartStyleToolProvider,
 } from "@pixerate/editor/chart";
+import { renderChart3dImage } from "@pixerate/editor/three";
+import { Chart3dView } from "./Chart3dView";
 import { StyleFindings, useAgentToolProvider, useStyleChoices, useStyleFindings, useStyleSwatches } from "@pixerate/editor-react";
 import { chartStylePatch, registerChartMap, type ChartSelection } from "@pixerate/editor/chart";
 import { EUROPE_CHART_MAP } from "@pixerate/editor/chart-maps";
@@ -288,7 +290,8 @@ function ChartEditorDemo() {
   const state = useChartState(controller);
   const { presence, director, sceneRef } = useChartDirector(controller);
   useChartCommands(demoCommandRegistry, controller);
-  useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" } });
+  // render3d: render_chart with format png draws a chart that has a 3-D view in 3-D (#795).
+  useChartToolProvider(demoToolRegistry, controller, { id: "chart", namespace: "chart", director, actor: { id: "agent", name: "Agent" }, render3d: (spec, size) => renderChart3dImage(spec, size) });
   // House style: `check_chart_style` joins the chart toolset (the `style` toolset is registered once in houseStyles.ts).
   useAgentToolProvider(demoToolRegistry, useMemo(() => createChartStyleToolProvider(controller, demoStyles), [controller]));
   const houseStyle = useStyleFindings(demoStyles, "chart", state.spec);
@@ -363,6 +366,18 @@ function ChartEditorDemo() {
         {/* The director's presence is the editor's playback cursor too: value drags and inspector edits share it. */}
         <ChartEditor controller={controller} swatches={houseSwatches.colors} height={400} canvasProps={{ presence, sceneRef, tooltip: 'category' }} playback={demoPlayback} />
       </div>
+      {/* The same chart in 3-D when it has a view (update_chart view3d, or an Office 3-D chart). */}
+      <div className="flex items-center gap-2">
+        <button type="button" className={button} onClick={() => controller.update({ view3d: state.spec.view3d ? null : {} })} data-testid="chart-3d-toggle">
+          {state.spec.view3d ? "Flat" : "3-D view"}
+        </button>
+        {state.spec.view3d && <span className="text-xs text-slate-400">azimuth {state.spec.view3d.azimuth}°, elevation {state.spec.view3d.elevation}°, depth {state.spec.view3d.depth}</span>}
+      </div>
+      {state.spec.view3d && (
+        <div className="rounded-xl border border-slate-800 bg-white p-3">
+          <Chart3dView spec={state.spec as ChartSpec} />
+        </div>
+      )}
       <EditorPanel id="house-style" label="House style" icon={ShieldCheck}>
         <div className="text-slate-200" data-testid="chart-house-style">
           <StyleFindings report={houseStyle.report} title="Org: Acme (locked) · user: big labels" onSelect={(f) => controller.select(f.target as ChartSelection)} />

@@ -324,6 +324,16 @@
         "default": "./dist/chart/index.cjs"
       }
     },
+    "./three": {
+      "import": {
+        "types": "./dist/three/index.d.ts",
+        "default": "./dist/three/index.js"
+      },
+      "require": {
+        "types": "./dist/three/index.d.cts",
+        "default": "./dist/three/index.cjs"
+      }
+    },
     "./chart-maps": {
       "import": {
         "types": "./dist/chart-maps/index.d.ts",
@@ -467,6 +477,9 @@
       "chart": [
         "./dist/chart/index.d.ts"
       ],
+      "three": [
+        "./dist/three/index.d.ts"
+      ],
       "chart-maps": [
         "./dist/chart-maps/index.d.ts"
       ],
@@ -532,12 +545,14 @@
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.6",
+    "@types/three": "0.186.0",
     "assemblyscript": "0.28.20",
     "fast-check": "^4.10.2",
     "markdown-it": "^15.0.3",
     "markdown-it-task-lists": "^2.1.1",
     "mermaid": "12.3.0",
     "prosemirror-markdown": "^1.13.9",
+    "three": "0.186.1",
     "tiptap-markdown": "^0.8.10",
     "tsup": "^9.0.0",
     "typescript": "^5.7.3",
@@ -570,7 +585,8 @@
     "@tiptap/suggestion": "^2.27.3",
     "markdown-it": "^15.0.3",
     "markdown-it-task-lists": "^2.1.1",
-    "prosemirror-markdown": "^1.13.9"
+    "prosemirror-markdown": "^1.13.9",
+    "three": ">=0.184.0"
   },
   "peerDependenciesMeta": {
     "@dagrejs/dagre": {
@@ -652,6 +668,9 @@
       "optional": true
     },
     "prosemirror-markdown": {
+      "optional": true
+    },
+    "three": {
       "optional": true
     }
   }

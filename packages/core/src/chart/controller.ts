@@ -121,7 +121,7 @@ export interface ChartState {
 export type ChartActionResult = { ok: true } | { ok: false; message: string; issues?: ChartIssue[] };
 
 /** Top-level fields with partial axes and legend. */
-export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxis' | 'yAxis2' | 'legend'>> & {
+export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxis' | 'yAxis2' | 'legend' | 'view3d'>> & {
 	xAxis?: Partial<ChartAxis>;
 	yAxis?: Partial<ChartAxis>;
 	yAxis2?: Partial<ChartAxis>;

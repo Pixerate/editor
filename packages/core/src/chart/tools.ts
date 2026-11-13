@@ -8,6 +8,7 @@ import { parseCsv } from '../spreadsheet/csv.js';
 import { checkChartColors } from './color.js';
 import type { ChartController, ChartSeriesPatch, ChartSpecPatch } from './controller.js';
 import { chartHitTest, handleChartKey, startChartPointDrag } from './interaction.js';
+import { CHART_3D_TYPES } from './layout3d.js';
 import { layoutChart, type ChartTextMeasure } from './layout.js';
 import { chartTooltipFor } from './tooltip.js';
 import { chartFromMermaid, chartToMermaid } from './mermaid.js';
@@ -62,7 +63,7 @@ import { chartSankeyNodeValues } from './links.js';
 import { listChartMaps, getChartMap, matchChartMapRegions } from './maps.js';
 import { chartRaceRanking } from './race.js';
 import { chartTreeDepth, chartTreeToRows, chartTreeTotal, findChartTreeNode } from './tree.js';
-import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartTrendline } from './types.js';
+import type { ChartLink, ChartReferenceBand, ChartReferenceLine, ChartSelection, ChartSpec, ChartTrendline } from './types.js';
 
 type ParserCtor = { new (): DOMParser };
 
@@ -92,6 +93,11 @@ export interface ChartToolProviderOptions {
 	/** Turns SVG into an image so `render_chart` can return PNG (e.g. through a canvas). */
 	rasterize?: (svg: string, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
 	/**
+	 * Draws a chart that has a 3-D view (`view3d`) as an image, for `render_chart` with format png
+	 * (e.g. `renderChart3dImage` from `@pixerate/editor/three`). Without it, such charts render flat.
+	 */
+	render3d?: (spec: ChartSpec, size: { width: number; height: number }) => Promise<{ data: string; mimeType: string }> | { data: string; mimeType: string };
+	/**
 	 * The agent playback surface its calls are acted out on (default `chart`, where `ChartEditor` attaches).
 	 * Set it when one registry holds several editors of this kind, each attached under its own surface id.
 	 */
@@ -103,7 +109,7 @@ export interface ChartToolProviderOptions {
  * `render_preview` and Ursula's VIEW_DIAGRAM_INSTRUCTIONS).
  */
 export const RENDER_CHART_INSTRUCTIONS =
-	'Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format "png" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper.';
+	'Draws the chart without changing it so you can check how it looks: SVG text by default, or a PNG image with format "png" when the host can rasterize. Returns the layout warnings (hidden or thinned labels, dropped markers) alongside. An image costs tokens, so render after a batch of edits rather than after each one, and use it to check what text cannot tell you: overlapping or cut-off labels, a crowded legend, unreadable colours, whether the chart reads at the given size. For values, ids and warnings alone, get_chart is cheaper. A chart with a 3-D view (view3d) comes back in 3-D as png when the host draws 3-D, and flat otherwise.';
 
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false } as const;
@@ -220,6 +226,16 @@ export function createChartToolProvider(controller: ChartController, options: Ch
 			const scene = layoutChart(json, { width, height, selection: null, raceFrame, measureText });
 			const svg = chartSceneToSvg(scene, { ariaLabel: json.title || undefined, description: describeChart(json) });
 			const warnings = scene.warnings;
+			if (format === 'png' && json.view3d && options.render3d && CHART_3D_TYPES.includes(json.type)) {
+				const image = await options.render3d(json, { width, height });
+				return {
+					content: [
+						{ type: 'image', data: image.data, mimeType: image.mimeType },
+						{ type: 'text', text: `Chart at ${width} × ${height}, in 3-D (azimuth ${json.view3d.azimuth}°, elevation ${json.view3d.elevation}°).` }
+					],
+					structuredContent: { width, height, mimeType: image.mimeType, warnings, view3d: json.view3d }
+				};
+			}
 			if (format === 'png') {
 				if (!options.rasterize) fail('This host cannot rasterize charts; call render_chart with format "svg", or get_chart for the layout warnings.');
 				const image = await options.rasterize!(svg, { width, height });
