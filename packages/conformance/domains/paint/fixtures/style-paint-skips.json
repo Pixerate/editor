@@ -1,0 +1,117 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-skips",
+  "description": "Checks that cannot run or do not exist are skipped with the reason (#791): paper, max-layers and palette-only with nothing to check against, an unknown check in the profile and in the brand, fonts-allowed with no fonts, and source-licences without requireSourceLicence.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "style": {
+      "checks": [
+        "paper",
+        "max-layers",
+        "bogus",
+        {
+          "id": "palette-only"
+        }
+      ]
+    },
+    "brushStyle": {
+      "checks": [
+        "source-licences",
+        "brushes",
+        "palette-only",
+        "nope"
+      ]
+    },
+    "brand": {
+      "name": "Plain",
+      "checks": [
+        "fonts-allowed",
+        "not-a-check"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "ok": true,
+          "ran": [],
+          "skipped": [
+            {
+              "check": "paper",
+              "reason": "The check could not run: the profile has no \"papers\"."
+            },
+            {
+              "check": "max-layers",
+              "reason": "The check could not run: the profile has no \"maxLayers\"."
+            },
+            {
+              "check": "bogus",
+              "reason": "There is no \"bogus\" check for paint-editor; it has \"paper\", \"brushes\", \"max-layers\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            },
+            {
+              "check": "palette-only",
+              "reason": "The check could not run: neither the profile nor the brand has a palette."
+            },
+            {
+              "check": "fonts-allowed",
+              "reason": "The check could not run: neither the check, the profile nor the brand names any fonts."
+            },
+            {
+              "check": "not-a-check",
+              "reason": "There is no \"not-a-check\" check for paint-editor; it has \"paper\", \"brushes\", \"max-layers\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {
+        "ids": [
+          "crayon"
+        ]
+      },
+      "expect": {
+        "result": {
+          "checked": [
+            "crayon"
+          ],
+          "findings": [],
+          "ok": true,
+          "ran": [],
+          "skipped": [
+            {
+              "check": "source-licences",
+              "reason": "The check could not run: the profile does not set \"requireSourceLicence\": true."
+            },
+            {
+              "check": "brushes",
+              "reason": "The check could not run: the profile has no \"brushes\"."
+            },
+            {
+              "check": "palette-only",
+              "reason": "The check could not run: neither the profile nor the brand has a palette."
+            },
+            {
+              "check": "nope",
+              "reason": "There is no \"nope\" check for brushes; it has \"brushes\", \"media\", \"source-licences\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            },
+            {
+              "check": "fonts-allowed",
+              "reason": "The check could not run: neither the check, the profile nor the brand names any fonts."
+            },
+            {
+              "check": "not-a-check",
+              "reason": "There is no \"not-a-check\" check for brushes; it has \"brushes\", \"media\", \"source-licences\", \"palette-only\", \"min-contrast\", \"distinguishable\", \"fonts-allowed\"."
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

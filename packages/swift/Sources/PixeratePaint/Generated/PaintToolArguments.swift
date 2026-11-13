@@ -3987,6 +3987,31 @@ public struct RejectPaintProposalArguments: Sendable {
     }
 }
 
+/// Arguments of `check_paint_style`.
+public struct CheckPaintStyleArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `fix_paint_style`.
+public struct FixPaintStyleArguments: Sendable {
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+    }
+}
+
+/// Arguments of `check_brush_style`.
+public struct CheckBrushStyleArguments: Sendable {
+    /// Brushes to check, built-ins included (default: the user's saved brushes).
+    public var ids: [String]?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        ids = try args.strings("ids")
+    }
+}
+
 /// A tool's arguments read into its `…Arguments` struct.
 public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws -> any Sendable {
     switch name {
@@ -4180,5 +4205,8 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .listPaintProposals: try ListPaintProposalsArguments(args)
     case .acceptPaintProposal: try AcceptPaintProposalArguments(args)
     case .rejectPaintProposal: try RejectPaintProposalArguments(args)
+    case .checkPaintStyle: try CheckPaintStyleArguments(args)
+    case .fixPaintStyle: try FixPaintStyleArguments(args)
+    case .checkBrushStyle: try CheckBrushStyleArguments(args)
     }
 }

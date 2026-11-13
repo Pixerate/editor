@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint] A Style Skill's Issues Name Every File It Holds, Whatever Domain Is Checked
+
+- **Issue / Symptom**: With an invalid `paint-editor.json` beside a valid `brushes.json`, `check_brush_style` still lists `paint-editor.json is left out: …` in its `issues` (and `check_paint_style` lists a broken `brushes.json`). A Swift port that loaded only the domain's own file and `brand.json` (as `HouseStyle` does) missed them.
+- **Root Cause**: `createStyleResolver` loads a skill once for all domains and keeps its problems on the skill (`info.issues`); `resolve(domain)` reports a skill's issues for every domain it applies to, and a skill with no `domains` in its frontmatter applies to all. Problems found while reading (not a JSON object, a root `$token`) come before the field errors of any file.
+- **Solution / Workaround**: `PaintHouseStyles` (`PixeratePaint/Editor/PaintStyle.swift`) builds both domains' `HouseStyle` and replaces their skill issues with every file's, root failures first (`styleProfileFailsAtRoot`), then the rest in domain order (paint-editor, brushes, brand); the issue about the profile derived from the brand follows. A Swift host with several domains in one skill must do the same (scenario `style-paint-invalid`).
+
 ### [swift/paint] The First Metal Compile on a Cold iOS Simulator Can Exceed the 2 s Pixel-Shader Budget
 
 - **Issue / Symptom**: `PixelLanguageTests.testMetalMatchesCPU()` failed only in the "Swift (iOS simulator)" CI job, on `main` and on PRs that never touched paint: `pixel.blank: … took longer than 2000 ms to compile for the GPU`. It passes on macOS and locally. Only the first template failed; every later kernel compiled in time.

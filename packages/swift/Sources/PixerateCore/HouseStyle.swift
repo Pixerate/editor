@@ -83,13 +83,15 @@ public func loadBrandProfile(_ raw: JSONValue, file: String = "brand.json") -> (
 /// out with an issue, as there is no token source), the profile against `schema` and its `checks`
 /// list against `checks` (each check's `optionsSchema`). The profile, or why it is left out.
 public func loadStyleProfile(_ raw: JSONValue, file: String, schema: JSONValue, checks: [(id: String, schema: JSONValue)]) -> (profile: JSONObject?, error: String?) {
-    guard case .object = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.") }
+    guard case .object(var parsed) = stripPrototypeKeys(raw) else { return (nil, "\(file) must hold a JSON object.") }
+    // Editors read "$schema" for completion; it is not part of the profile.
+    if case .string? = parsed["$schema"] { parsed["$schema"] = Optional<JSONValue>.none }
     var errors: [String] = []
     var undefinedPaths = Set<String>()
     // A root `{ "$token": ... }` resolves to a value or to nothing, never to a profile object: the
     // profile is left out with the reason, as `createStyleResolver` does (#768).
     // With no token source here, it always resolves to nothing and an error says why.
-    guard case .object(let resolved)? = resolveStyleTokens(stripPrototypeKeys(raw), "", "", &errors, &undefinedPaths) else {
+    guard case .object(let resolved)? = resolveStyleTokens(.object(parsed), "", "", &errors, &undefinedPaths) else {
         return (nil, "\(file) is left out: \(errors.joined(separator: " "))")
     }
     var rest = resolved
@@ -98,6 +100,15 @@ public func loadStyleProfile(_ raw: JSONValue, file: String, schema: JSONValue, 
     errors += styleCheckListErrors(resolved["checks"], undefinedPaths, checks: checks)
     if !errors.isEmpty { return (nil, "\(file) is left out: \(errors.joined(separator: " "))") }
     return (resolved, nil)
+}
+
+/// Whether `loadStyleProfile` leaves the file out before reading its fields (it is not a JSON object,
+/// or is a `{ "$token": ... }` reference). `createStyleResolver` reports these while it reads a
+/// skill's files, before the field errors of any of its files.
+public func styleProfileFailsAtRoot(_ raw: JSONValue) -> Bool {
+    guard case .object(var parsed) = stripPrototypeKeys(raw) else { return true }
+    if case .string? = parsed["$schema"] { parsed["$schema"] = Optional<JSONValue>.none }
+    return parsed.contains("$token")
 }
 
 /// `chartStyleFromBrand`: the chart profile a brand gives, its palette and a theme from its colour

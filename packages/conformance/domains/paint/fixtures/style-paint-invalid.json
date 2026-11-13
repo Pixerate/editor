@@ -1,0 +1,113 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-invalid",
+  "description": "Profiles that fail validation are left out with the reason and nothing crashes (#791): an invalid paint-editor.json, brushes.json (with a token reference this host cannot resolve) and brand.json are each reported in both domains' issues.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "style": {
+      "papers": [
+        "no-such-paper"
+      ],
+      "maxLayers": 0,
+      "extra": true,
+      "checks": [
+        "paper",
+        {
+          "id": "palette-only",
+          "tolerance": 99
+        },
+        "bogus"
+      ]
+    },
+    "brushStyle": {
+      "media": [
+        "oil"
+      ],
+      "palette": [
+        {
+          "$token": "brand.red"
+        }
+      ],
+      "requireSourceLicence": "yes"
+    },
+    "brand": {
+      "colors": {
+        "primary": 3
+      },
+      "palette": [],
+      "mood": "calm"
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "paint-editor.json is left out: /papers/0: Expected one of \"cold-pressed\", \"hot-pressed\", \"rough-watercolor\", \"cartridge\", \"laid\", \"ingres\", \"sanded-pastel\", \"pastel-card\", \"cotton-canvas\", \"fine-linen\", \"gesso\", \"smooth\", \"stained-glass\", got \"no-such-paper\". /maxLayers: Must be >= 1. /extra: Unknown property \"extra\". Allowed: papers, brushes, maxLayers, palette. checks[1] (palette-only)/tolerance: Must be <= 20.",
+              "skill": "house"
+            },
+            {
+              "layer": "org",
+              "message": "brushes.json is left out: palette[0]: \"brand.red\" is a token reference, but this host has no design tokens to resolve it. /media/0: Expected one of \"paint\", \"ink\", \"dry\", \"spray\", got \"oil\". /palette/0: Expected string, got undefined. /requireSourceLicence: Expected boolean, got string.",
+              "skill": "house"
+            },
+            {
+              "layer": "org",
+              "message": "brand.json is left out: /colors/primary: Expected string, got integer. /palette: Must have at least 1 items. /mood: Unknown property \"mood\". Allowed: name, colors, palette, fonts, logo.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "changed": {},
+          "left": []
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "checked": [],
+          "findings": [],
+          "issues": [
+            {
+              "layer": "org",
+              "message": "paint-editor.json is left out: /papers/0: Expected one of \"cold-pressed\", \"hot-pressed\", \"rough-watercolor\", \"cartridge\", \"laid\", \"ingres\", \"sanded-pastel\", \"pastel-card\", \"cotton-canvas\", \"fine-linen\", \"gesso\", \"smooth\", \"stained-glass\", got \"no-such-paper\". /maxLayers: Must be >= 1. /extra: Unknown property \"extra\". Allowed: papers, brushes, maxLayers, palette. checks[1] (palette-only)/tolerance: Must be <= 20.",
+              "skill": "house"
+            },
+            {
+              "layer": "org",
+              "message": "brushes.json is left out: palette[0]: \"brand.red\" is a token reference, but this host has no design tokens to resolve it. /media/0: Expected one of \"paint\", \"ink\", \"dry\", \"spray\", got \"oil\". /palette/0: Expected string, got undefined. /requireSourceLicence: Expected boolean, got string.",
+              "skill": "house"
+            },
+            {
+              "layer": "org",
+              "message": "brand.json is left out: /colors/primary: Expected string, got integer. /palette: Must have at least 1 items. /mood: Unknown property \"mood\". Allowed: name, colors, palette, fonts, logo.",
+              "skill": "house"
+            }
+          ],
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}

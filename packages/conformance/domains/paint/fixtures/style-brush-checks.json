@@ -1,0 +1,460 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-brush-checks",
+  "description": "check_brush_style (#791): by default the saved brushes (none at first), or brushes by id with built-ins; the brushes, media, source-licences and palette-only checks on brush colours (default and palette, light side of a pair); an unknown id is refused with the closest ids.",
+  "setup": {
+    "width": 32,
+    "height": 24,
+    "brushStyle": {
+      "brushes": [
+        "my-ink",
+        "crayon",
+        "eraser-soft"
+      ],
+      "media": [
+        "ink",
+        "paint"
+      ],
+      "requireSourceLicence": true,
+      "palette": [
+        "#1e3a8a",
+        "#dc2626",
+        "#f59e0b"
+      ],
+      "checks": [
+        "brushes",
+        "media",
+        "source-licences",
+        "palette-only"
+      ]
+    }
+  },
+  "steps": [
+    {
+      "tool": "check_brush_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "checked": [],
+          "findings": [],
+          "ok": true,
+          "ran": [
+            "brushes",
+            "media",
+            "source-licences",
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "add_brush_source",
+      "arguments": {
+        "name": "Unlicensed scan",
+        "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAUUlEQVR4Ab2QSwoAIAhEKzqF9z+bh3BTFBQqGrrp7WT8zVQiGiVB8yWb9EDnBQAIERFFvbgedLPFWrBfijQfPpv24Ob3BSuNg9buS9bQM9YoEx19H6lk0NoNAAAAAElFTkSuQmCC",
+        "origin": "scanner-7"
+      },
+      "expect": {
+        "result": {
+          "height": 12,
+          "id": "unlicensed-scan",
+          "problems": [
+            "channel auto read the marks from the dark parts (dark marks on a light background)."
+          ],
+          "ref": "source:unlicensed-scan",
+          "replaced": false,
+          "width": 12
+        }
+      }
+    },
+    {
+      "tool": "add_brush_source",
+      "arguments": {
+        "name": "Licensed scan",
+        "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaUlEQVR42mPQEOFioASjC8gAcQYQzwTiVVA6AypO0AArqKb/WPAqqDxOA2TwaEY2RAaXARkENMNwBi4DZhJpwExcBqwi0oBVNHMBxWFATCycgGKy08EJNEx2SkQxhNw8QLEBODMT/Q0AAIhTpBx+UTquAAAAAElFTkSuQmCC",
+        "licence": "Made for this scenario; CC0."
+      },
+      "expect": {
+        "result": {
+          "height": 16,
+          "id": "licensed-scan",
+          "problems": [
+            "channel auto read the marks from the transparency."
+          ],
+          "ref": "source:licensed-scan",
+          "replaced": false,
+          "width": 16
+        }
+      }
+    },
+    {
+      "tool": "add_brush_source",
+      "arguments": {
+        "name": "Bare scan",
+        "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAaUlEQVR42mPQEOFioASjC8gAcQYQzwTiVVA6AypO0AArqKb/WPAqqDxOA2TwaEY2RAaXARkENMNwBi4DZhJpwExcBqwi0oBVNHMBxWFATCycgGKy08EJNEx2SkQxhNw8QLEBODMT/Q0AAIhTpBx+UTquAAAAAElFTkSuQmCC",
+        "id": "bare-scan",
+        "licence": "   "
+      },
+      "expect": {
+        "result": {
+          "height": 16,
+          "id": "bare-scan",
+          "problems": [
+            "channel auto read the marks from the transparency."
+          ],
+          "ref": "source:bare-scan",
+          "replaced": false,
+          "width": 16
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "my-ink",
+        "name": "My ink",
+        "kind": "mark",
+        "medium": "ink",
+        "tip": {
+          "shape": "stamp",
+          "size": 8,
+          "stamps": [
+            "source:unlicensed-scan",
+            "source:licensed-scan"
+          ]
+        },
+        "colour": {
+          "default": "#1e3a8a",
+          "palette": [
+            "#1e3a8a",
+            "#00ff00",
+            {
+              "light": "#dc2626",
+              "dark": "#ffffff"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "#1e3a8a",
+              "palette": [
+                "#1e3a8a",
+                "#00ff00",
+                {
+                  "dark": "#ffffff",
+                  "light": "#dc2626"
+                }
+              ]
+            },
+            "id": "my-ink",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "My ink",
+            "tip": {
+              "shape": "stamp",
+              "size": 8,
+              "stamps": [
+                "source:unlicensed-scan",
+                "source:licensed-scan"
+              ]
+            }
+          },
+          "engine": "dab",
+          "id": "my-ink",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "my-chalk",
+        "name": "My chalk",
+        "kind": "mark",
+        "medium": "dry",
+        "tip": {
+          "shape": "stamp",
+          "size": 8,
+          "stamps": [
+            "source:unlicensed-scan"
+          ],
+          "grain": {
+            "source": "source:bare-scan",
+            "depth": 0.5
+          }
+        },
+        "colour": {
+          "default": "rgba(0, 200, 120, 0.5)"
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": "rgba(0, 200, 120, 0.5)"
+            },
+            "id": "my-chalk",
+            "kind": "mark",
+            "medium": "dry",
+            "name": "My chalk",
+            "tip": {
+              "grain": {
+                "depth": 0.5,
+                "source": "source:bare-scan"
+              },
+              "shape": "stamp",
+              "size": 8,
+              "stamps": [
+                "source:unlicensed-scan"
+              ]
+            }
+          },
+          "engine": "dab",
+          "id": "my-chalk",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "checked": [
+            "my-ink",
+            "my-chalk"
+          ],
+          "findings": [
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Brush my-chalk (\"My chalk\") is not a house brush; the house brushes are my-ink, crayon, eraser-soft.",
+              "severity": "warning",
+              "target": {
+                "brush": "my-chalk"
+              }
+            },
+            {
+              "check": "media",
+              "layer": "org",
+              "message": "Brush my-chalk (\"My chalk\") lays dry; the house media are ink, paint.",
+              "severity": "warning",
+              "target": {
+                "brush": "my-chalk"
+              }
+            },
+            {
+              "check": "source-licences",
+              "layer": "org",
+              "message": "Image source unlicensed-scan (\"Unlicensed scan\", from scanner-7) used by my-ink, my-chalk records no licence. Re-add it with add_brush_source and its licence, or replace it.",
+              "severity": "warning",
+              "target": {
+                "source": "unlicensed-scan"
+              }
+            },
+            {
+              "check": "source-licences",
+              "layer": "org",
+              "message": "Image source bare-scan (\"Bare scan\") used by my-chalk records no licence. Re-add it with add_brush_source and its licence, or replace it.",
+              "severity": "warning",
+              "target": {
+                "source": "bare-scan"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush my-ink (\"My ink\") palette colour 2 uses #00ff00, which is not a house colour; the nearest is #f59e0b. Change it to #f59e0b or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "my-ink",
+                "colour": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush my-chalk (\"My chalk\") default colour uses #00c878, which is not a house colour; the nearest is #f59e0b. Change it to #f59e0b or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "my-chalk",
+                "colour": "default"
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "brushes",
+            "media",
+            "source-licences",
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {
+        "ids": [
+          "crayon",
+          "eraser-soft",
+          "ballpoint",
+          "my-ink"
+        ]
+      },
+      "expect": {
+        "result": {
+          "checked": [
+            "crayon",
+            "eraser-soft",
+            "ballpoint",
+            "my-ink"
+          ],
+          "findings": [
+            {
+              "check": "brushes",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") is not a house brush; the house brushes are my-ink, crayon, eraser-soft.",
+              "severity": "warning",
+              "target": {
+                "brush": "ballpoint"
+              }
+            },
+            {
+              "check": "media",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") lays dry; the house media are ink, paint.",
+              "severity": "warning",
+              "target": {
+                "brush": "crayon"
+              }
+            },
+            {
+              "check": "source-licences",
+              "layer": "org",
+              "message": "Image source unlicensed-scan (\"Unlicensed scan\", from scanner-7) used by my-ink records no licence. Re-add it with add_brush_source and its licence, or replace it.",
+              "severity": "warning",
+              "target": {
+                "source": "unlicensed-scan"
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 3 uses #facc15, which is not a house colour; the nearest is #f59e0b. Change it to #f59e0b or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 4 uses #16a34a, which is not a house colour; the nearest is #f59e0b. Change it to #f59e0b or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 5 uses #2563eb, which is not a house colour; the nearest is #1e3a8a. Change it to #1e3a8a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 4
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush crayon (\"Crayon\") palette colour 6 uses #7c3aed, which is not a house colour; the nearest is #1e3a8a. Change it to #1e3a8a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "crayon",
+                "colour": 5
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 2 uses #111827, which is not a house colour; the nearest is #1e3a8a. Change it to #1e3a8a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 1
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 3 uses #b91c1c, which is not a house colour; the nearest is #dc2626. Change it to #dc2626 or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 2
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush ballpoint (\"Ballpoint\") palette colour 4 uses #166534, which is not a house colour; the nearest is #1e3a8a. Change it to #1e3a8a or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "ballpoint",
+                "colour": 3
+              }
+            },
+            {
+              "check": "palette-only",
+              "layer": "org",
+              "message": "Brush my-ink (\"My ink\") palette colour 2 uses #00ff00, which is not a house colour; the nearest is #f59e0b. Change it to #f59e0b or another palette colour.",
+              "severity": "error",
+              "target": {
+                "brush": "my-ink",
+                "colour": 1
+              }
+            }
+          ],
+          "ok": false,
+          "ran": [
+            "brushes",
+            "media",
+            "source-licences",
+            "palette-only"
+          ],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {
+        "ids": [
+          "pencil-hbb",
+          "crayon",
+          "zzz"
+        ]
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "No brush \"pencil-hbb\", \"zzz\". Closest: pencil-hb, pencil-6b. list_brush_presets lists them."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

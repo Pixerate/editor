@@ -1,0 +1,48 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "style-paint-none",
+  "description": "With no house style (#791) the checks run nothing and say so, fix_paint_style changes nothing, and check_brush_style reads no saved brushes.",
+  "setup": {
+    "width": 32,
+    "height": 24
+  },
+  "steps": [
+    {
+      "tool": "check_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "findings": [],
+          "note": "No house style applies to paintings.",
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    },
+    {
+      "tool": "fix_paint_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "changed": {},
+          "left": []
+        }
+      }
+    },
+    {
+      "tool": "check_brush_style",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "checked": [],
+          "findings": [],
+          "note": "No house style applies to brushes.",
+          "ok": true,
+          "ran": [],
+          "skipped": []
+        }
+      }
+    }
+  ]
+}
