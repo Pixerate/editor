@@ -305,3 +305,10 @@ describe('css colours', () => {
     expect(parseCssColor('var(--x)')).toBeNull();
   });
 });
+
+describe('parseCssColor and Object.prototype names (#849)', () => {
+  it('refuses inherited names, whatever their case', () => {
+    for (const name of ['constructor', 'Constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf']) expect(parseCssColor(name), name).toBeNull();
+    expect(parseCssColor('Red')).toEqual({ hex: '#ff0000', alpha: 1 });
+  });
+});
