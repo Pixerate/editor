@@ -20,7 +20,7 @@ import { exchangeRates, PaintExchange, TileMedium, type MixerLoad, type PaintTil
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
-import { TILE, TiledSurface, finishTile, readRegion, surfaceFromSavedPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, surfaceFromSavedPixels, tileKeyIn, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { IridescenceSettings } from './brush-model';
 import type { PaintBrush } from './brushes';
@@ -36,6 +36,16 @@ import {
 } from './ferro';
 import { hash2 } from './noise';
 import { ageKey, carveAgeCrackHeightTile, isAgeActive, type PaintAgeSettings } from './age';
+
+/**
+ * A tile nothing keeps, handed to a write past the surface range (#852) so the pixel is dropped
+ * instead of landing on another tile. Reads past the range see no tile (the default).
+ */
+const outsideTiles: [Uint8ClampedArray | null, Uint8ClampedArray | null] = [null, null];
+function outsideTile(channels: 1 | 4): Uint8ClampedArray {
+  const i = channels === 1 ? 0 : 1;
+  return (outsideTiles[i] ??= new Uint8ClampedArray(TILE * TILE * channels));
+}
 
 /** Where the light comes from. */
 export interface PaintLighting {
@@ -266,7 +276,7 @@ export class LitCache {
     for (const [key, tile] of color.tiles) {
       const tx = (key % 65536) - 32768;
       const ty = Math.floor(key / 65536) - 32768;
-      const around = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy))?.data ?? null;
+      const around = (dx: number, dy: number) => ch.height.tiles.get(tileKeyIn(tx + dx, ty + dy))?.data ?? null;
       let any = hasCracks;
       if (hasRelief && !any) {
         for (let dy = -1; dy <= 1 && !any; dy++) for (let dx = -1; dx <= 1 && !any; dx++) if (around(dx, dy)) any = true;
@@ -278,7 +288,7 @@ export class LitCache {
       const inputs: unknown[] = [tile, lk, m, f];
       for (let dy = -1; dy <= 1; dy++) {
         for (let dx = -1; dx <= 1; dx++) {
-          const nk = tileKey(tx + dx, ty + dy);
+          const nk = tileKeyIn(tx + dx, ty + dy);
           inputs.push(hasRelief ? (ch.height.tiles.get(nk) ?? null) : null);
           if (hasCracks) inputs.push(color.tiles.get(nk) ?? null);
         }
@@ -290,7 +300,7 @@ export class LitCache {
       }
       const cd = expand(tile, 4);
       const heightTileAt = (ntx: number, nty: number): Uint8ClampedArray | null => {
-        const nk = tileKey(ntx, nty);
+        const nk = tileKeyIn(ntx, nty);
         const ht = ch.height.tiles.get(nk);
         const baseH = ht ? expand(ht, 1) : null;
         if (!hasCracks) return baseH;
@@ -338,8 +348,8 @@ export class LitCache {
       const tile = color.tiles.get(key) ?? null;
       const tx = (key % 65536) - 32768;
       const ty = Math.floor(key / 65536) - 32768;
-      const aroundH = (dx: number, dy: number) => ch.height.tiles.get(tileKey(tx + dx, ty + dy)) ?? null;
-      const aroundF = (dx: number, dy: number) => ferro.surface.tiles.get(tileKey(tx + dx, ty + dy)) ?? null;
+      const aroundH = (dx: number, dy: number) => ch.height.tiles.get(tileKeyIn(tx + dx, ty + dy)) ?? null;
+      const aroundF = (dx: number, dy: number) => ferro.surface.tiles.get(tileKeyIn(tx + dx, ty + dy)) ?? null;
       const film = ch.film.tiles.get(key) ?? null;
       let any = !!film;
       for (let dy = -1; dy <= 1 && !any; dy++) {
@@ -387,7 +397,7 @@ export class LitCache {
       }
 
       const buildHeightTile = (ntx: number, nty: number): Uint8ClampedArray | null => {
-        const nkey = tileKey(ntx, nty);
+        const nkey = tileKeyIn(ntx, nty);
         const ht = ch.height.tiles.get(nkey) ?? null;
         const ft = hasFerroSpikes ? (ferro.surface.tiles.get(nkey) ?? null) : null;
         if (!ht && !ft) return null;
@@ -450,7 +460,8 @@ export class FilmBuffer {
   }
 
   private tile(tx: number, ty: number): Uint8ClampedArray {
-    const key = tileKey(tx, ty);
+    const key = tileKeyIn(tx, ty);
+    if (key < 0) return outsideTile(4);
     let t = this.tiles.get(key);
     if (!t) {
       const b = this.base.tiles.get(key);
@@ -527,7 +538,7 @@ export class FilmBuffer {
         const ly = wy - oy;
         const tx = Math.floor(lx / TILE);
         const ty = Math.floor(ly / TILE);
-        const key = tileKey(tx, ty);
+        const key = tileKeyIn(tx, ty);
         if (!this.tiles.has(key) && !this.base.tiles.has(key)) continue;
         const t = this.tile(tx, ty);
         const i = ((ly & 255) * TILE + (lx & 255)) * 4;
@@ -648,7 +659,8 @@ export class ThickStrokeDriver {
   }
 
   private heightTile(tx: number, ty: number, write: boolean): Uint8ClampedArray | null {
-    const key = tileKey(tx, ty);
+    const key = tileKeyIn(tx, ty);
+    if (key < 0) return write ? outsideTile(1) : null;
     let t = this.height.get(key);
     if (t) {
       // Live tiles are replaced on write so caches keyed by identity see the change.
@@ -662,7 +674,8 @@ export class ThickStrokeDriver {
   }
 
   private materialTile(tx: number, ty: number): Uint8ClampedArray {
-    const key = tileKey(tx, ty);
+    const key = tileKeyIn(tx, ty);
+    if (key < 0) return outsideTile(4);
     let t = this.material.get(key);
     if (!t) {
       const base = this.init.channels.material.tiles.get(key);

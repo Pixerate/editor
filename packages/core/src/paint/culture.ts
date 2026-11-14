@@ -10,6 +10,8 @@
  */
 
 import {
+  MAX_SURFACE_PIXEL,
+  MIN_SURFACE_PIXEL,
   TILE,
   TiledSurface,
   contentBounds,
@@ -732,10 +734,11 @@ export function seedCultureFromStroke(input: SeedCultureInput): {
   const angleStep = (CULTURE_ANGLE_STEPS / sporesPerStation) | 0;
   const ox = input.offsetX ?? 0;
   const oy = input.offsetY ?? 0;
-  const minX = -ox * CULTURE_FP;
-  const minY = -oy * CULTURE_FP;
-  const maxX = (input.canvasWidth - ox) * CULTURE_FP;
-  const maxY = (input.canvasHeight - oy) * CULTURE_FP;
+  // The canvas in layer pixels, cut to the surface range so no spore lands on a tile past it (#852).
+  const minX = Math.max(-ox, MIN_SURFACE_PIXEL) * CULTURE_FP;
+  const minY = Math.max(-oy, MIN_SURFACE_PIXEL) * CULTURE_FP;
+  const maxX = Math.min(input.canvasWidth - ox, MAX_SURFACE_PIXEL + 1) * CULTURE_FP;
+  const maxY = Math.min(input.canvasHeight - oy, MAX_SURFACE_PIXEL + 1) * CULTURE_FP;
 
   let nextId = base.nextId;
   let seedsAdded = 0;
@@ -847,10 +850,12 @@ export function stepLayerCulture(input: StepLayerCultureInput): StepLayerCulture
 
   const ox = input.offsetX ?? 0;
   const oy = input.offsetY ?? 0;
-  const minX = -ox;
-  const minY = -oy;
-  const maxX = input.canvasWidth - ox;
-  const maxY = input.canvasHeight - oy;
+  // The canvas in layer pixels, cut to the surface range: every read and write below stays inside
+  // these bounds, so a layer offset far from the canvas cannot key a tile past the range (#852).
+  const minX = Math.max(-ox, MIN_SURFACE_PIXEL);
+  const minY = Math.max(-oy, MIN_SURFACE_PIXEL);
+  const maxX = Math.min(input.canvasWidth - ox, MAX_SURFACE_PIXEL + 1);
+  const maxY = Math.min(input.canvasHeight - oy, MAX_SURFACE_PIXEL + 1);
   const lockT = Boolean(input.lockTransparency);
   const paperSeed = input.paperSeed | 0;
   const paperDepth = input.paperDepthPermille | 0;

@@ -9,7 +9,7 @@ import { oklabToRgb, rgbToOklab } from '../color/convert';
 import { dabRect, rasterizeDab } from '../paint/brush';
 import type { RgbTriple } from '../paint/exchange';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
-import { TILE, TiledSurface, finishTile, tileKey, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, tileInRange, tileKey, tileKeyIn, tilesInRect, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectAt, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
@@ -315,7 +315,7 @@ export class AntimatterStrokeDriver {
           const ly = py - t.offset.y;
           const tx = Math.floor(lx / TILE);
           const ty = Math.floor(ly / TILE);
-          const tile = t.base.tiles.get(tileKey(tx, ty));
+          const tile = t.base.tiles.get(tileKeyIn(tx, ty));
           if (!tile) continue;
           const ox = lx - tx * TILE;
           const oy = ly - ty * TILE;
@@ -411,7 +411,9 @@ export class AntimatterStrokeDriver {
         if (h <= 0) continue;
         const tx = Math.floor(px / TILE);
         const ty = Math.floor(py / TILE);
-        const key = tileKey(tx, ty);
+        // Heat is kept in document tiles: past the surface range it is dropped, never aliased.
+        const key = tileKeyIn(tx, ty);
+        if (key < 0) continue;
         let tile = heatMap.get(key);
         if (!tile) {
           tile = new Float32Array(TILE * TILE);
@@ -428,7 +430,7 @@ export class AntimatterStrokeDriver {
             const ly = py - tgt.offset.y;
             const ltx = Math.floor(lx / TILE);
             const lty = Math.floor(ly / TILE);
-            const lt = tgt.base.tiles.get(tileKey(ltx, lty));
+            const lt = tgt.base.tiles.get(tileKeyIn(ltx, lty));
             if (lt && lt.data[((ly - lty * TILE) * TILE + (lx - ltx * TILE)) * 4 + 3] > 0) {
               this.reachedSkipped.add(tgt.id);
             }
@@ -528,7 +530,9 @@ export class AntimatterStrokeDriver {
             const lx = px - offX;
             const ltx = Math.floor(lx / TILE);
             const lox = lx - ltx * TILE;
-            const lk = tileKey(ltx, lty);
+            // A layer pixel past the surface range has no tile: nothing to burn, nothing written.
+            const lk = tileKeyIn(ltx, lty);
+            if (lk < 0) continue;
             const lIdx = loy * TILE + lox;
             const pIdx = lIdx * 4;
             const srcTile = tgt.base.tiles.get(lk);
@@ -695,6 +699,8 @@ export class AntimatterStrokeDriver {
       const ly = py - offY;
       const ltx = Math.floor(lx / TILE);
       const lty = Math.floor(ly / TILE);
+      // Sparks past the surface range are dropped (the layer stores no tile there).
+      if (!tileInRange(ltx, lty)) return;
       const lox = lx - ltx * TILE;
       const loy = ly - lty * TILE;
       const lIdx = loy * TILE + lox;

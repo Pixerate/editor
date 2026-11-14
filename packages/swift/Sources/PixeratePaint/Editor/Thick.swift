@@ -236,7 +236,7 @@ final class LitCache {
         for (key, tile) in color.tiles {
             keys.insert(key)
             let (tx, ty) = tileCoord(key)
-            func around(_ dx: Int, _ dy: Int) -> Tile? { hasHeight ? ch.height.tiles.get(tileKey(tx + dx, ty + dy)) : nil }
+            func around(_ dx: Int, _ dy: Int) -> Tile? { hasHeight ? ch.height.tiles.get(tileKeyIn(tx + dx, ty + dy)) : nil }
             let f = ch.film.tiles.get(key)
             var any = f != nil || hasCracks
             if hasHeight && !any {
@@ -248,7 +248,7 @@ final class LitCache {
             for dy in -1...1 {
                 for dx in -1...1 {
                     inputs.append(around(dx, dy).map(ObjectIdentifier.init))
-                    if hasCracks { inputs.append(color.tiles.get(tileKey(tx + dx, ty + dy)).map(ObjectIdentifier.init)) }
+                    if hasCracks { inputs.append(color.tiles.get(tileKeyIn(tx + dx, ty + dy)).map(ObjectIdentifier.init)) }
                 }
             }
             if let cached = tiles[key], cached.inputs == inputs, cached.light == light, cached.viewTilt == viewTilt, cached.ferroKey == ck {
@@ -266,7 +266,7 @@ final class LitCache {
                 let (tx, ty) = tileCoord(w.key)
                 let cd = expandTile(w.tile, 4)
                 func heightTileAt(_ ntx: Int, _ nty: Int) -> [UInt8]? {
-                    let nk = tileKey(ntx, nty)
+                    let nk = tileKeyIn(ntx, nty)
                     let ht = ch.height.tiles.get(nk)
                     let baseH = ht.map { expandTile($0, 1) }
                     if !hasCracks { return baseH }
@@ -300,8 +300,8 @@ final class LitCache {
         for (key, _) in keys {
             let tile = color.tiles.get(key)
             let (tx, ty) = tileCoord(key)
-            func aroundH(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKey(tx + dx, ty + dy)) }
-            func aroundF(_ dx: Int, _ dy: Int) -> Tile? { ferro.surface.tiles.get(tileKey(tx + dx, ty + dy)) }
+            func aroundH(_ dx: Int, _ dy: Int) -> Tile? { ch.height.tiles.get(tileKeyIn(tx + dx, ty + dy)) }
+            func aroundF(_ dx: Int, _ dy: Int) -> Tile? { ferro.surface.tiles.get(tileKeyIn(tx + dx, ty + dy)) }
             let film = ch.film.tiles.get(key)
             var any = film != nil
             for dy in -1...1 where !any {
@@ -347,7 +347,7 @@ final class LitCache {
             }
 
             func buildHeightTile(_ ntx: Int, _ nty: Int) -> [UInt8]? {
-                let nkey = tileKey(ntx, nty)
+                let nkey = tileKeyIn(ntx, nty)
                 let ht = ch.height.tiles.get(nkey)
                 let ft = hasFerroSpikes ? ferro.surface.tiles.get(nkey) : nil
                 if ht == nil && ft == nil { return nil }
@@ -401,8 +401,12 @@ public final class FilmBuffer {
 
     public var changed: Bool { !tiles.isEmpty }
 
+    /// A tile nothing keeps: writes past the surface range land here and are dropped (#852).
+    private lazy var outside = ByteTile([UInt8](repeating: 0, count: TILE * TILE * 4))
+
     private func tile(_ tx: Int, _ ty: Int) -> ByteTile {
-        let key = tileKey(tx, ty)
+        let key = tileKeyIn(tx, ty)
+        if key < 0 { return outside }
         if let t = tiles.get(key) { return t }
         let t = ByteTile(base.tiles.get(key)?.data ?? [UInt8](repeating: 0, count: TILE * TILE * 4))
         tiles.set(key, t)
@@ -455,7 +459,7 @@ public final class FilmBuffer {
                 let c = Swift.min(1, Double(cov[p]) * opacity * maskAt(wx, wy))
                 if !(c > 0) { continue }
                 let lx = wx - off.x, ly = wy - off.y
-                let key = tileKey(lx >> 8, ly >> 8)
+                let key = tileKeyIn(lx >> 8, ly >> 8)
                 if !tiles.has(key) && !base.tiles.has(key) { continue }
                 let t = tile(lx >> 8, ly >> 8)
                 let i = ((ly & 255) * TILE + (lx & 255)) * 4
@@ -562,8 +566,12 @@ final class ThickStrokeDriver {
         return ThickChannels(height: TiledSurface(channels: 1, tiles: h, defaultValue: 0), material: TiledSurface(channels: 4, tiles: m, defaultValue: 0), film: film?.surface() ?? initValues.channels.film)
     }
 
+    /// A tile nothing keeps: material writes past the surface range land here and are dropped (#852).
+    private lazy var outsideMaterial = ByteTile([UInt8](repeating: 0, count: TILE * TILE * 4))
+
     private func heightTile(_ tx: Int, _ ty: Int, _ write: Bool) -> [UInt8]? {
-        let key = tileKey(tx, ty)
+        let key = tileKeyIn(tx, ty)
+        if key < 0 { return nil }
         if let t = height.get(key) { return t.data }
         let base = initValues.channels.height.tiles.get(key)
         if !write { return base?.data }
@@ -573,7 +581,8 @@ final class ThickStrokeDriver {
     }
 
     private func materialTile(_ tx: Int, _ ty: Int) -> ByteTile {
-        let key = tileKey(tx, ty)
+        let key = tileKeyIn(tx, ty)
+        if key < 0 { return outsideMaterial }
         if let t = material.get(key) { return t }
         let t = ByteTile(initValues.channels.material.tiles.get(key)?.data ?? [UInt8](repeating: 0, count: TILE * TILE * 4))
         material.set(key, t)
@@ -586,6 +595,8 @@ final class ThickStrokeDriver {
     }
 
     private func setH(_ x: Int, _ y: Int, _ v: Double) {
+        // Past the surface range there is no height tile: the value is dropped (#852).
+        if !tileInRange(x >> 8, y >> 8) { return }
         _ = heightTile(x >> 8, y >> 8, true)
         height.get(tileKey(x >> 8, y >> 8))!.data[(y & 255) * TILE + (x & 255)] = JS.u8c(v)
     }

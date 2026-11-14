@@ -207,7 +207,7 @@ public final class CoverageMap {
     /// The colour at a pixel (gradient paint), or nil when the stroke has one colour there.
     func colorAt(_ x: Int, _ y: Int, _ out: inout [Double]) -> Bool {
         let tx = floorTile(x), ty = floorTile(y)
-        guard let t = colors[tileKey(tx, ty)] else { return false }
+        guard let t = colors[tileKeyIn(tx, ty)] else { return false }
         let i = ((y - ty * TILE) * TILE + (x - tx * TILE)) * 3
         out[0] = Double(t.data[i])
         out[1] = Double(t.data[i + 1])
@@ -217,7 +217,7 @@ public final class CoverageMap {
 
     public func get(_ x: Int, _ y: Int) -> Double {
         let tx = floorTile(x), ty = floorTile(y)
-        guard let t = tiles[tileKey(tx, ty)] else { return 0 }
+        guard let t = tiles[tileKeyIn(tx, ty)] else { return 0 }
         return Double(t.data[(y - ty * TILE) * TILE + (x - tx * TILE)])
     }
 
@@ -230,8 +230,10 @@ public final class CoverageMap {
     public func accumulate(_ rect: RasterRect, _ vals: [Float], _ ceil: Double, color: [Double]? = nil, field: [Float]? = nil, limits: [Float]? = nil) {
         if rect.width <= 0 || rect.height <= 0 { return }
         let w = rect.width
-        let tx0 = floorTile(rect.x), ty0 = floorTile(rect.y)
-        let tx1 = floorTile(rect.x + rect.width - 1), ty1 = floorTile(rect.y + rect.height - 1)
+        // Only tiles in the surface range (as `tilesInRect`): coverage past it is dropped, not aliased.
+        let tx0 = Swift.max(floorTile(rect.x), MIN_TILE), ty0 = Swift.max(floorTile(rect.y), MIN_TILE)
+        let tx1 = Swift.min(floorTile(rect.x + rect.width - 1), MAX_TILE), ty1 = Swift.min(floorTile(rect.y + rect.height - 1), MAX_TILE)
+        if tx0 > tx1 || ty0 > ty1 { return }
         var touched = false
         for ty in ty0...ty1 {
             for tx in tx0...tx1 {
@@ -362,7 +364,7 @@ public func applyStrokeToTile(_ coverage: CoverageMap, _ tileData: [UInt8], _ ch
     let bg = [Double(s.background[0]) / 255, Double(s.background[1]) / 255, Double(s.background[2]) / 255, Double(s.background[3]) / 255]
     // With a tile-aligned offset the layer tile is one coverage tile: read it directly.
     let aligned = s.offset.x % TILE == 0 && s.offset.y % TILE == 0
-    let covTile = aligned ? coverage.tiles[tileKey(floorTile(ox), floorTile(oy))] : nil
+    let covTile = aligned ? coverage.tiles[tileKeyIn(floorTile(ox), floorTile(oy))] : nil
     if aligned && covTile == nil { return out }
     // Gradient paint: each pixel's own colour (alpha stays the stroke's).
     let colored = s.mode == .paint && !coverage.colors.isEmpty

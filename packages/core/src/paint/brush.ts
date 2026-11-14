@@ -16,7 +16,7 @@
 import { blendPixel, mixPigment8, mixPigmentRgb, type BlendMode } from '../raster/blend';
 import { srgbDecode, srgbEncode } from '../raster/deep';
 import type { RasterRect as CropBox } from '../raster/surface';
-import { TILE, tileKey, tileCoord, type TileKey } from '../raster/surface';
+import { MAX_TILE, MIN_TILE, TILE, tileKey, tileKeyIn, tileCoord, type TileKey } from '../raster/surface';
 import { PaintGradientSampler, type PaintDabParams, type PaintGradientSample, type PaintGradientSource, type PaintRgb } from './gradient-paint';
 
 /** One input sample. Missing pressure is a mouse (1). */
@@ -367,7 +367,7 @@ export class CoverageMap {
   colorAt(x: number, y: number, out: number[]): number[] | null {
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
-    const t = this.colors.get(tileKey(tx, ty));
+    const t = this.colors.get(tileKeyIn(tx, ty));
     if (!t) return null;
     const i = ((y - ty * TILE) * TILE + (x - tx * TILE)) * 3;
     out[0] = t[i];
@@ -379,7 +379,7 @@ export class CoverageMap {
   get(x: number, y: number): number {
     const tx = Math.floor(x / TILE);
     const ty = Math.floor(y / TILE);
-    const t = this.tiles.get(tileKey(tx, ty));
+    const t = this.tiles.get(tileKeyIn(tx, ty));
     return t ? t[(y - ty * TILE) * TILE + (x - tx * TILE)] : 0;
   }
 
@@ -391,10 +391,11 @@ export class CoverageMap {
   accumulate(rect: CropBox, vals: Float32Array, ceil: number, color: readonly number[] | null = null, field: Float32Array | null = null, limits: Float32Array | null = null): void {
     if (rect.width <= 0 || rect.height <= 0) return;
     const w = rect.width;
-    const tx0 = Math.floor(rect.x / TILE);
-    const ty0 = Math.floor(rect.y / TILE);
-    const tx1 = Math.floor((rect.x + rect.width - 1) / TILE);
-    const ty1 = Math.floor((rect.y + rect.height - 1) / TILE);
+    // Only tiles in the surface range (as `tilesInRect`): coverage past it is dropped, not aliased.
+    const tx0 = Math.max(Math.floor(rect.x / TILE), MIN_TILE);
+    const ty0 = Math.max(Math.floor(rect.y / TILE), MIN_TILE);
+    const tx1 = Math.min(Math.floor((rect.x + rect.width - 1) / TILE), MAX_TILE);
+    const ty1 = Math.min(Math.floor((rect.y + rect.height - 1) / TILE), MAX_TILE);
     let touched = false;
     for (let ty = ty0; ty <= ty1; ty++) {
       for (let tx = tx0; tx <= tx1; tx++) {
@@ -635,7 +636,7 @@ export function applyStrokeToTile(
   const bg = [s.background[0] / 255, s.background[1] / 255, s.background[2] / 255, s.background[3] / 255];
   // With a tile-aligned offset the layer tile is one coverage tile: read it directly.
   const aligned = s.offset.x % TILE === 0 && s.offset.y % TILE === 0;
-  const covTile = aligned ? coverage.tiles.get(tileKey(Math.floor(ox / TILE), Math.floor(oy / TILE))) : undefined;
+  const covTile = aligned ? coverage.tiles.get(tileKeyIn(Math.floor(ox / TILE), Math.floor(oy / TILE))) : undefined;
   if (aligned && !covTile) return out;
   // Gradient paint: each pixel's own colour (alpha stays the stroke's).
   const colored = s.mode === 'paint' && coverage.colors.size > 0;

@@ -28,7 +28,7 @@
 
 import { blendPixel, mixPigment8, type BlendMode } from '../raster/blend';
 import type { RasterRect } from '../raster/surface';
-import { TILE } from '../raster/surface';
+import { TILE, tileInRange } from '../raster/surface';
 import { createPigment, lerpPigmentInto, setPigmentColor, type Pigment } from './pigment';
 
 /** How colours mix: straight sRGB averages, or like paint (Kubelka-Munk). */
@@ -250,6 +250,10 @@ export class TileMedium implements PaintMedium {
   private ty = NaN;
   private tile: PaintPixels | null = null;
   private writable = false;
+  // Whether the cached tile lies past the surface range (#852): reads see an empty tile and
+  // writes land in `scratch`, which nothing keeps, so a far-off pixel never aliases another tile.
+  private outside = false;
+  private scratch: Uint8ClampedArray | null = null;
   private readonly canvasPig = createPigment([0, 0, 0]);
   private readonly paintPig = createPigment([0, 0, 0]);
   private paintKey = -1;
@@ -277,11 +281,13 @@ export class TileMedium implements PaintMedium {
     const ly = dy - t.offset.y;
     const tx = Math.floor(lx / TILE);
     const ty = Math.floor(ly / TILE);
-    if (tx !== this.tx || ty !== this.ty || (write && !this.writable)) {
+    if (tx !== this.tx || ty !== this.ty || (write && !this.writable) || (!write && this.outside)) {
       this.tx = tx;
       this.ty = ty;
-      this.tile = write ? t.writeTile(tx, ty) : t.readTile(tx, ty);
       this.writable = write;
+      this.outside = !tileInRange(tx, ty);
+      if (this.outside) this.tile = write ? (this.scratch ??= new Uint8ClampedArray(TILE * TILE * 4)) : null;
+      else this.tile = write ? t.writeTile(tx, ty) : t.readTile(tx, ty);
     }
     return this.tile ? ((ly - ty * TILE) * TILE + (lx - tx * TILE)) * 4 : -1;
   }

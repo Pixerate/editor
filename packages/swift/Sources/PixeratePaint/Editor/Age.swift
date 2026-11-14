@@ -785,7 +785,8 @@ public final class ScraperStrokeDriver {
                     if rem <= 1e-6 { break }
                     let lx = wx - entry.layer.pixelOffset.x
                     let ly = wy - entry.layer.pixelOffset.y
-                    let key = tileKey(lx >> 8, ly >> 8)
+                    // Past the surface range there is no tile to scrape (NO_TILE_KEY finds none).
+                    let key = tileKeyIn(lx >> 8, ly >> 8)
                     let cRead = getColorTile(entry, key, false)
                     let hRead = getHeightTile(entry, key, false)
                     if cRead == nil && hRead == nil { continue }

@@ -11,7 +11,7 @@ import {
   TILE,
   TiledSurface,
   finishTile,
-  tileKey,
+  tileKeyIn,
   type RasterRect,
   type Tile,
   type TileKey,
@@ -259,7 +259,8 @@ export class ScraperStrokeDriver {
           const entry = this.stack[k];
           const lx = wx - entry.layer.offset.x;
           const ly = wy - entry.layer.offset.y;
-          const key = tileKey(Math.floor(lx / TILE), Math.floor(ly / TILE));
+          // Past the surface range there is no tile to scrape (NO_TILE_KEY finds none).
+          const key = tileKeyIn(Math.floor(lx / TILE), Math.floor(ly / TILE));
           const cRead = this.getColorTile(entry, key, false);
           const hRead = this.getHeightTile(entry, key, false);
           if (!cRead && !hRead) continue;
