@@ -1,8 +1,10 @@
 /**
  * House style for charts: the `chart.json` profile (palette, allowed colour schemes and
- * layouts, theme, defaults for new charts), its checks, and `check_chart_style`.
+ * layouts, theme, defaults for new charts, how 3-D charts look), its checks, and
+ * `check_chart_style`.
  */
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
+import type { JsonSchema } from '../tools/schema.js';
 import type { StyleCheck, StyleDomain, StyleResolver } from '../tools/style.js';
 import { brandColor, brandPalette, type BrandProfile } from '../tools/brand.js';
 import type { ChartSelection, ChartSpec, ChartType } from './types.js';
@@ -11,6 +13,7 @@ import { chartColorsByCategory, chartSeriesColor, chartSliceColor, createChartSp
 import { chartToSvg } from './svg.js';
 import { CHART_COLOR_SCHEMES, CHART_LAYOUT_PRESETS } from './presets.js';
 import type { ChartController } from './controller.js';
+import { CHART_3D_STYLE_SCHEMA, chart3dContrastCheck, type Chart3dStyleInput } from './style3d.js';
 
 const CHART_TYPES: readonly ChartType[] = ['bar', 'line', 'area', 'scatter', 'bubble', 'pie', 'donut', 'radar', 'waterfall', 'histogram', 'box', 'funnel', 'treemap'];
 
@@ -26,6 +29,8 @@ export interface ChartStyleProfile {
 	theme?: Partial<Record<'background' | 'surface' | 'text' | 'mutedText' | 'grid' | 'axis' | 'positive' | 'negative' | 'fontFamily', string> & Record<'fontSize' | 'titleSize', number>>;
 	/** Spec values new charts start from. */
 	defaults?: Partial<Pick<ChartSpec, 'dataLabels' | 'points' | 'curve' | 'stacking' | 'orientation' | 'labelPosition'>>;
+	/** How 3-D charts look (`@pixerate/editor/three`): materials, light, shadows, background. */
+	three?: Chart3dStyleInput;
 }
 
 const COLOR = { type: 'string', minLength: 1, description: 'A CSS colour (hex or rgb()), or a { "$token": ... } reference.' } as const;
@@ -185,11 +190,12 @@ export const chartStyleDomain: StyleDomain<ChartSpec> = {
 				},
 				additionalProperties: false,
 				description: 'Spec values new charts start from.'
-			}
+			},
+			three: CHART_3D_STYLE_SCHEMA as unknown as JsonSchema
 		},
 		additionalProperties: false
 	},
-	checks: [paletteOnly, distinguishable, minContrast, allowedType],
+	checks: [paletteOnly, distinguishable, minContrast, allowedType, chart3dContrastCheck],
 	themeFromBrand: (brand) => ({ ...chartStyleFromBrand(brand) }),
 	example: {
 		palette: ['#0b5fff', '#ff6a00', '#12a150'],

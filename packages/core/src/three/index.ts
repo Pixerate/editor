@@ -17,7 +17,9 @@
  */
 import * as THREE from 'three';
 import { DEFAULT_CHART_THEME } from '../chart/spec.js';
+import { chartContrastRatio } from '../chart/color.js';
 import { chart3dMarkInFocus, layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
+import { chart3dStyleColors, resolveChart3dStyle, type Chart3dMaterial, type Chart3dStyle, type Chart3dStyleInput } from '../chart/style3d.js';
 import type { ChartSelection, ChartSpec, ChartTheme } from '../chart/types.js';
 import { registerCaptureSource } from '../tools/dom-capture.js';
 
@@ -29,6 +31,11 @@ export interface Chart3dOptions {
 	theme?: Partial<ChartTheme>;
 	/** Room around the chart for labels, as a fraction of the shorter side (default 0.12). */
 	padding?: number;
+	/**
+	 * House style for 3-D (#810): the chart profile's `three` section (materials, light preset,
+	 * shadows, contact darkening, background). Absent: the defaults, unchanged from unstyled 3-D.
+	 */
+	style?: Chart3dStyleInput;
 }
 
 /** A label for the overlay, in CSS px from the top left. */
@@ -57,6 +64,10 @@ export interface Chart3dScene {
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
 	layout: Chart3dLayout;
+	/** The 3-D style in use, every part resolved. */
+	style: Chart3dStyle;
+	/** The colour behind the chart (the style's, else the theme's). */
+	background: string;
 	/** The overlay labels for the current size. */
 	labels(): Chart3dLabel[];
 	/** Changes the size (the camera's aspect and fit follow). */
@@ -123,27 +134,63 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		return o;
 	};
 	const world = (x: number, y: number, z: number) => new THREE.Vector3(x, y, -z);
-	const material = (css: string) => {
-		const m = new THREE.MeshStandardMaterial({ color: color(css, '#888888'), roughness: 0.8, metalness: 0 });
+	const style = resolveChart3dStyle(options.style);
+	const surfaces = chart3dStyleColors(style, theme);
+	const material = (css: string, look: Chart3dMaterial = style.materials.mark) => {
+		const params = { color: color(css, '#888888'), roughness: look.roughness, metalness: look.metalness, ...(look.opacity < 1 ? { transparent: true, opacity: look.opacity } : {}) };
+		const m = look.transmission > 0 ? new THREE.MeshPhysicalMaterial({ ...params, transmission: look.transmission, thickness: 0.2 }) : new THREE.MeshStandardMaterial(params);
 		disposables.push(m);
 		return m;
 	};
 
-	// Light: a soft key from the upper left and a sky / ground fill.
-	scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, 1.6));
-	const key = new THREE.DirectionalLight(0xffffff, 1.4);
-	key.position.copy(world(-layout.width, layout.height * 2.5, -(layout.depth * 3 + layout.width)));
+	// Light from the style's preset (default studio: a soft key from the upper left and a sky / ground fill).
+	const k = style.light.intensity;
+	const keyPosition =
+		style.light.azimuth !== undefined || style.light.elevation !== undefined
+			? (() => {
+					const az = ((style.light.azimuth ?? -45) * Math.PI) / 180;
+					const el = ((style.light.elevation ?? 55) * Math.PI) / 180;
+					const r = layout.width + layout.height + layout.depth * 3;
+					return world(layout.width / 2 + Math.sin(az) * Math.cos(el) * r, Math.sin(el) * r, layout.depth / 2 - Math.cos(az) * Math.cos(el) * r);
+				})()
+			: world(-layout.width, layout.height * 2.5, -(layout.depth * 3 + layout.width));
+	const preset = style.light.preset;
+	const [fill, keyStrength] = preset === 'soft' ? [2.2, 0.6] : preset === 'rim' ? [0.9, 1] : preset === 'flat' ? [0, 0] : [1.6, 1.4];
+	if (preset === 'flat') scene.add(new THREE.AmbientLight(0xffffff, 3 * k));
+	else scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8f99, fill * k));
+	const key = new THREE.DirectionalLight(0xffffff, keyStrength * k);
+	key.position.copy(keyPosition);
 	scene.add(key);
+	// A key from a chosen direction aims at the chart's centre; the default keeps aiming at the
+	// origin, as unstyled 3-D always has.
+	if (style.light.azimuth !== undefined || style.light.elevation !== undefined || style.shadow.enabled) {
+		key.target.position.copy(world(layout.width / 2, 0, layout.depth / 2));
+		scene.add(key.target);
+	}
+	if (preset === 'rim') {
+		const rim = new THREE.DirectionalLight(0xffffff, 1.6 * k);
+		rim.position.copy(world(layout.width * 0.8, layout.height * 1.5, layout.depth * 4 + layout.width));
+		scene.add(rim);
+	}
+	if (style.shadow.enabled && preset !== 'flat') {
+		key.castShadow = true;
+		key.shadow.mapSize.set(2048, 2048);
+		key.shadow.radius = 1 + style.shadow.softness * 8;
+		key.shadow.bias = -0.0005;
+		const span = Math.max(layout.width, layout.height, layout.depth) * 1.5;
+		Object.assign(key.shadow.camera, { left: -span, right: span, top: span, bottom: -span, near: 0.1, far: span * 8 });
+	}
 
 	// Floor and back wall, with the value gridlines on the wall.
 	const floorGeometry = new THREE.PlaneGeometry(layout.width, layout.depth + 0.4);
 	disposables.push(floorGeometry);
-	const floor = add(new THREE.Mesh(floorGeometry, material(theme.grid)));
+	const floor = add(new THREE.Mesh(floorGeometry, material(surfaces.floor, style.materials.floor)));
 	floor.rotation.x = -Math.PI / 2;
 	floor.position.set(layout.width / 2, 0, (layout.depth + 0.4) / 2 - 0.2);
+	floor.receiveShadow = style.shadow.enabled;
 	const wallGeometry = new THREE.PlaneGeometry(layout.width, layout.height);
 	disposables.push(wallGeometry);
-	const wallMaterial = material(theme.surface);
+	const wallMaterial = material(surfaces.wall, style.materials.wall);
 	wallMaterial.side = THREE.DoubleSide;
 	const wall = add(new THREE.Mesh(wallGeometry, wallMaterial));
 	wall.position.set(layout.width / 2, layout.height / 2, layout.depth + 0.2);
@@ -163,9 +210,21 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 	for (const b of layout.boxes) {
 		const g = new THREE.BoxGeometry(b.x1 - b.x0, Math.max(1e-4, b.y1 - b.y0), b.z1 - b.z0);
 		disposables.push(g);
-		const m = material(b.color);
+		const m = material(b.color, style.materials.mark);
 		const mesh = add(new THREE.Mesh(g, m));
 		mesh.position.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2);
+		mesh.castShadow = style.shadow.enabled;
+		if (style.ambientOcclusion && b.y0 <= 1e-6) {
+			// Contact darkening: a soft dark footprint, a little larger than the bar, just above the floor.
+			const pad = Math.min(b.x1 - b.x0, b.z1 - b.z0) * 0.35;
+			const cg = new THREE.PlaneGeometry(b.x1 - b.x0 + pad * 2, b.z1 - b.z0 + pad * 2);
+			const cm = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.16, depthWrite: false });
+			disposables.push(cg, cm);
+			const contact = add(new THREE.Mesh(cg, cm));
+			contact.rotation.x = -Math.PI / 2;
+			contact.position.set((b.x0 + b.x1) / 2, 0.002, (b.z0 + b.z1) / 2);
+			contact.name = `contact-${b.seriesId}-${b.index}`;
+		}
 		mesh.name = `bar-${b.seriesId}-${b.index}`;
 		mesh.userData = { seriesId: b.seriesId, index: b.index };
 		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: b.seriesId, index: b.index });
@@ -175,13 +234,15 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		if (r.points.length < 2) continue;
 		const g = ribbonGeometry(r.points, r.z0, r.z1, r.kind, ribbonThickness);
 		disposables.push(g);
-		const m = material(r.color);
+		const m = material(r.color, style.materials.ribbon);
 		const mesh = add(new THREE.Mesh(g, m));
 		mesh.name = `${r.kind}-${r.seriesId}`;
+		mesh.castShadow = style.shadow.enabled;
 		mesh.userData = { seriesId: r.seriesId };
 		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: r.seriesId, ribbon: r });
 	}
-	const fadeTo = color(theme.background === 'transparent' ? theme.surface : theme.background, '#ffffff');
+	const fadeTo = color(surfaces.background, '#ffffff');
+	const glow = style.materials.highlight.color ? color(style.materials.highlight.color, '#ffffff') : null;
 	let focused: ChartSelection | null = null;
 
 	// The camera: around the chart's centre, from the view's azimuth and elevation.
@@ -224,6 +285,8 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		scene,
 		camera,
 		layout,
+		style,
+		background: surfaces.background,
 		labels() {
 			const out: Chart3dLabel[] = [];
 			const at = focusedIndex();
@@ -262,6 +325,9 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 				const lit = chart3dMarkInFocus(selection, m.seriesId, m.index);
 				m.material.color.copy(m.base);
 				if (!lit) m.material.color.lerp(fadeTo, dim);
+				// The house highlight glows on focused marks.
+				m.material.emissive.setRGB(0, 0, 0);
+				if (glow && selection && lit) m.material.emissive.copy(glow).multiplyScalar(style.materials.highlight.intensity);
 			}
 		},
 		getFocus: () => focused,
@@ -278,6 +344,34 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 			for (const d of disposables) d.dispose();
 		}
 	};
+}
+
+/** A label that doesn't read on what is drawn behind it. */
+export interface Chart3dLabelContrastFinding {
+	label: Chart3dLabel;
+	/** The colour sampled behind the label, and the text colour. */
+	behind: string;
+	text: string;
+	ratio: number;
+}
+
+/**
+ * The house-style check on the rendered picture (#810): each overlay label's text colour against
+ * the colour behind it, which `sample(x, y)` reads from a capture of the canvas (for example the
+ * pixels of `compositeCapture` or `captureAt`, without the labels). Labels below `minRatio` (default
+ * 4.5) come back; titles count as large text (3).
+ */
+export function checkChart3dLabelContrast(labels: readonly Chart3dLabel[], sample: (x: number, y: number) => string | null, theme: Partial<Pick<ChartTheme, 'text' | 'mutedText'>> = {}, minRatio = 4.5): Chart3dLabelContrastFinding[] {
+	const out: Chart3dLabelContrastFinding[] = [];
+	for (const label of labels) {
+		const behind = sample(label.x, label.y);
+		if (!behind) continue;
+		const text = label.kind === 'tick' ? (theme.mutedText ?? DEFAULT_CHART_THEME.mutedText) : (theme.text ?? DEFAULT_CHART_THEME.text);
+		const ratio = chartContrastRatio(text, behind);
+		const want = label.kind === 'title' ? Math.min(3, minRatio) : minRatio;
+		if (ratio !== null && ratio < want) out.push({ label, behind, text, ratio: Math.round(ratio * 100) / 100 });
+	}
+	return out;
 }
 
 export interface Chart3dRenderer {
@@ -315,12 +409,16 @@ export interface Chart3dRenderer {
  */
 export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, options: Chart3dOptions & { pixelRatio?: number }): Chart3dRenderer {
 	const theme: ChartTheme = { ...DEFAULT_CHART_THEME, ...options.theme };
-	const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: theme.background === 'transparent', preserveDrawingBuffer: true });
+	const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: theme.background === 'transparent' && !options.style?.background, preserveDrawingBuffer: true });
 	renderer.setPixelRatio(options.pixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio : 1));
 	renderer.setSize(options.width, options.height, false);
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
-	if (theme.background !== 'transparent') renderer.setClearColor(color(theme.background, '#ffffff'), 1);
 	const view = createChart3dScene(spec, options);
+	if (view.style.background || theme.background !== 'transparent') renderer.setClearColor(color(view.background, '#ffffff'), 1);
+	if (view.style.shadow.enabled) {
+		renderer.shadowMap.enabled = true;
+		renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+	}
 	let size = { width: options.width, height: options.height };
 	let lost = false;
 	const onLost = (event: Event) => {
@@ -411,6 +509,7 @@ export function renderChart3dImage(spec: ChartSpec, options: Chart3dOptions & { 
 	}
 }
 
+export { resolveChart3dStyle, chart3dStyleColors, DEFAULT_CHART_3D_STYLE, CHART_3D_LIGHT_PRESETS, CHART_3D_STYLE_VERSION, type Chart3dStyle, type Chart3dStyleInput, type Chart3dMaterial } from '../chart/style3d.js';
 export { layoutChart3d, CHART_3D_TYPES, chart3dMarkSeries, chart3dMarkInFocus, nextChart3dFocus, type Chart3dLayout, type Chart3dBox, type Chart3dRibbon } from '../chart/layout3d.js';
 export { describeChartSelectionIn } from '../chart/interaction.js';
 export { chartTooltipFor, type ChartTooltip } from '../chart/tooltip.js';
