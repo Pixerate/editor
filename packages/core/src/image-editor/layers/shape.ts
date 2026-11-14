@@ -46,6 +46,7 @@ import { expandVectorCorners, setAnchorCorner } from '../../vector/corners';
 import type { VectorAnchor, VectorSubpath, Vec2 } from '../../vector/types';
 import { combineCoverage, flatBounds, flattenPath, rasterizeCoverage, rasterizeCoverageSampled, type FlatPath } from './vector-raster';
 import { parseCssColor } from './css-color';
+import { checkShapeAnnotationFields } from './annotation-fields';
 import { LayerOperationError, requireLayer, requireUnlocked } from './ops';
 import {
   mapLayer,
@@ -832,11 +833,13 @@ function annotationPaint(color: string | undefined, opacity: number): ShapePaint
 /**
  * The shape an annotation draws (pen, rectangle, ellipse, line, arrow), exactly as the canvas drew
  * it, or `null` for annotations that are not shapes (text, image) or use a colour we can't read.
+ * Throws a `LayerOperationError` naming the field when one it draws with has the wrong type (a pen
+ * without `points`, a rectangle whose `width` is not a number, …).
  */
 export function shapeFromAnnotation(a: Annotation): Pick<ShapeLayer, 'components' | 'fill' | 'stroke'> | null {
   const opacity = a.opacity ?? 1;
   // A canvas ignores a line width of 0 or less and keeps its default of 1.
-  const lineWidth = 'strokeWidth' in a && a.strokeWidth > 0 ? a.strokeWidth : 1;
+  const lineWidth = 'strokeWidth' in a && typeof a.strokeWidth === 'number' && a.strokeWidth > 0 ? a.strokeWidth : 1;
   const rotation = a.rotation ? rotateMatrix(a.rotation, { x: a.x, y: a.y }) : undefined;
   const t = rotation ? { transform: rotation } : {};
   const live = (l: LiveShape) => liveComponent(l);
@@ -846,6 +849,7 @@ export function shapeFromAnnotation(a: Annotation): Pick<ShapeLayer, 'components
       if (!stroke) return null;
       const fill = a.fillColor ? annotationPaint(a.fillColor, opacity) : null;
       if (fill === undefined) return null;
+      checkShapeAnnotationFields(a);
       return {
         components: [live({ kind: 'rect', x: a.x, y: a.y, width: a.width, height: a.height, ...t })],
         fill,
@@ -857,6 +861,7 @@ export function shapeFromAnnotation(a: Annotation): Pick<ShapeLayer, 'components
       if (!stroke) return null;
       const fill = a.fillColor ? annotationPaint(a.fillColor, opacity) : null;
       if (fill === undefined) return null;
+      checkShapeAnnotationFields(a);
       const rx = Math.abs(a.radiusX);
       const ry = Math.abs(a.radiusY);
       return {
@@ -869,10 +874,12 @@ export function shapeFromAnnotation(a: Annotation): Pick<ShapeLayer, 'components
     case 'arrow': {
       const paint = annotationPaint(a.strokeColor, opacity);
       if (!paint) return null;
+      checkShapeAnnotationFields(a);
       const line: LiveShape = { kind: 'line', x1: a.x, y1: a.y, x2: a.endX, y2: a.endY, weight: lineWidth, ...t };
       if (a.type === 'arrow') {
         // The old arrowhead: two sides `max(12, 3w)` long at ±30° from the line, filled.
-        const side = Math.max(12, a.strokeWidth * 3);
+        // (A canvas line width: a left-out or non-positive `strokeWidth` draws 1 wide.)
+        const side = Math.max(12, lineWidth * 3);
         line.endArrow = { width: side, length: side * Math.cos(Math.PI / 6) };
       }
       if (line.x1 === line.x2 && line.y1 === line.y2) return { components: [{ op: 'combine', subpaths: [] }], fill: paint, stroke: null };
@@ -881,6 +888,7 @@ export function shapeFromAnnotation(a: Annotation): Pick<ShapeLayer, 'components
     case 'pen': {
       const paint = annotationPaint(a.strokeColor, opacity);
       if (!paint) return null;
+      checkShapeAnnotationFields(a);
       const pts = rotation ? a.points.map((p) => applyMatrix(rotation, p)) : a.points;
       const subpaths: VectorSubpath[] = pts.length > 1 ? [{ closed: false, anchors: pts.map((p) => ({ x: p.x, y: p.y })) }] : [];
       return {

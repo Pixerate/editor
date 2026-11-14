@@ -1044,7 +1044,14 @@ export function deserializeLayer(raw: unknown, ctx: DeserializeContext): ImageLa
       }
       const annotation = JSON.parse(JSON.stringify({ ...a, id: typeof a.id === 'string' ? a.id : id })) as Annotation;
       // Pen, rectangle, ellipse, line, arrow and text annotations load as shape and type layers that remember them.
-      const migrated = annotationLayerFor(annotation, { ...(ctx.canvas ?? { width: 1, height: 1 }), shaper: ctx.text?.shaper ?? null, createCanvas: ctx.text?.createCanvas });
+      // One whose fields can't be drawn (a pen without points, a text that is not a string) is left out.
+      let migrated: ReturnType<typeof annotationLayerFor>;
+      try {
+        migrated = annotationLayerFor(annotation, { ...(ctx.canvas ?? { width: 1, height: 1 }), shaper: ctx.text?.shaper ?? null, createCanvas: ctx.text?.createCanvas });
+      } catch (e) {
+        ctx.problems.push(`Layer "${base.name || id}": the annotation could not be read (${e instanceof Error ? e.message : String(e)})`);
+        return null;
+      }
       if (migrated.type === 'shape' || migrated.type === 'type') {
         const blend = base.blend === 'normal' ? migrated.blend : base.blend;
         return { ...migrated, ...base, blend, id, name: base.name } as ShapeLayer | TypeLayer;
