@@ -334,6 +334,16 @@
         "default": "./dist/three/index.cjs"
       }
     },
+    "./page-kit": {
+      "import": {
+        "types": "./dist/page-kit/index.d.ts",
+        "default": "./dist/page-kit/index.js"
+      },
+      "require": {
+        "types": "./dist/page-kit/index.d.cts",
+        "default": "./dist/page-kit/index.cjs"
+      }
+    },
     "./chart-maps": {
       "import": {
         "types": "./dist/chart-maps/index.d.ts",
@@ -477,6 +487,9 @@
       "chart": [
         "./dist/chart/index.d.ts"
       ],
+      "page-kit": [
+        "./dist/page-kit/index.d.ts"
+      ],
       "three": [
         "./dist/three/index.d.ts"
       ],
@@ -513,6 +526,7 @@
     "test": "vitest run",
     "test:corpus": "node scripts/fetch-psd-corpus.mjs && PSD_CORPUS=1 vitest run tests/psd-corpus.test.ts",
     "build:wasm": "node scripts/build-wet-wasm.mjs",
+    "build:page-kit": "node scripts/build-page-kit.mjs",
     "eval:tools": "vitest run --config vitest.eval.config.ts --disableConsoleIntercept"
   },
   "devDependencies": {

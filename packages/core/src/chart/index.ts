@@ -6,6 +6,7 @@ export * from './links.js';
 export * from './race.js';
 export * from './maps.js';
 export * from './scale.js';
+export * from './number-text.js';
 export * from './numfmt.js';
 export * from './color.js';
 export * from './date.js';

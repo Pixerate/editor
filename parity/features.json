@@ -1256,6 +1256,13 @@
           "swift": "✅ (`elbow`, `fanElbows`, `roundedPolyline`, `helix`, `splitByDepth` in PixerateGeometry, checked against the TS fixtures)"
         },
         {
+          "feature": "Page Kit for Generated Pages (core's 2-D helpers as one strings-only bundle for sandboxed, model-written pages: label placement, isometric projection, connectors, fans and helices, path length / point / trim, text fitting with a canvas measure, contrast and ink, colour mixing and ramps, nice scales and number formats, SVG elements, host theme tokens, redraw on resize, and the page motion contract with frame-pure seek; a guide for models checked against the exports; under 60 kB; web only)",
+          "core": "`PAGE_KIT`, `PAGE_KIT_GUIDE`, `PAGE_KIT_FILES`, `PAGE_KIT_VERSION`, `PAGE_KIT_HASH` (`/page-kit`), `formatPlainChartNumber` (`/chart`)",
+          "react": "Via core (inline `PAGE_KIT` in a sandboxed frame)",
+          "svelte": "Via core (inline `PAGE_KIT` in a sandboxed frame)",
+          "swift": "Not applicable: web pages only (a WKWebView host inlines the same script)"
+        },
+        {
           "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor; an isometric perspective grid (`isometric: { angle }`, planes floor / left / right, nothing recedes) with an Iso preset)",
           "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `vectorIsometricPerspectivePreset`, `vector.setPerspective` `isometric`, `mermaidToSvg` `projection`",
           "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`)",

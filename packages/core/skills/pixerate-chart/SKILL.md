@@ -316,6 +316,17 @@ the user wants to edit, annotate or restyle the chart itself. Bar chart roles: `
 series, `surface` the background, `ink` the title and legend, `ink-muted` ticks and axes, `border`
 the grid. Sparkline: `accent` is the line.
 
+## Data visuals as sandboxed pages
+
+Some data visuals are written as a page that runs in a sandboxed frame rather than as a chart:
+lineage fans, braids, isometric stacks, ridge waves. When you write that page, use the **page
+kit**, which the host inlines as `window.pixerateKit` (`@pixerate/editor/page-kit`: `PAGE_KIT`, with
+`PAGE_KIT_GUIDE` as its guide). It holds the editors' own label placement, connectors and fans,
+helices with over/under runs, path lengths and trims, text fitting, contrast and ink, nice scales
+and number formats, and the page motion contract (`defineMotion`: frame-pure, `p = 1` at rest,
+which the host can seek). Don't re-derive these in the page. Read the guide the host gives you.
+The page loads nothing from the network.
+
 ## Pitfalls
 
 - With agent playback on, value changes and selections are dragged by the chart's director, and other changes are clicked on the inspector option, data grid or toolbar they belong to. Results are unchanged.
