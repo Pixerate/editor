@@ -674,6 +674,10 @@ extension PaintEditorController {
             let now = JS.round(Date().timeIntervalSince1970 * 1000)
             state = state.with { $0.lastGrownAt = now }
         }
+        // The dry an opened document's log ends with is what opening the file does anyway: while it still ends the log, it isn't written.
+        if let events = state.wetEvents, let last = events.last, let opened = openedDry, last.key == opened.key, last.clock == wet.clock, last.replayAt >= Double(state.strokes.count) {
+            state = state.with { $0.wetEvents = events.count > 1 ? Array(events.dropLast()) : nil }
+        }
         return state
     }
 }

@@ -339,7 +339,7 @@ extension PaintEditorController {
     private func schemeReplayHost(_ scheme: String) -> SchemeReplayHost {
         SchemeReplayHost(
             document: { [unowned self] in doc },
-            clock: { [unowned self] in wet.world?.clock ?? 0 },
+            clock: { [unowned self] in wet.clock },
             liveStroke: { [unowned self] in liveStrokeRecord() },
             inScheme: { [unowned self] st in schemeStroke(st, scheme) },
             createTarget: { [unowned self] in
@@ -461,7 +461,7 @@ extension PaintEditorController {
 
     /// A replay editor's state after an item, for a scheme replay to come back to (undo).
     func replayCheckpoint() -> ReplayCheckpoint {
-        ReplayCheckpoint(doc: doc, wet: wet.snapshot(), tilt: wet.tilt, settings: wet.settings, clock: wet.world?.clock ?? 0)
+        ReplayCheckpoint(doc: doc, wet: wet.snapshot(), tilt: wet.tilt, settings: wet.settings, clock: wet.clock)
     }
 
     /// Puts a `replayCheckpoint` back. False when it can't (mid-stroke, or its clock can't be restored).
@@ -471,9 +471,9 @@ extension PaintEditorController {
         try? wet.restore(cp.wet)
         _ = wet.setTilt(angle: cp.tilt.angle, direction: cp.tilt.direction)
         wet.settings = cp.settings
-        if let w = wet.world, w.clock != cp.clock, w.laneIds().isEmpty { w.setClock(cp.clock) }
+        if wet.clock != cp.clock { wet.setClock(cp.clock) }
         emit()
-        return (wet.world?.clock ?? 0) == cp.clock
+        return wet.clock == cp.clock
     }
 
     /// Drops the undo history (a replay editor keeps checkpoints of its own instead).
@@ -513,7 +513,7 @@ extension PaintEditorController {
      * or event names can't come from the log, so it is marked now in `d` (saved with the document);
      * one the log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
      */
-    func openLedger(_ d: PaintDocumentState, complete: Bool) {
+    func openLedger(_ d: PaintDocumentState, complete: Bool, wetLog: OpenedWetLog? = nil) {
         openedCheck?.replay?.dispose()
         openedCheck = nil
         if complete || replayTarget { return }
@@ -544,7 +544,10 @@ extension PaintEditorController {
             }
         }
         if !unlogged.isEmpty { d.unlogged = unlogged }
-        if !pending.isEmpty { openedCheck = OpenedCheck(doc: d, pending: pending, events: Set((d.paintEvents ?? []).map(\.key))) }
+        // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`), but not the
+        // dry that ends it: an older document doesn't say how long its paint flowed on before it was saved.
+        let checked: PaintDocumentState = wetLog.map { log in d.with { $0.strokes = log.strokes; $0.wetEvents = Array(log.wetEvents.dropLast()) } } ?? d
+        if !pending.isEmpty { openedCheck = OpenedCheck(doc: checked, pending: pending, events: Set((d.paintEvents ?? []).map(\.key))) }
     }
 
     /**

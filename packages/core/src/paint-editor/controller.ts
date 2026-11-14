@@ -146,7 +146,7 @@ import {
   type LivePatternsSettings,
 } from '../paint/live-patterns';
 import { wetSupport } from '../paint/wet/wasm';
-import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
+import { buildTimeLapse, emptiedLayers, loggedWetClock, MAX_WET_CLOCK, openedWetLog, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { pixelsMatch, SchemeReplay, type SchemeReplayHost, type SchemeReplayState } from './scheme-replay';
 import { WET_TILE } from '../paint/wet/model';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
@@ -1395,7 +1395,7 @@ export class PaintEditorController {
         overlay: this.wet.overlay,
         instantDry: this.wet.instantDry,
         speed: this.wet.speed,
-        clock: this.wet.world?.clock ?? 0,
+        clock: this.wet.clock,
         tilt: { ...this.wet.tilt },
         gpu: this.wet.gpuMode,
         gpuActive: Boolean(this.wet.world?.gpuActive),
@@ -1675,7 +1675,7 @@ export class PaintEditorController {
   private pendingWetEvents: WetEvent[] = [];
 
   private logWet(e: Omit<WetEvent, 'clock'>): void {
-    this.pendingWetEvents.push({ clock: this.wet.world?.clock ?? 0, at: this.doc.strokes.length, ...e });
+    this.pendingWetEvents.push({ clock: this.wet.clock, at: this.doc.strokes.length, ...e });
   }
 
   /** The document with a paint event appended (for replays). */
@@ -3887,6 +3887,8 @@ export class PaintEditorController {
    * scheme needs one of them (`startOpenedCheck`). View state: never saved or undone.
    */
   private openedCheck: OpenedCheck | null = null;
+  /** The dry that ends an opened document's log (`openedWetLog`): what opening the file does, so a save it still ends is not written. */
+  private openedDry: WetEvent | null = null;
 
   /**
    * Which pixel layers hold dual-colour strokes painted in the other scheme's side: `replay` (the
@@ -3950,7 +3952,7 @@ export class PaintEditorController {
   private schemeReplayHost(scheme: ColorScheme): SchemeReplayHost {
     return {
       document: () => this.doc,
-      clock: () => this.wet.world?.clock ?? 0,
+      clock: () => this.wet.clock,
       liveStroke: () => this.liveStrokeRecord(),
       inScheme: (st) => this.schemeStroke(st, scheme),
       createTarget: () => {
@@ -4029,7 +4031,7 @@ export class PaintEditorController {
   replayCheckpoint(): ReplayCheckpoint {
     const settings = new Map<string, WetLayerSettings>();
     for (const [id, v] of this.wet.settings) settings.set(id, cloneWetSettings(v));
-    return { doc: this.doc, wet: this.wet.snapshot(), tilt: { ...this.wet.tilt }, settings, clock: this.wet.world?.clock ?? 0 };
+    return { doc: this.doc, wet: this.wet.snapshot(), tilt: { ...this.wet.tilt }, settings, clock: this.wet.clock };
   }
 
   /** @internal Puts a `replayCheckpoint` back. `false` when it can't (mid-stroke, mid-step, or its clock can't be restored). */
@@ -4040,10 +4042,9 @@ export class PaintEditorController {
     this.wet.setTilt(cp.tilt);
     this.wet.settings.clear();
     for (const [id, v] of cp.settings) this.wet.settings.set(id, cloneWetSettings(v));
-    const w = this.wet.world;
-    if (w && w.clock !== cp.clock && !w.laneIds().length) w.clock = cp.clock;
+    if (this.wet.clock !== cp.clock) this.wet.setClock(cp.clock);
     this.emit();
-    return (this.wet.world?.clock ?? 0) === cp.clock;
+    return this.wet.clock === cp.clock;
   }
 
   /** @internal A replay editor's layers replaced (layers it is missing added), outside history. */
@@ -4567,7 +4568,12 @@ export class PaintEditorController {
     if (init.effect) stroke.paint = JSON.parse(JSON.stringify(init.effect.source));
     else if (init.paint) stroke.paint = JSON.parse(JSON.stringify(init.paint));
     if (init.mixerLoad.reservoir || init.mixerLoad.pickup) stroke.load = JSON.parse(JSON.stringify(init.mixerLoad));
-    if (init.wet) stroke.steps = [...init.wet.driver.steps];
+    if (init.wet) {
+      stroke.steps = [...init.wet.driver.steps];
+      // Pen-up applied at a later clock than the last point (the simulation ran in between): a replay ends it there too.
+      const end = init.wet.driver.endStep;
+      if (end !== null && stroke.steps.length && end > stroke.steps[stroke.steps.length - 1]) stroke.endStep = end;
+    }
     // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
     const fuel = init.antimatter?.targets;
     if (fuel?.length) stroke.targets = fuel.map((t) => t.id);
@@ -6359,7 +6365,7 @@ export class PaintEditorController {
   async timeLapse(options: TimeLapseOptions = {}): Promise<TimeLapse> {
     const target = this.createReplayTarget(1);
     try {
-      return await buildTimeLapse(this.withCulturePreviewEvents(), target, options);
+      return await buildTimeLapse(this.withCulturePreviewEvents(), target, options, this.wet.clock);
     } finally {
       target.dispose();
     }
@@ -6379,7 +6385,7 @@ export class PaintEditorController {
   async renderHighRes(options: { scale: number; paper?: boolean }): Promise<PixelImage> {
     const target = this.createReplayTarget(options.scale);
     try {
-      await replayPainting(this.withCulturePreviewEvents(), target, { scale: options.scale });
+      await replayPainting(this.withCulturePreviewEvents(), target, { scale: options.scale, clock: this.wet.clock });
       await target.wetIdle();
       return target.compositePixels({ paper: options.paper, wet: 'dried' });
     } finally {
@@ -6543,7 +6549,7 @@ export class PaintEditorController {
 
   /** Records a settings change as a wet event (not an undo step). */
   private recordWetSetting(e: Omit<WetEvent, 'clock'>): void {
-    this.doc = { ...this.doc, wetEvents: [...(this.doc.wetEvents ?? []), { clock: this.wet.world?.clock ?? 0, at: this.doc.strokes.length, ...e }] };
+    this.doc = { ...this.doc, wetEvents: [...(this.doc.wetEvents ?? []), { clock: this.wet.clock, at: this.doc.strokes.length, ...e }] };
   }
 
   /** Changes a layer's wet settings (viscosity, evaporation, granulation…). Editor settings saved with the document, not an undo step. */
@@ -7146,11 +7152,24 @@ export class PaintEditorController {
     const layers = this.driedLayers(state.layers);
     if (layers !== state.layers) state = { ...state, layers };
     if (state.growWhileClosed) state = { ...state, lastGrownAt: Date.now() };
+    // The dry an opened document's log ends with is what opening the file does anyway: while it still ends the log, it isn't written.
+    const events = state.wetEvents ?? [];
+    const last = events[events.length - 1];
+    if (last && last === this.openedDry && last.clock === this.wet.clock && (last.at ?? 0) >= state.strokes.length) {
+      const { wetEvents: _e, ...rest } = state;
+      state = events.length > 1 ? { ...rest, wetEvents: events.slice(0, -1) } : rest;
+    }
     return state;
   }
 
-  /** Wet settings saved with the document (`null` when they are all defaults). */
-  private wetJSON(): unknown {
+  /**
+   * Wet settings saved with the document (`undefined` when they are all defaults), with the wet
+   * clock (`clock`) when it is past the latest clock the saved log records: the paint flowed on
+   * after the last logged item before this save dried it, and a reader's replay steps to it.
+   */
+  private wetJSON(state: PaintDocumentState, strokes: StrokeLogOption | undefined, extensions: PaintDocumentExtensions): unknown {
+    const savedLog = savesStrokeLog(state, { strokes, extensions }) ? state : { strokes: [], wetEvents: state.wetEvents };
+    const clock = this.wet.clock > loggedWetClock(savedLog) ? this.wet.clock : null;
     const layers: Record<string, WetLayerSettings> = {};
     for (const [id, set] of this.wet.settings) {
       if (!findLayer(this.doc.layers, id)) continue;
@@ -7166,14 +7185,20 @@ export class PaintEditorController {
       };
     }
     const flat = this.wet.tilt.angle === 0;
-    if (!Object.keys(layers).length && flat) return undefined;
-    return { tilt: { ...this.wet.tilt }, layers };
+    if (!Object.keys(layers).length && flat && clock === null) return undefined;
+    return { tilt: { ...this.wet.tilt }, layers, ...(clock !== null ? { clock } : {}) };
   }
 
-  private readWet(raw: unknown, problems: string[]): void {
+  /** Reads the saved wet settings; returns the saved wet clock (`null` when none was saved). */
+  private readWet(raw: unknown, problems: string[]): number | null {
     this.wet.reset();
-    if (!raw || typeof raw !== 'object') return;
-    const r = raw as { tilt?: unknown; layers?: unknown };
+    if (!raw || typeof raw !== 'object') return null;
+    const r = raw as { tilt?: unknown; layers?: unknown; clock?: unknown };
+    let clock: number | null = null;
+    if (r.clock !== undefined) {
+      if (Number.isInteger(r.clock) && (r.clock as number) >= 0 && (r.clock as number) <= MAX_WET_CLOCK) clock = r.clock as number;
+      else problems.push(`wet.clock ${JSON.stringify(r.clock)} is not a whole number of steps from 0 to ${MAX_WET_CLOCK}; the clock the log ends at is used.`);
+    }
     this.wet.setTilt(normalizeTilt((r.tilt as Partial<WetTilt>) ?? {}));
     if (r.layers && typeof r.layers === 'object') {
       for (const [id, v] of Object.entries(r.layers as Record<string, unknown>)) {
@@ -7193,6 +7218,7 @@ export class PaintEditorController {
         if (livePatterns) this.wet.patternFieldOf(id).configure(livePatterns);
       }
     }
+    return clock;
   }
 
   /** Thick paint and light as saved (`layerChannels`, `lighting`), merged into the extensions. */
@@ -7470,7 +7496,8 @@ export class PaintEditorController {
   toJSON(options: { strokes?: StrokeLogOption } = {}): SerializedPaintDocument {
     this.flushCulturePreview();
     const state = this.savedState();
-    return serializePaintDocument(state, { strokes: options.strokes, extensions: this.ledgerExtensions(state, options.strokes), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    const extensions = this.ledgerExtensions(state, options.strokes);
+    return serializePaintDocument(state, { strokes: options.strokes, extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON(state, options.strokes, extensions) });
   }
 
   /**
@@ -7482,7 +7509,8 @@ export class PaintEditorController {
   toJSONExternal(store: PaintAssetStore, options: { strokes?: StrokeLogOption } = {}): Promise<SerializedPaintDocument> {
     this.flushCulturePreview();
     const state = this.savedState();
-    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.ledgerExtensions(state, options.strokes), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    const extensions = this.ledgerExtensions(state, options.strokes);
+    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions, guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON(state, options.strokes, extensions) });
   }
 
   /**
@@ -7522,7 +7550,7 @@ export class PaintEditorController {
    * or event names can't come from the log, so it is marked now (saved with the document); one the
    * log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
    */
-  private openLedger(complete: boolean): void {
+  private openLedger(complete: boolean, wetLog: ReturnType<typeof openedWetLog> = null): void {
     this.openedCheck?.replay?.dispose();
     this.openedCheck = null;
     if (complete || this.replayTarget) return;
@@ -7549,7 +7577,10 @@ export class PaintEditorController {
       else unlogged[l.id] = label;
     }
     if (Object.keys(unlogged).length) this.doc = { ...d, unlogged };
-    if (pending.size) this.openedCheck = { doc: this.doc, pending, events: new Set(d.paintEvents ?? []), results: null, running: null, replay: null, revision: 0 };
+    // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`), but not the
+    // dry that ends it: an older document doesn't say how long its paint flowed on before it was saved.
+    const checked = wetLog ? { ...this.doc, strokes: wetLog.strokes, wetEvents: wetLog.wetEvents.slice(0, -1) } : this.doc;
+    if (pending.size) this.openedCheck = { doc: checked, pending, events: new Set(d.paintEvents ?? []), results: null, running: null, replay: null, revision: 0 };
   }
 
   /**
@@ -7622,7 +7653,7 @@ export class PaintEditorController {
     this.culturePreview = null;
     this.culturePaused = false;
     this.extensions = loaded.extensions;
-    this.readWet(loaded.wet, loaded.problems);
+    const wetClock = this.readWet(loaded.wet, loaded.problems);
     this.readMixingPad(loaded.mixingPad, loaded.problems);
     this.readGuides(loaded.guides, loaded.state, loaded.problems);
     if (Array.isArray(loaded.swatches)) this.swatches = loaded.swatches.map(readSwatch).filter((x): x is Swatch => x !== null);
@@ -7636,7 +7667,12 @@ export class PaintEditorController {
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
     const unlogged = readUnlogged(loaded.extensions.unlogged, this.doc.layers);
     if (unlogged) this.doc = { ...this.doc, unlogged };
-    this.openLedger(loaded.extensions.unloggedComplete === true);
+    // The wet clock goes on from where the document's left it, and its log ends with the dry the save did (#720).
+    const wetLog = openedWetLog(this.doc, wetClock);
+    this.openLedger(loaded.extensions.unloggedComplete === true, wetLog);
+    if (wetLog) this.doc = { ...this.doc, strokes: wetLog.strokes, wetEvents: wetLog.wetEvents };
+    this.openedDry = wetLog?.dry ?? null;
+    this.wet.setClock(wetLog?.clock ?? wetClock ?? 0);
     this.nextMagnetId = 1;
     for (const m of this.doc.magnets ?? []) {
       const n = Number(/^mag(\d+)$/.exec(m.id)?.[1] ?? 0);

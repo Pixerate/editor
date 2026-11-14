@@ -1,0 +1,2569 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "color-scheme-wet-clock",
+  "description": "The wet clock through saving and reopening (#720), seen in the dark scheme's replay of light / dark watercolour on a pixel layer: a document whose second stroke's pen lifted after the paint flowed on (`endStep`) and whose paint flowed on after its last stroke (`wet.clock`) is opened and replayed to both; saved and reopened it is the same; a stroke painted after opening goes on from the saved clock, and reopening that two-session document replays the dry its save did between the sessions; an older two-session document, whose second session's clocks start again at 0, is replayed in order.",
+  "setup": {
+    "width": 48,
+    "height": 32,
+    "colorScheme": "dark"
+  },
+  "steps": [
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "load": {
+        "unloggedComplete": true,
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 48,
+        "height": 32,
+        "dpi": 300,
+        "paper": {
+          "preset": "cold-pressed",
+          "name": "Cold pressed watercolour",
+          "family": "watercolor",
+          "pattern": "cold-pressed",
+          "seed": 1,
+          "color": "#f7f3ea",
+          "scale": 1,
+          "tiling": "mirror",
+          "depth": 0.5,
+          "shading": 0.5,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          },
+          "absorption": 0.7,
+          "permeability": 0.5,
+          "roughness": 0.6
+        },
+        "activeLayerId": "plmwgrpnxa1",
+        "strokes": [
+          {
+            "id": "s1",
+            "layerId": "plmwgrpnxa1",
+            "color": "#1d4ed8",
+            "points": [
+              {
+                "x": 4,
+                "y": 10,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 11.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 11.818594853651364,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 10.282240016119735,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 8.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 8.082151450673724,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 9.441169003602148,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 11.313973197437578,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 3,
+            "dualColor": {
+              "light": "#1d4ed8",
+              "dark": "#93c5fd"
+            },
+            "load": {
+              "reservoir": [
+                0.11372549019607843,
+                0.3058823529411765,
+                0.8470588235294118
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "layerId": "plmwgrpnxa1",
+            "color": "#b91c1c",
+            "points": [
+              {
+                "x": 4,
+                "y": 20,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 21.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 21.818594853651362,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 20.282240016119733,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 18.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 18.082151450673724,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 19.44116900360215,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 21.313973197437576,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 4,
+            "dualColor": {
+              "light": "#b91c1c",
+              "dark": "#fca5a5"
+            },
+            "load": {
+              "reservoir": [
+                0.7254901960784313,
+                0.10980392156862745,
+                0.10980392156862745
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              5,
+              5,
+              5,
+              7,
+              7,
+              7,
+              9,
+              9
+            ],
+            "endStep": 16,
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          }
+        ],
+        "guides": {
+          "symmetry": {
+            "mode": "off",
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "rotation": 0,
+            "segments": 6,
+            "mirror": true
+          },
+          "perspective": {
+            "enabled": false,
+            "points": [],
+            "snap": true
+          },
+          "tracing": null,
+          "references": [],
+          "stencils": []
+        },
+        "swatches": [
+          {
+            "color": "#f7f5ee",
+            "name": "Warm white"
+          },
+          {
+            "color": "#f3d23a",
+            "name": "Lemon yellow"
+          },
+          {
+            "color": "#c8912f",
+            "name": "Yellow ochre"
+          },
+          {
+            "color": "#d23a2a",
+            "name": "Warm red"
+          },
+          {
+            "color": "#9e1f3d",
+            "name": "Crimson"
+          },
+          {
+            "color": "#8a4a2b",
+            "name": "Burnt earth"
+          },
+          {
+            "color": "#2f3f9e",
+            "name": "Deep blue"
+          },
+          {
+            "color": "#1d6f8f",
+            "name": "Cool blue"
+          },
+          {
+            "color": "#4f6e2c",
+            "name": "Leaf green"
+          },
+          {
+            "color": "#25221f",
+            "name": "Warm black"
+          }
+        ],
+        "wet": {
+          "tilt": {
+            "angle": 0,
+            "direction": 0
+          },
+          "layers": {
+            "plmwgrpnxa1": {
+              "params": {
+                "viscosity": 0.3,
+                "evaporation": 0.45,
+                "edgeDarkening": 0.5,
+                "pigmentWeight": 0.3,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "fixture": 0.2,
+                "bloom": 0.4,
+                "bleed": 0.3
+              },
+              "flow": {
+                "kind": "none",
+                "strength": 0.5,
+                "angle": 0,
+                "clockwise": true,
+                "scale": 120,
+                "seed": 1
+              }
+            }
+          },
+          "clock": 39
+        },
+        "layers": [
+          {
+            "id": "plmwgrpnxa1",
+            "name": "Layer 1",
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "type": "pixel",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "asset": "plmwgrpnxa1",
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "assets": {
+          "plmwgrpnxa1": "data:image/png;base64,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"
+        }
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Layer 1",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 3,
+            "state": "ready",
+            "total": 3
+          },
+          "scheme": "dark"
+        },
+        "loaded": [],
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.1.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ec8fa83e62887a4cd00346a0e34b97ff40d8a585b6c50ea40199628f63f3bed4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:2e2-fdpxqsfsef"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#1d4ed8",
+                "dualColor": {
+                  "dark": "#93c5fd",
+                  "light": "#1d4ed8"
+                },
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.11372549019607843,
+                    0.3058823529411765,
+                    0.8470588235294118
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 10
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 11.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 11.818594853651364
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 10.282240016119735
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 8.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 8.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 9.441169003602148
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 11.313973197437578
+                  }
+                ],
+                "seed": 3,
+                "steps": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#b91c1c",
+                "dualColor": {
+                  "dark": "#fca5a5",
+                  "light": "#b91c1c"
+                },
+                "endStep": 16,
+                "id": "s2",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.7254901960784313,
+                    0.10980392156862745,
+                    0.10980392156862745
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 21.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 21.818594853651362
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 20.282240016119733
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 18.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 18.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 19.44116900360215
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 21.313973197437576
+                  }
+                ],
+                "seed": 4,
+                "steps": [
+                  5,
+                  5,
+                  5,
+                  7,
+                  7,
+                  7,
+                  9,
+                  9
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "unloggedComplete": true,
+            "version": 2,
+            "wet": {
+              "clock": 39,
+              "layers": {
+                "@1": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "265c2fce72f1921de19c91ef84a13ac41f7dca54de20cdc61934e1cb0c817673",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Layer 1",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 3,
+            "state": "ready",
+            "total": 3
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ec8fa83e62887a4cd00346a0e34b97ff40d8a585b6c50ea40199628f63f3bed4",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "set_color",
+      "arguments": {
+        "dualColor": {
+          "light": "#065f46",
+          "dark": "#6ee7b7"
+        }
+      },
+      "expect": {
+        "result": {
+          "color": "#6ee7b7",
+          "dualColor": {
+            "dark": "#6ee7b7",
+            "light": "#065f46"
+          },
+          "locked": false,
+          "secondaryColor": "#ffffff"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "layerId": "plmwgrpnxa1",
+        "points": [
+          {
+            "x": 4,
+            "y": 26,
+            "pressure": 0.8
+          },
+          {
+            "x": 24,
+            "y": 24,
+            "pressure": 0.8
+          },
+          {
+            "x": 44,
+            "y": 26,
+            "pressure": 0.8
+          }
+        ],
+        "brushId": "watercolor-round",
+        "seed": 9
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 38,
+            "width": 74,
+            "x": -14,
+            "y": 6
+          },
+          "dabs": 14,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#6ee7b7"
+          },
+          "strokeId": "s3",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "advance_wet_paint",
+      "arguments": {
+        "steps": 6
+      },
+      "expect": {
+        "result": {
+          "clock": 45,
+          "layers": [
+            {
+              "activeTiles": 1,
+              "flow": {
+                "angle": 0,
+                "clockwise": true,
+                "kind": "none",
+                "scale": 120,
+                "seed": 1,
+                "strength": 0.5
+              },
+              "layerId": "@1",
+              "livePatterns": null,
+              "params": {
+                "bleed": 0.3,
+                "bloom": 0.4,
+                "edgeDarkening": 0.5,
+                "evaporation": 0.45,
+                "fixture": 0.2,
+                "granulation": 0.4,
+                "pickup": 0.2,
+                "pigmentWeight": 0.3,
+                "viscosity": 0.3
+              },
+              "wet": true,
+              "wetBounds": {
+                "height": 22,
+                "width": 48,
+                "x": 0,
+                "y": 10
+              },
+              "wetCells": 1027
+            }
+          ],
+          "steps": 6,
+          "stillWet": true
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Layer 1",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 4,
+            "state": "ready",
+            "total": 4
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.7.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ad14a60aef8c8d06ad5a21a438736b0ffd2fbe3bad0d571fdb2d88a15bcdb6b1",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "pixels": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@1",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@1",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@1",
+            "assets": {
+              "@1": "pixerate-asset:2ka-a3j3yrmpg7"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@1",
+                "blend": "normal",
+                "id": "@1",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#1d4ed8",
+                "dualColor": {
+                  "dark": "#93c5fd",
+                  "light": "#1d4ed8"
+                },
+                "id": "s1",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.11372549019607843,
+                    0.3058823529411765,
+                    0.8470588235294118
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 10
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 11.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 11.818594853651364
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 10.282240016119735
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 8.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 8.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 9.441169003602148
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 11.313973197437578
+                  }
+                ],
+                "seed": 3,
+                "steps": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#b91c1c",
+                "dualColor": {
+                  "dark": "#fca5a5",
+                  "light": "#b91c1c"
+                },
+                "endStep": 16,
+                "id": "s2",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.7254901960784313,
+                    0.10980392156862745,
+                    0.10980392156862745
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 20
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 21.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 21.818594853651362
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 20.282240016119733
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 18.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 18.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 19.44116900360215
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 21.313973197437576
+                  }
+                ],
+                "seed": 4,
+                "steps": [
+                  5,
+                  5,
+                  5,
+                  7,
+                  7,
+                  7,
+                  9,
+                  9
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#6ee7b7",
+                "dualColor": {
+                  "dark": "#6ee7b7",
+                  "light": "#065f46"
+                },
+                "id": "s3",
+                "layerId": "@1",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.43137254901960786,
+                    0.9058823529411765,
+                    0.7176470588235294
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 26
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 24,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 26
+                  }
+                ],
+                "seed": 9,
+                "steps": [
+                  39,
+                  39,
+                  39
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "unloggedComplete": true,
+            "version": 2,
+            "wet": {
+              "clock": 45,
+              "layers": {
+                "@1": {
+                  "flow": {
+                    "angle": 0,
+                    "clockwise": true,
+                    "kind": "none",
+                    "scale": 120,
+                    "seed": 1,
+                    "strength": 0.5
+                  },
+                  "params": {
+                    "bleed": 0.3,
+                    "bloom": 0.4,
+                    "edgeDarkening": 0.5,
+                    "evaporation": 0.45,
+                    "fixture": 0.2,
+                    "granulation": 0.4,
+                    "pickup": 0.2,
+                    "pigmentWeight": 0.3,
+                    "viscosity": 0.3
+                  }
+                }
+              },
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
+            "wetEvents": [
+              {
+                "at": 2,
+                "clock": 39,
+                "kind": "dry"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        },
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.8.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "4dc2a3a706960aa92710515182eb81edc4f4b79cd7fc116c37b236be09ec3402",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@1",
+              "name": "Layer 1",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 5,
+            "state": "ready",
+            "total": 5
+          },
+          "scheme": "dark"
+        },
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.9.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "ad14a60aef8c8d06ad5a21a438736b0ffd2fbe3bad0d571fdb2d88a15bcdb6b1",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "get_color_scheme_view",
+      "arguments": {
+        "wait": true
+      },
+      "load": {
+        "unloggedComplete": true,
+        "format": "pixerate-paint",
+        "version": 2,
+        "width": 48,
+        "height": 32,
+        "dpi": 300,
+        "paper": {
+          "preset": "cold-pressed",
+          "name": "Cold pressed watercolour",
+          "family": "watercolor",
+          "pattern": "cold-pressed",
+          "seed": 1,
+          "color": "#f7f3ea",
+          "scale": 1,
+          "tiling": "mirror",
+          "depth": 0.5,
+          "shading": 0.5,
+          "dry": {
+            "contrast": 1,
+            "invert": false
+          },
+          "wet": {
+            "contrast": 1,
+            "invert": false
+          },
+          "absorption": 0.7,
+          "permeability": 0.5,
+          "roughness": 0.6
+        },
+        "activeLayerId": "plmwgrpo1i2",
+        "strokes": [
+          {
+            "id": "s1",
+            "layerId": "plmwgrpo1i2",
+            "color": "#1d4ed8",
+            "points": [
+              {
+                "x": 4,
+                "y": 9,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 10.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 10.818594853651364,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 9.282240016119735,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 7.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 7.082151450673723,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 8.441169003602148,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 10.313973197437578,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 5,
+            "dualColor": {
+              "light": "#1d4ed8",
+              "dark": "#93c5fd"
+            },
+            "load": {
+              "reservoir": [
+                0.11372549019607843,
+                0.3058823529411765,
+                0.8470588235294118
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          },
+          {
+            "id": "s2",
+            "layerId": "plmwgrpo1i2",
+            "color": "#b91c1c",
+            "points": [
+              {
+                "x": 4,
+                "y": 17,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 18.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 18.818594853651362,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 17.282240016119733,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 15.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 15.082151450673724,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 16.44116900360215,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 18.313973197437576,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 6,
+            "dualColor": {
+              "light": "#b91c1c",
+              "dark": "#fca5a5"
+            },
+            "load": {
+              "reservoir": [
+                0.7254901960784313,
+                0.10980392156862745,
+                0.10980392156862745
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              21,
+              21,
+              21,
+              21,
+              21,
+              21,
+              21,
+              21
+            ],
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          },
+          {
+            "id": "s3",
+            "layerId": "plmwgrpo1i2",
+            "color": "#1d4ed8",
+            "points": [
+              {
+                "x": 4,
+                "y": 24,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 25.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 25.818594853651362,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 24.282240016119733,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 22.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 22.082151450673724,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 23.44116900360215,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 25.313973197437576,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 7,
+            "dualColor": {
+              "light": "#1d4ed8",
+              "dark": "#93c5fd"
+            },
+            "load": {
+              "reservoir": [
+                0.11372549019607843,
+                0.3058823529411765,
+                0.8470588235294118
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          },
+          {
+            "id": "s4",
+            "layerId": "plmwgrpo1i2",
+            "color": "#b91c1c",
+            "points": [
+              {
+                "x": 4,
+                "y": 14,
+                "pressure": 0.8
+              },
+              {
+                "x": 9.714285714285715,
+                "y": 15.682941969615793,
+                "pressure": 0.8
+              },
+              {
+                "x": 15.428571428571429,
+                "y": 15.818594853651364,
+                "pressure": 0.8
+              },
+              {
+                "x": 21.142857142857142,
+                "y": 14.282240016119735,
+                "pressure": 0.8
+              },
+              {
+                "x": 26.857142857142858,
+                "y": 12.486395009384143,
+                "pressure": 0.8
+              },
+              {
+                "x": 32.57142857142857,
+                "y": 12.082151450673724,
+                "pressure": 0.8
+              },
+              {
+                "x": 38.285714285714285,
+                "y": 13.441169003602148,
+                "pressure": 0.8
+              },
+              {
+                "x": 44,
+                "y": 15.313973197437578,
+                "pressure": 0.8
+              }
+            ],
+            "seed": 8,
+            "dualColor": {
+              "light": "#b91c1c",
+              "dark": "#fca5a5"
+            },
+            "load": {
+              "reservoir": [
+                0.7254901960784313,
+                0.10980392156862745,
+                0.10980392156862745
+              ],
+              "amount": 1,
+              "pickup": null
+            },
+            "steps": [
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4,
+              4
+            ],
+            "brush": {
+              "id": "watercolor-round",
+              "name": "Watercolour round",
+              "kind": "mark",
+              "medium": "paint",
+              "variety": "watercolor",
+              "tip": {
+                "shape": "round",
+                "size": 28,
+                "hardness": 0.6,
+                "spacing": 0.12
+              },
+              "dynamics": {
+                "smoothing": 0.25,
+                "pressureOpacity": true,
+                "minSize": 0.35
+              },
+              "behaviour": {
+                "surface": "wet",
+                "exchange": {
+                  "pickup": 0.55
+                },
+                "wet": {
+                  "water": 0.55,
+                  "rewet": 0.2
+                }
+              }
+            }
+          }
+        ],
+        "guides": {
+          "symmetry": {
+            "mode": "off",
+            "center": {
+              "x": 24,
+              "y": 16
+            },
+            "rotation": 0,
+            "segments": 6,
+            "mirror": true
+          },
+          "perspective": {
+            "enabled": false,
+            "points": [],
+            "snap": true
+          },
+          "tracing": null,
+          "references": [],
+          "stencils": []
+        },
+        "swatches": [
+          {
+            "color": "#f7f5ee",
+            "name": "Warm white"
+          },
+          {
+            "color": "#f3d23a",
+            "name": "Lemon yellow"
+          },
+          {
+            "color": "#c8912f",
+            "name": "Yellow ochre"
+          },
+          {
+            "color": "#d23a2a",
+            "name": "Warm red"
+          },
+          {
+            "color": "#9e1f3d",
+            "name": "Crimson"
+          },
+          {
+            "color": "#8a4a2b",
+            "name": "Burnt earth"
+          },
+          {
+            "color": "#2f3f9e",
+            "name": "Deep blue"
+          },
+          {
+            "color": "#1d6f8f",
+            "name": "Cool blue"
+          },
+          {
+            "color": "#4f6e2c",
+            "name": "Leaf green"
+          },
+          {
+            "color": "#25221f",
+            "name": "Warm black"
+          }
+        ],
+        "layers": [
+          {
+            "id": "plmwgrpo1i2",
+            "name": "Layer 1",
+            "visible": true,
+            "opacity": 1,
+            "blend": "normal",
+            "type": "pixel",
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "asset": "plmwgrpo1i2",
+            "x": 0,
+            "y": 0
+          }
+        ],
+        "assets": {
+          "plmwgrpo1i2": "data:image/png;base64,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"
+        }
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "layers": [
+            {
+              "layerId": "@2",
+              "name": "Layer 1",
+              "state": "ready",
+              "view": "replay"
+            }
+          ],
+          "replay": {
+            "error": null,
+            "items": 6,
+            "state": "ready",
+            "total": 6
+          },
+          "scheme": "dark"
+        },
+        "loaded": [],
+        "pixels": {
+          "file": "png/color-scheme-wet-clock.10.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "5c1ed0fd348f8f0cd53e6a2538c1090b711ea7c4e9c4d3983c6f943dd8a1abcf",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "@2",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": {
+                "height": 32,
+                "width": 48,
+                "x": 0,
+                "y": 0
+              },
+              "clipped": false,
+              "depth": 0,
+              "id": "@2",
+              "locks": {},
+              "name": "Layer 1",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "@2",
+            "assets": {
+              "@2": "pixerate-asset:2gq-wojx0wy0tv"
+            },
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 24,
+                  "y": 16
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 32,
+            "layers": [
+              {
+                "asset": "@2",
+                "blend": "normal",
+                "id": "@2",
+                "name": "Layer 1",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true,
+                "x": 0,
+                "y": 0
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#f7f3ea",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "strokes": [
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#1d4ed8",
+                "dualColor": {
+                  "dark": "#93c5fd",
+                  "light": "#1d4ed8"
+                },
+                "id": "s1",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.11372549019607843,
+                    0.3058823529411765,
+                    0.8470588235294118
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 9
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 10.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 10.818594853651364
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 9.282240016119735
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 7.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 7.082151450673723
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 8.441169003602148
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 10.313973197437578
+                  }
+                ],
+                "seed": 5,
+                "steps": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0,
+                  0
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#b91c1c",
+                "dualColor": {
+                  "dark": "#fca5a5",
+                  "light": "#b91c1c"
+                },
+                "id": "s2",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.7254901960784313,
+                    0.10980392156862745,
+                    0.10980392156862745
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 17
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 18.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 18.818594853651362
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 17.282240016119733
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 15.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 15.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 16.44116900360215
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 18.313973197437576
+                  }
+                ],
+                "seed": 6,
+                "steps": [
+                  21,
+                  21,
+                  21,
+                  21,
+                  21,
+                  21,
+                  21,
+                  21
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#1d4ed8",
+                "dualColor": {
+                  "dark": "#93c5fd",
+                  "light": "#1d4ed8"
+                },
+                "id": "s3",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.11372549019607843,
+                    0.3058823529411765,
+                    0.8470588235294118
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 24
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 25.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 25.818594853651362
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 24.282240016119733
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 22.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 22.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 23.44116900360215
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 25.313973197437576
+                  }
+                ],
+                "seed": 7,
+                "steps": [
+                  32,
+                  32,
+                  32,
+                  32,
+                  32,
+                  32,
+                  32,
+                  32
+                ]
+              },
+              {
+                "brush": {
+                  "behaviour": {
+                    "exchange": {
+                      "pickup": 0.55
+                    },
+                    "surface": "wet",
+                    "wet": {
+                      "rewet": 0.2,
+                      "water": 0.55
+                    }
+                  },
+                  "dynamics": {
+                    "minSize": 0.35,
+                    "pressureOpacity": true,
+                    "smoothing": 0.25
+                  },
+                  "id": "watercolor-round",
+                  "kind": "mark",
+                  "medium": "paint",
+                  "name": "Watercolour round",
+                  "tip": {
+                    "hardness": 0.6,
+                    "shape": "round",
+                    "size": 28,
+                    "spacing": 0.12
+                  },
+                  "variety": "watercolor"
+                },
+                "color": "#b91c1c",
+                "dualColor": {
+                  "dark": "#fca5a5",
+                  "light": "#b91c1c"
+                },
+                "id": "s4",
+                "layerId": "@2",
+                "load": {
+                  "amount": 1,
+                  "pickup": null,
+                  "reservoir": [
+                    0.7254901960784313,
+                    0.10980392156862745,
+                    0.10980392156862745
+                  ]
+                },
+                "points": [
+                  {
+                    "pressure": 0.8,
+                    "x": 4,
+                    "y": 14
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 9.714285714285715,
+                    "y": 15.682941969615793
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 15.428571428571429,
+                    "y": 15.818594853651364
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 21.142857142857142,
+                    "y": 14.282240016119735
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 26.857142857142858,
+                    "y": 12.486395009384143
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 32.57142857142857,
+                    "y": 12.082151450673724
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 38.285714285714285,
+                    "y": 13.441169003602148
+                  },
+                  {
+                    "pressure": 0.8,
+                    "x": 44,
+                    "y": 15.313973197437578
+                  }
+                ],
+                "seed": 8,
+                "steps": [
+                  36,
+                  36,
+                  36,
+                  36,
+                  36,
+                  36,
+                  36,
+                  36
+                ]
+              }
+            ],
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "unloggedComplete": true,
+            "version": 2,
+            "wetEvents": [
+              {
+                "at": 2,
+                "clock": 21,
+                "kind": "dry"
+              }
+            ],
+            "width": 48
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    }
+  ]
+}

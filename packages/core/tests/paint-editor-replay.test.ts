@@ -116,6 +116,12 @@ describe('advanceReplayClock (#855)', () => {
         clock += ran;
         return { steps: ran };
       },
+      wet: {
+        setClock: (c: number) => {
+          clock = c;
+          return true;
+        },
+      },
     };
     return { target: target as unknown as PaintEditorController, calls };
   };
@@ -137,9 +143,9 @@ describe('advanceReplayClock (#855)', () => {
     expect(seen).toEqual([3, 6, 7]);
   });
 
-  it('stops when the clock cannot move', async () => {
+  it('sets the clock where the simulation cannot step it (no world yet, #720)', async () => {
     const { target, calls } = fake(4);
-    expect(await advanceReplayClock(target, 10)).toBe(4);
+    expect(await advanceReplayClock(target, 10)).toBe(10);
     expect(calls).toEqual([10, 6]);
   });
 });

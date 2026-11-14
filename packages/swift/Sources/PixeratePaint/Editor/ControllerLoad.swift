@@ -51,7 +51,7 @@ extension PaintEditorController {
         culturePreview = nil
         culturePaused = false
         extensions = loaded.extensions
-        readWet(loaded.wet, &problems)
+        let wetClock = readWet(loaded.wet, &problems)
         readMixingPad(loaded.mixingPad, &problems)
         readGuides(loaded.guides, loaded.state, &problems)
         if let list = loaded.swatches?.arrayValue { swatches = list.compactMap(readSwatch) }
@@ -67,7 +67,15 @@ extension PaintEditorController {
         clearBlastAnimation()
         let state = readExtensions(loaded.state, loaded.extensions, &problems)
         if let unlogged = readUnlogged(loaded.extensions["unlogged"], state.layers) { state.unlogged = unlogged }
-        openLedger(state, complete: loaded.extensions["unloggedComplete"] == .bool(true))
+        // The wet clock goes on from where the document's left it, and its log ends with the dry the save did (#720).
+        let wetLog = openedWetLog(state, clock: wetClock)
+        openLedger(state, complete: loaded.extensions["unloggedComplete"] == .bool(true), wetLog: wetLog)
+        if let wetLog {
+            state.strokes = wetLog.strokes
+            state.wetEvents = wetLog.wetEvents
+        }
+        openedDry = wetLog?.dry
+        wet.setClock(wetLog?.clock ?? wetClock ?? 0)
         schemeViews = [:]
         schemeCopies = [:]
         preludeDry = []
@@ -102,13 +110,21 @@ extension PaintEditorController {
         if let n = idNumber(id, "s"), n >= strokeCounter { strokeCounter = n + 1 }
     }
 
-    /// Wet settings by layer and the tilt (`readWet`). Wet paint itself is saved dry.
-    private func readWet(_ raw: JSONValue?, _ problems: inout [String]) {
+    /// Wet settings by layer and the tilt (`readWet`). Wet paint itself is saved dry. Returns the saved wet clock (nil when none was saved).
+    private func readWet(_ raw: JSONValue?, _ problems: inout [String]) -> Int? {
         wet.reset()
-        guard let r = raw?.objectValue else { return }
+        guard let r = raw?.objectValue else { return nil }
+        var clock: Int? = nil
+        if let c = r["clock"] {
+            if let n = c.finite, n == n.rounded(.towardZero), n >= 0, n <= Double(MAX_WET_CLOCK) {
+                clock = Int(n)
+            } else {
+                problems.append("wet.clock \(c.stringified()) is not a whole number of steps from 0 to \(MAX_WET_CLOCK); the clock the log ends at is used.")
+            }
+        }
         let t = r["tilt"]?.objectValue ?? JSONObject()
         _ = wet.setTilt(angle: t["angle"]?.numberValue, direction: t["direction"]?.numberValue)
-        guard let layers = r["layers"]?.objectValue else { return }
+        guard let layers = r["layers"]?.objectValue else { return clock }
         for (id, v) in layers {
             guard let x = v.objectValue else {
                 problems.append("wet.layers[\"\(id)\"] is not wet settings; skipped.")
@@ -125,6 +141,7 @@ extension PaintEditorController {
             wet.settings.set(id, WetLayerSettings(params: normalizeWetParams(x["params"]?.objectValue ?? JSONObject()), flow: normalizeFlow(x["flow"]?.objectValue ?? JSONObject()), livePatterns: livePatterns, ghost: ghost))
             if let livePatterns { _ = wet.patternFieldOf(id).configure(livePatterns) }
         }
+        return clock
     }
 
     /// The mixing pad and the pads kept by name (`readMixingPad`).

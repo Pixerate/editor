@@ -262,6 +262,8 @@ public final class PaintEditorController {
      * scheme needs one of them (`startOpenedCheck`). View state: never saved or undone.
      */
     var openedCheck: OpenedCheck?
+    /// The dry that ends an opened document's log (`openedWetLog`): what opening the file does, so a save it still ends is not written.
+    var openedDry: WetEvent?
     /// Wet events logged only to dry a layer before a change outside the log (`dryLayersFirst`), by key: they don't put that change in the log.
     var preludeDry = Set<Int>()
     /**
@@ -2082,7 +2084,11 @@ public final class PaintEditorController {
         if !i.affineCopies.isEmpty { stroke.copies = i.affineCopies }
         if let e = i.effect { stroke.effect = e.source } else if let p = i.paint { stroke.paint = p }
         if i.mixerLoad.reservoir != nil || i.mixerLoad.pickup != nil { stroke.load = i.mixerLoad }
-        if let w = i.wet { stroke.steps = w.driver.steps }
+        if let w = i.wet {
+            stroke.steps = w.driver.steps
+            // Pen-up applied at a later clock than the last point (the simulation ran in between): a replay ends it there too.
+            if let end = w.driver.endStep, let last = w.driver.steps.last, end > last { stroke.endStep = end }
+        }
         // The fuel layers the stroke read (visible pixel layers at the time, or the replayed ones): a replay reads fuel from exactly these.
         if s.antimatterDriver != nil, let fuel = i.antimatter, !fuel.isEmpty { stroke.targets = fuel.map(\.id) }
         if let sc = i.scraper { stroke.scrapeLayerIds = sc.layerIds }
@@ -2450,7 +2456,7 @@ public final class PaintEditorController {
         out["guides"] = .object(guides.json)
         out["swatches"] = .array(swatches.map(\.json))
         if let pad = mixingPadJSON() { out["mixingPad"] = pad }
-        if let w = wetJSON() { out["wet"] = w }
+        if let w = wetJSON(d, savesLog: savesStrokeLog(d, strokeLog)) { out["wet"] = w }
         if let events = d.wetEvents, !events.isEmpty { out["wetEvents"] = .array(events.map(\.json)) }
         for (k, v) in thickJSON() { out[k] = v }
         for (k, v) in ferroJSON() { out[k] = v }

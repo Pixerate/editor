@@ -33,7 +33,7 @@ async function paint(c: PaintEditorController, steps: readonly Step[]): Promise<
       const st = c.beginStroke({ brushId: 'watercolor-round', color: s.color, seed: s.seed });
       for (const [i, p] of wave(s.y).entries()) {
         st.push([p]);
-        // Not after the last point: a replay ends the stroke there (it records no clock for the end).
+        // Not after the last point (pen-up then comes right after it, and the stroke records no `endStep`).
         if (i % 4 === 3 && i < 15) await c.advanceWet({ steps: 2 });
       }
       st.end();

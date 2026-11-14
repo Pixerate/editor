@@ -126,6 +126,8 @@ export class WetStrokeDriver {
   vortexSummary: VortexStrokeSummary | null = null;
   /** The world's clock at which each raw point was applied (recorded with the stroke). */
   readonly steps: number[] = [];
+  /** The world's clock at which the end (pen-up) was applied, once it has been (`null` before). */
+  endStep: number | null = null;
   private readonly smoother: PenSmoother;
   private readonly states: CopyState[];
   private readonly medium: WetMedium;
@@ -220,6 +222,7 @@ export class WetStrokeDriver {
         this.vortexPoints.push(raw);
       }
       if (this.finishing) {
+        this.endStep = this.init.world.clock;
         this.applyVortex(rects);
         this.finished = true;
       }
@@ -239,6 +242,7 @@ export class WetStrokeDriver {
       });
     }
     if (this.finishing) {
+      this.endStep = this.init.world.clock;
       const raw = this.lastRaw;
       const fed = this.lastFed;
       this.copies.forEach((c, i) => {
@@ -640,6 +644,8 @@ export class PaintWetLayers {
   private gpu: WetGpuEngine | null = null;
   private gpuSupport: WetGpuSupport | null = null;
   private gpuStarting: Promise<void> | null = null;
+  /** The clock while there is no world: a world made later starts at it, and dropping one keeps its clock here. */
+  private clockBase = 0;
 
   constructor(
     private readonly host: PaintWetHost,
@@ -711,6 +717,31 @@ export class PaintWetLayers {
     return { ...base, state: 'standby', reason: `The GPU takes over at ${this.gpuMinTiles} wet tiles (256 px).` };
   }
 
+  /**
+   * The simulation clock (steps). It never goes back on its own: a world made again (after a
+   * resize, a new canvas, or once all paint dried and the world was dropped) goes on from it, so
+   * the clocks a document logs only grow. Only opening a document (`setClock`) or undo (a restored
+   * snapshot) sets it back.
+   */
+  get clock(): number {
+    return this.world?.clock ?? this.clockBase;
+  }
+
+  /**
+   * Sets the clock while nothing is wet (no world, or one without wet layers): opening a document
+   * (its saved clock), a replay catching up, a restored checkpoint. `false` when there is wet paint.
+   */
+  setClock(clock: number): boolean {
+    const c = Math.max(0, Math.floor(clock));
+    const w = this.world;
+    if (w) {
+      if (w.laneIds().length || w.busy) return w.clock === c;
+      w.clock = c;
+    }
+    this.clockBase = c;
+    return true;
+  }
+
   /** The world (made on first use, at the canvas size). */
   ensureWorld(): WetWorld {
     const { width, height } = this.host.canvas();
@@ -725,6 +756,7 @@ export class PaintWetLayers {
 
   private makeWorld(width: number, height: number, paper: PaperSettings): WetWorld {
     const world = new WetWorld(width, height, wetPaperInput(paper), { kernel: this.options.kernel, threads: this.options.threads });
+    world.clock = this.clockBase;
     world.setTilt(this.tilt);
     world.gpuMinTiles = this.gpuMinTiles;
     if (this.gpu) world.attachGpu(this.gpu);
@@ -1226,7 +1258,7 @@ export class PaintWetLayers {
     if (!w || !w.laneIds().length) {
       if (!patterns.size) return null;
       return {
-        clock: w?.clock ?? 0,
+        clock: this.clock,
         tilt: { ...this.tilt },
         lanes: [],
         slots: new Map(),
@@ -1271,13 +1303,15 @@ export class PaintWetLayers {
   }
 
   private dropWorld(): void {
+    if (this.world) this.clockBase = this.world.clock;
     this.world?.destroy();
     this.world = null;
     this.driver = null;
   }
 
-  /** Forgets everything wet (a new canvas, a resize, opening a document). */
+  /** Forgets everything wet (a new canvas, a resize, opening a document); the clock goes on (see `clock`). */
   reset(): void {
+    if (this.world) this.clockBase = this.world.clock;
     this.world?.destroy();
     this.world = null;
     this.driver = null;
@@ -1311,6 +1345,7 @@ export class PaintWetLayers {
   }
 
   destroy(): void {
+    if (this.world) this.clockBase = this.world.clock;
     this.world?.destroy();
     this.world = null;
     this.gpu?.destroy();
