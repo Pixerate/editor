@@ -187,11 +187,20 @@ const XML_ENTITIES: Record<string, string> = {
 	apos: "'"
 };
 
+/** A character reference's text: a Unicode scalar value (not a surrogate, at most U+10FFFF), or `null`. */
+function xmlCharRef(n: number): string | null {
+	return Number.isInteger(n) && n >= 0 && n <= 0x10ffff && (n < 0xd800 || n > 0xdfff) ? String.fromCodePoint(n) : null;
+}
+
+/**
+ * Decodes the five XML entities and character references. An unknown name (even one every object
+ * inherits, such as `toString`) and a reference past U+10FFFF or to a surrogate stay as text (#767).
+ */
 function decodeXmlEntities(raw: string): string {
 	return raw.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (match, code: string) => {
-		if (code.startsWith('#x') || code.startsWith('#X')) return String.fromCodePoint(parseInt(code.slice(2), 16));
-		if (code.startsWith('#')) return String.fromCodePoint(parseInt(code.slice(1), 10));
-		return XML_ENTITIES[code] ?? match;
+		if (code.startsWith('#x') || code.startsWith('#X')) return xmlCharRef(parseInt(code.slice(2), 16)) ?? match;
+		if (code.startsWith('#')) return xmlCharRef(parseInt(code.slice(1), 10)) ?? match;
+		return Object.hasOwn(XML_ENTITIES, code) ? XML_ENTITIES[code] : match;
 	});
 }
 
