@@ -1259,6 +1259,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`)"
       },
       {
+        "feature": "Connectors and Helices for Data Visuals (rounded orthogonal elbows with a chosen turn level; fans of nested elbows from one root to a row of targets that never cross; strands wound around an axis with their depth, cut into front and back runs exactly at the crossings for over/under; exact lengths and path data pathops reads, for drawing on and labelling)",
+        "core": "`elbow`, `fanElbows`, `roundedPolyline`, `helix`, `splitByDepth` (`/tools`)",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "✅ (`elbow`, `fanElbows`, `roundedPolyline`, `helix`, `splitByDepth` in PixerateGeometry, checked against the TS fixtures)"
+      },
+      {
         "feature": "Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: \"isometric\"` draws a diagram as blocks on group tiles with edges on the floor; an isometric perspective grid (`isometric: { angle }`, planes floor / left / right, nothing recedes) with an Iso preset)",
         "core": "`isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `vectorIsometricPerspectivePreset`, `vector.setPerspective` `isometric`, `mermaidToSvg` `projection`",
         "react": "✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`)",
@@ -2782,6 +2789,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
+        "feature": "Fitting Labels to a Column (the largest size, and optionally tighter tracking, at which every word of a row of labels fits a width unbroken; two staggered rows when one is too tight; the caller measures text; `fit_text_to_width` agent tool on estimated widths)",
+        "core": "`fitText`, `staggerRows`, `estimatedMeasure` (`/typography`), `fit_text_to_width`",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "✅ (`fitText`, `staggerRows` and a CoreText `coreTextMeasure` in PixerateGeometry; the agent tool: Planned (#533))"
+      },
+      {
         "feature": "Font Stacks, Providers & Loading (system catalog, Local Font Access opt-in, web fonts)",
         "core": "`resolveFontFallback`, `createSystemFontProvider`, `createWebFontProvider`, `ensureFontsLoaded`",
         "react": "Via core",
@@ -2803,7 +2817,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
-        "feature": "Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …)",
+        "feature": "Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `fit_text_to_width`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …)",
         "core": "`createTypographyToolProvider`, `createFontPickerToolProvider`",
         "react": "`useAgentToolProvider`",
         "svelte": "`useAgentToolProvider`",

@@ -355,7 +355,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Vector editor</strong> (44)</summary>
+<summary><strong>Vector editor</strong> (45)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -402,6 +402,7 @@ Every feature is available from core and from both framework packages, except wh
 | Vector SVG Import / Export & Agent Commands | `parseVectorSvg`, `vectorDocumentToSvg` & `createVectorCommands` | `useVectorCommands` | `useVectorCommands` | Agent commands ✅ (`createVectorCommands`: every command with its contract metadata, enablement and Swift run), SVG export and import ✅ headless (`vectorDocumentToSvg`, `parseVectorSvg`); the editor's tools in a `ToolRegistry` agents and the user share, servable over the MCP bridge ✅ (`VectorEditorModel`); SVG import / export in the views: Planned (#533) |
 | Vector Provider Effects (optional: `addVectorEffect` adds a provider vector effect's picture at rest as a group of editable shapes tagged `providerEffect`; `updateVectorEffect` draws it again with new values, keeping its place; `detachVectorEffect` keeps the shapes; tags survive save and load without a provider; 6 agent tools) | `vectorEffectGroups`, `createVectorEffectsToolProvider` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | `<VectorEditor effects>`, `<VectorProviderEffectsPanel>`, `useVectorEffectsTools` | ✅ headless (`addVectorEffect`, `updateVectorEffect`, `detachVectorEffect`, `vectorEffectGroups`, `createVectorEffectsToolProvider`); the views: Planned (#533) |
 | Callouts and Label Placement (labels placed near their anchors and clear of the art, marks and each other, stepping outwards from preferred sides and wrapping when that fits better, with leader lines: `placeLabels` for any editor; `vector.placeCallouts` moves label nodes and draws leaders as one undo step; chart callouts and diagram SVG edge labels use it) | `placeLabels`, `labelHull` (`/tools`), `vector.placeCallouts` | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`vector.placeCallouts` in the command palette and agent tools) | ✅ (`placeLabels` in PixerateRaster, chart callouts, `vector.placeCallouts`) |
+| Connectors and Helices for Data Visuals (rounded orthogonal elbows with a chosen turn level; fans of nested elbows from one root to a row of targets that never cross; strands wound around an axis with their depth, cut into front and back runs exactly at the crossings for over/under; exact lengths and path data pathops reads, for drawing on and labelling) | `elbow`, `fanElbows`, `roundedPolyline`, `helix`, `splitByDepth` (`/tools`) | Via core | Via core | ✅ (`elbow`, `fanElbows`, `roundedPolyline`, `helix`, `splitByDepth` in PixerateGeometry, checked against the TS fixtures) |
 | Isometric (2.5D) Blocks and Diagrams (a projector for grid points (i, j, k) with box faces, outlines, grid lines on whole multiples and back-to-front order; `vector.addIsoBoxes` adds editable blocks shaded from one fill or per face as one undo step; `mermaidToSvg` / `render_diagram` `projection: "isometric"` draws a diagram as blocks on group tiles with edges on the floor; an isometric perspective grid (`isometric: { angle }`, planes floor / left / right, nothing recedes) with an Iso preset) | `isoProjector`, `isoOrder`, `isoFaceColors` (`/tools`), `vector.addIsoBoxes`, `vectorIsometricPerspectivePreset`, `vector.setPerspective` `isometric`, `mermaidToSvg` `projection` | ✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`) | ✅ (`vector.addIsoBoxes` in the command palette and agent tools; `render_diagram` projection; Iso preset in `VectorPerspectivePanel`) | ✅ (`IsoProjector` in PixerateGeometry, `vector.addIsoBoxes`, the isometric perspective grid); the isometric diagram export: Planned (#533) |
 
 </details>
@@ -701,16 +702,17 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Typography</strong> (6)</summary>
+<summary><strong>Typography</strong> (7)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
 | Type Scales, Hierarchies & Fluid Sizes | `computeTypeScale`, `generateTypeHierarchy`, `typeHierarchyToCss`, `computeFluidSize` (`/typography`) | Via core | Via core | Planned (#533) |
 | Readability & Type-Aware Contrast | `auditTextReadability`, `checkTypographyAccessibility` | Via core | Via core | Planned (#533) |
+| Fitting Labels to a Column (the largest size, and optionally tighter tracking, at which every word of a row of labels fits a width unbroken; two staggered rows when one is too tight; the caller measures text; `fit_text_to_width` agent tool on estimated widths) | `fitText`, `staggerRows`, `estimatedMeasure` (`/typography`), `fit_text_to_width` | Via core | Via core | ✅ (`fitText`, `staggerRows` and a CoreText `coreTextMeasure` in PixerateGeometry; the agent tool: Planned (#533)) |
 | Font Stacks, Providers & Loading (system catalog, Local Font Access opt-in, web fonts) | `resolveFontFallback`, `createSystemFontProvider`, `createWebFontProvider`, `ensureFontsLoaded` | Via core | Via core | Planned (#533) |
 | Text Segmentation for Animation | `segmentText` | Via core | Via core | Planned (#533) |
 | Font Picker & Typography Control | `FontPickerModel` | `<FontPicker>`, `<TypographyControl>`, `useFontPicker` | `<FontPicker>`, `<TypographyControl>`, `fontPickerOf` | Planned (#533) |
-| Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …) | `createTypographyToolProvider`, `createFontPickerToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` | Planned (#533) |
+| Typography Agent Tools (`list_fonts`, `resolve_font_stack`, `generate_type_hierarchy`, `audit_text_readability`, `fit_text_to_width`, `check_typography_accessibility`, `segment_text`, `set_font_selection`, …) | `createTypographyToolProvider`, `createFontPickerToolProvider` | `useAgentToolProvider` | `useAgentToolProvider` | Planned (#533) |
 
 </details>
 

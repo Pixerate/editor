@@ -98,6 +98,10 @@ import {
 	type PolygonInput
 } from '../src/canvas/polygonBoolean.js';
 import type { Point } from '../src/canvas/types.js';
+import { elbow, fanElbows, roundedPolyline, type Connector, type ElbowAxis } from '../src/geom/connectors.js';
+import { helix, splitByDepth, type HelixEnvelope } from '../src/geom/helix.js';
+import type { Vec2 } from '../src/geom/types.js';
+import { fitText, staggerRows, type MeasureText } from '../src/typography/fit.js';
 import { conformanceValuesMatch } from '../src/tools/conformance.js';
 
 /**
@@ -804,6 +808,134 @@ function shapeVectors(): Entry[] {
 	return out;
 }
 
+// ---------------------------------------------------------------------------
+// Connectors, helices and fitting text (#811, #813)
+// ---------------------------------------------------------------------------
+
+const V = (p: Vec2) => [p.x, p.y];
+const vIn = (p: number[]): Vec2 => ({ x: p[0], y: p[1] });
+function connectorOut(c: Connector): Entry {
+	return {
+		d: c.d,
+		length: c.length,
+		segments: c.segments.map((s) =>
+			s.kind === 'line'
+				? { kind: s.kind, from: V(s.from), to: V(s.to), length: s.length }
+				: { kind: s.kind, from: V(s.from), to: V(s.to), center: V(s.center), radius: s.radius, sweep: s.sweep, length: s.length }
+		)
+	};
+}
+
+function connectorVectors(): Entry[] {
+	const out: Entry[] = [];
+	const polylines: number[][][] = [
+		[[0, 0], [0, 40], [60, 40], [60, 90]],
+		[[0, 0], [0, -10], [0, 20]],
+		[[5, 5], [5, 5], [5, 30], [5, 60], [40, 60]],
+		[[0, 0], [30, 10], [60, 0]],
+		[[0, 0], [10, 0], [10, 10], [0, 10], [0, 2]],
+		[[1, 1]],
+		[]
+	];
+	for (const points of polylines) for (const radius of [0, 6, 50]) out.push(vec('roundedPolyline', true, { points, radius }, () => connectorOut(roundedPolyline(points.map(vIn), radius))));
+	const elbows: { from: number[]; to: number[]; options: { level?: number; radius?: number; axis?: ElbowAxis } }[] = [
+		{ from: [0, 0], to: [100, 80], options: { level: 30, radius: 10 } },
+		{ from: [0, 0], to: [6, 100], options: { level: 50, radius: 20 } },
+		{ from: [10, 0], to: [10, 50], options: {} },
+		{ from: [0, 0], to: [80, -40], options: { axis: 'horizontal', radius: 5 } },
+		{ from: [12.5, -3.25], to: [-60.75, 90.5], options: { level: 120, radius: 7.5 } },
+		{ from: [0, 0], to: [-50, 50], options: { level: 0 } }
+	];
+	for (const e of elbows) out.push(vec('elbow', true, e, () => ({ ...connectorOut(elbow(vIn(e.from), vIn(e.to), e.options)), level: elbow(vIn(e.from), vIn(e.to), e.options).level })));
+	const random = rng(811);
+	const fans: { root: number[]; targets: number[][]; options: Record<string, unknown> }[] = [
+		{ root: [0, 0], targets: [[-90, 100], [-30, 100], [0, 100], [40, 100], [120, 100]], options: { lead: 10, step: 10, radius: 4 } },
+		{ root: [0, 0], targets: [[50, -80], [-50, -80]], options: { gap: 6 } },
+		{ root: [0, 0], targets: Array.from({ length: 9 }, (_, i) => [-200 + i * 10, 60]), options: {} },
+		{ root: [0, 0], targets: [], options: {} },
+		{ root: [20, 40], targets: [[200, -60], [200, 10], [200, 90], [200, 150]], options: { axis: 'horizontal', gap: 4 } }
+	];
+	for (let f = 0; f < 3; f++) {
+		const n = 3 + Math.floor(random() * 12);
+		let x = -random() * 200;
+		const targets: number[][] = [];
+		for (let i = 0; i < n; i++) {
+			targets.push([x, 100 + random() * 30]);
+			x += 5 + random() * 25;
+		}
+		fans.push({ root: [random() * 40, 0], targets, options: { gap: 3, step: 4 + random() * 10, radius: 2 + random() * 8 } });
+	}
+	for (const f of fans) {
+		out.push(
+			vec('fanElbows', true, f, () => {
+				const fan = fanElbows(vIn(f.root), f.targets.map(vIn), f.options);
+				return { elbows: fan.elbows.map((e) => ({ ...connectorOut(e), level: e.level })), levels: fan.levels, starts: fan.starts.map(V), step: fan.step, radius: fan.radius };
+			})
+		);
+	}
+	return out;
+}
+
+function helixVectors(): Entry[] {
+	const out: Entry[] = [];
+	const cases: { axis: number[][]; options: { amplitude?: number; turns?: number; phase?: number; envelope?: Exclude<HelixEnvelope, Function>; samples?: number } }[] = [
+		{ axis: [[0, 0], [0, 100]], options: { amplitude: 10, turns: 1, samples: 4 } },
+		{ axis: [[10, 20], [310, 140]], options: { amplitude: 18, turns: 2.3, phase: 0.7, samples: 37 } },
+		{ axis: [[0, 0], [200, 0]], options: { envelope: 'pinch', phase: Math.PI / 2 } },
+		{ axis: [[0, 0], [200, 0]], options: { envelope: 'start', turns: 1.5 } },
+		{ axis: [[0, 0], [200, 0]], options: { envelope: 'end', turns: 0.5, samples: 9 } },
+		{ axis: [[5, 5], [5, 5]], options: { samples: 3 } }
+	];
+	for (const c of cases) {
+		out.push(
+			vec('helix', true, c, () => {
+				const h = helix([vIn(c.axis[0]), vIn(c.axis[1])], c.options);
+				return { points: h.points.map(V), depth: h.depth, d: h.d, length: h.length, runs: splitByDepth(h.points, h.depth).map((r) => ({ front: r.front, points: r.points.map(V), d: r.d, from: r.from, to: r.to, length: r.length })) };
+			})
+		);
+	}
+	const splits: { points: number[][]; depth: number[] }[] = [
+		{ points: [[0, 0], [10, 0], [20, 0]], depth: [1, -3, 1] },
+		{ points: [[0, 0], [1, 0], [2, 0], [3, 0]], depth: [0, 1, 0, -1] },
+		{ points: [[0, 0], [3, 4], [6, 8]], depth: [-1, -1, -1] },
+		{ points: [[0, 0], [3, 4]], depth: [0, 0] },
+		{ points: [], depth: [] }
+	];
+	for (const s of splits) {
+		out.push(vec('splitByDepth', false, s, () => splitByDepth(s.points.map(vIn), s.depth).map((r) => ({ front: r.front, points: r.points.map(V), d: r.d, from: r.from, to: r.to, length: r.length }))));
+	}
+	return out;
+}
+
+/** The fixtures' measure: every character `advance` em wide, spacing after all but the last. */
+const fixedMeasure = (advance: number): MeasureText => (word, size, spacing) => word.length * size * advance + Math.max(0, word.length - 1) * spacing;
+
+function fitTextVectors(): Entry[] {
+	const out: Entry[] = [];
+	const fits: { words: string[]; width: number; advance: number; options: { min?: number; max?: number; step?: number; tracking?: { floor: number; step?: number } } }[] = [
+		{ words: ['tag', 'category', 'axis'], width: 72, advance: 0.6, options: {} },
+		{ words: ['category'], width: 70, advance: 0.6, options: {} },
+		{ words: ['a'], width: 1000, advance: 0.6, options: { max: 24 } },
+		{ words: ['category'], width: 70, advance: 0.6, options: { min: 9.25, step: 1 } },
+		{ words: ['category'], width: 46.5, advance: 0.6, options: { min: 10, tracking: { floor: -0.05 } } },
+		{ words: ['category'], width: 40, advance: 0.6, options: { min: 10, tracking: { floor: -0.05 } } },
+		{ words: ['supercalifragilistic'], width: 50, advance: 0.6, options: {} },
+		{ words: [], width: 10, advance: 0.6, options: {} },
+		{ words: ['abc', 'xyz'], width: 30, advance: 0.55, options: {} },
+		{ words: ['a'], width: 10, advance: 0.6, options: { step: 0 } },
+		{ words: ['Revenue', 'Cost', 'Margin', 'Head-count'], width: 64, advance: 0.52, options: { min: 9, max: 18, tracking: { floor: -0.04, step: 0.005 } } }
+	];
+	for (const f of fits) out.push(vec('fitText', false, f, () => fitText(f.words, f.width, { measure: fixedMeasure(f.advance), ...f.options })));
+	const rows: { words: string[]; positions: number[]; advance: number; options: { size: number; letterSpacing?: number; gap?: number } }[] = [
+		{ words: ['one', 'two', 'six'], positions: [0, 40, 80], advance: 0.6, options: { size: 10 } },
+		{ words: ['alpha', 'gamma', 'beta'], positions: [0, 50, 25], advance: 0.6, options: { size: 10 } },
+		{ words: ['category', 'category', 'category'], positions: [0, 10, 20], advance: 0.6, options: { size: 10 } },
+		{ words: ['Q1', 'Q2', 'Q3', 'Q4'], positions: [0, 20, 40, 60], advance: 0.6, options: { size: 12, letterSpacing: -0.5, gap: 2 } }
+	];
+	for (const r of rows) out.push(vec('staggerRows', false, r, () => staggerRows(r.words, r.positions, { measure: fixedMeasure(r.advance), ...r.options })));
+	return out;
+}
+
 function vectors() {
 	return {
 		version: 1,
@@ -817,7 +949,10 @@ function vectors() {
 		pathfinder: pathfinderVectors(),
 		hatch: hatchVectors(),
 		curveFit: curveFitVectors(),
-		shape: shapeVectors()
+		shape: shapeVectors(),
+		connectors: connectorVectors(),
+		helix: helixVectors(),
+		fitText: fitTextVectors()
 	};
 }
 

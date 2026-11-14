@@ -9,3 +9,5 @@ export * from './homography';
 export * from './warp';
 export * from './iso';
 export * from './labels';
+export * from './connectors';
+export * from './helix';
