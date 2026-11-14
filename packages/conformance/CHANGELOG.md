@@ -1,5 +1,11 @@
 # @pixerate/conformance
 
+## 0.1.6
+
+### Patch Changes
+
+- be1ee7f: Tool argument validation (`validateJsonSchema`) no longer treats `Object.prototype` names such as `toString` or `constructor` as declared properties or present required ones: with `additionalProperties: false` they are reported as unknown properties (#766).
+
 ## 0.1.5
 
 ### Patch Changes
