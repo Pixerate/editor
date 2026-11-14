@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PaintEditorController, createPaintEditorToolProvider, replayItems } from '../src/paint-editor';
 import { ToolRegistry } from '../src/tools/registry';
+import { advanceReplayClock } from '../src/paint-editor/replay';
 
 const wave = (y: number, n = 30, x0 = 30, x1 = 290) => Array.from({ length: n }, (_, i) => ({ x: x0 + ((x1 - x0) * i) / (n - 1), y: y + Math.sin(i / 4) * 12, pressure: 0.6 + 0.4 * Math.sin(i / 7) }));
 const editor = () => new PaintEditorController({ width: 320, height: 240, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0 } });
@@ -100,4 +101,45 @@ describe('replay agent tools', () => {
     expect(r.isError).toBe(true);
     c.dispose();
   }, 60000);
+});
+
+describe('advanceReplayClock (#855)', () => {
+  /** A target whose wet clock moves by the steps asked for, counting the calls. */
+  const fake = (limit = Infinity) => {
+    let clock = 0;
+    const calls: number[] = [];
+    const target = {
+      getState: () => ({ wet: { clock } }),
+      advanceWet: async ({ steps }: { steps: number }) => {
+        const ran = Math.max(0, Math.min(steps, limit - clock));
+        calls.push(steps);
+        clock += ran;
+        return { steps: ran };
+      },
+    };
+    return { target: target as unknown as PaintEditorController, calls };
+  };
+
+  it('steps all at once without a wetChunk', async () => {
+    const { target, calls } = fake();
+    expect(await advanceReplayClock(target, 50)).toBe(50);
+    expect(calls).toEqual([50]);
+    const zero = fake();
+    expect(await advanceReplayClock(zero.target, 50, { wetChunk: 0 })).toBe(50);
+    expect(zero.calls).toEqual([50]);
+  });
+
+  it('steps in chunks of wetChunk, calling onWetSteps after each', async () => {
+    const { target, calls } = fake();
+    const seen: number[] = [];
+    expect(await advanceReplayClock(target, 7, { wetChunk: 3, onWetSteps: (c) => void seen.push(c) })).toBe(7);
+    expect(calls).toEqual([3, 3, 1]);
+    expect(seen).toEqual([3, 6, 7]);
+  });
+
+  it('stops when the clock cannot move', async () => {
+    const { target, calls } = fake(4);
+    expect(await advanceReplayClock(target, 10)).toBe(4);
+    expect(calls).toEqual([10, 6]);
+  });
 });

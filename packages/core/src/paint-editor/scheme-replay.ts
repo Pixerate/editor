@@ -249,7 +249,11 @@ export class SchemeReplay {
       const cp = this.checkpoints[i].cp;
       if (cp.lost) continue;
       bytes += cp.wet?.bytes ?? 0;
-      if (bytes > budget) cp.lost = true;
+      if (bytes > budget) {
+        // A lost checkpoint is never restored: let its snapshot go so the budget holds.
+        cp.lost = true;
+        cp.wet = null;
+      }
     }
   }
 

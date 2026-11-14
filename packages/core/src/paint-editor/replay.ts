@@ -122,7 +122,7 @@ export interface ReplayItemOptions {
  * fewer when there is no simulation to step yet (its clock can't move).
  */
 export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
-  const chunk = Math.max(1, options.wetChunk ?? 0) || Infinity;
+  const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
   const start = target.getState().wet.clock;
   let left = clock - start;
   while (left > 0) {

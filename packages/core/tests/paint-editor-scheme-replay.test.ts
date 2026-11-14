@@ -189,6 +189,34 @@ describe('wet dual-colour paint follows the scheme through a replay of the strok
     c.dispose();
   }, 60000);
 
+  it('lets the wet snapshot of a checkpoint over the memory budget go (#855)', async () => {
+    const steps: Step[] = [{ kind: 'stroke', y: 40, color: BLUE, seed: 1 }, { kind: 'wait', steps: 6 }, { kind: 'stroke', y: 70, color: RED, seed: 2 }, { kind: 'wait', steps: 4 }];
+    type Cp = { cp: { wet: unknown; lost?: boolean } };
+    const checkpoints = (c: PaintEditorController): Cp[] => (c as unknown as { schemeReplay: { checkpoints: Cp[] } }).schemeReplay.checkpoints;
+    // Enough memory: every checkpoint keeps its snapshot.
+    const roomy = editor();
+    await roomy.wetReady();
+    await paint(roomy, steps);
+    roomy.setColorScheme('dark');
+    await roomy.colorSchemeViewReady();
+    const kept = checkpoints(roomy).filter((x) => x.cp.wet);
+    expect(kept.length).toBeGreaterThan(0);
+    expect(checkpoints(roomy).some((x) => x.cp.lost)).toBe(false);
+    roomy.dispose();
+    // No memory: every checkpoint with a snapshot is lost, and holds none.
+    const tight = new PaintEditorController({ width: W, height: H, paper: 'cold-pressed', wet: { kernel: 'wasm', threads: 0, undoMemory: 1 } });
+    await tight.wetReady();
+    await paint(tight, steps);
+    tight.setColorScheme('dark');
+    await tight.colorSchemeViewReady();
+    const lost = checkpoints(tight).filter((x) => x.cp.lost);
+    expect(lost.length).toBe(kept.length);
+    for (const x of lost) expect(x.cp.wet).toBeNull();
+    // The view itself is the same either way.
+    expect(dried(tight).equals((await fresh(steps, 'dark')).dried)).toBe(true);
+    tight.dispose();
+  }, 60000);
+
   it('works for loaded documents, and saves the same file in either scheme', async () => {
     const steps: Step[] = [{ kind: 'live', y: 40, color: BLUE, seed: 7 }, { kind: 'wait', steps: 5 }, { kind: 'stroke', y: 60, color: RED, seed: 8 }];
     const c = editor();
