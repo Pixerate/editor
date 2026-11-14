@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChartSelection, ChartSpec } from "@pixerate/editor/chart";
-import { chartTooltipFor, describeChartSelectionIn, nextChart3dFocus, renderChart3d, type Chart3dLabel, type Chart3dRenderer, type ChartTooltip } from "@pixerate/editor/three";
+import { chartTooltipFor, describeChartSelectionIn, nextChart3dFocus, renderChart3d, type Chart3dLabel, type Chart3dRenderer, type Chart3dStyleInput, type ChartTooltip } from "@pixerate/editor/three";
 import { compositeCapture } from "@pixerate/editor/tools";
 
 /**
@@ -9,7 +9,41 @@ import { compositeCapture } from "@pixerate/editor/tools";
  * line (#808), or focus the chart and use the arrow keys: the focused mark keeps its colour, the
  * rest dim, and the tooltip and description are the flat chart's.
  */
+/**
+ * Two house styles for 3-D (#810), as `chart.json` would hold them: the `three` section and the
+ * theme the labels are drawn in. "Unstyled" is today's look.
+ */
+const HOUSE_STYLES: Record<string, { label: string; three: Chart3dStyleInput; text: string; muted: string }> = {
+  none: { label: "Unstyled", three: {}, text: "#0f172a", muted: "#64748b" },
+  matte: {
+    label: "Matte paper (warm studio, soft shadows)",
+    three: {
+      version: 1,
+      materials: { mark: { roughness: 1, metalness: 0 }, floor: { color: "#efe6d8", roughness: 1 }, wall: { color: "#faf5ec", roughness: 1 }, highlight: { color: "#ffb347", intensity: 0.15 } },
+      light: { preset: "studio", intensity: 1.05, azimuth: -50, elevation: 60 },
+      shadow: { enabled: true, softness: 0.8 },
+      ambientOcclusion: true,
+      background: "#fbf7f0",
+    },
+    text: "#2b2118",
+    muted: "#6b5a49",
+  },
+  glass: {
+    label: "Glass night (rim light, glassy ribbons)",
+    three: {
+      version: 1,
+      materials: { mark: { roughness: 0.25, metalness: 0.35 }, ribbon: { roughness: 0.1, transmission: 0.6, opacity: 0.85 }, floor: { color: "#111827", roughness: 0.4, metalness: 0.2 }, wall: { color: "#0b1220" }, highlight: { color: "#7dd3fc", intensity: 0.2 } },
+      light: { preset: "rim", intensity: 1.1 },
+      background: "#05080f",
+    },
+    text: "#e2e8f0",
+    muted: "#94a3b8",
+  },
+};
+
 export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSpec; width?: number; height?: number }) {
+  const [styleId, setStyleId] = useState("none");
+  const house = HOUSE_STYLES[styleId] ?? HOUSE_STYLES.none;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<Chart3dRenderer | null>(null);
   const [labels, setLabels] = useState<Chart3dLabel[]>([]);
@@ -32,7 +66,7 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const view = renderChart3d(canvas, spec, { width, height });
+      const view = renderChart3d(canvas, spec, { width, height, style: house.three });
       viewRef.current = view;
       view.render();
       setLabels(view.labels());
@@ -46,7 +80,7 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [spec, width, height]);
+  }, [spec, width, height, house]);
 
   // Draw the focus (no clock: one render per change) and place the tooltip.
   const show = (next: ChartSelection | null) => {
@@ -91,8 +125,8 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
       {labels.map((l, i) => (
         <span
           key={i}
-          className={`pointer-events-none absolute whitespace-nowrap ${l.kind === "title" ? "text-[15px] font-semibold text-slate-900" : l.kind === "tick" ? "text-[11px] text-slate-500" : l.focused ? "text-[12px] font-semibold text-slate-950" : "text-[12px] text-slate-700"}`}
-          style={{ left: l.x, top: l.y, transform: `translate(${l.anchor === "middle" ? "-50%" : l.anchor === "end" ? "-100%" : "0"}, -50%)` }}
+          className={`pointer-events-none absolute whitespace-nowrap ${l.kind === "title" ? "text-[15px] font-semibold" : l.kind === "tick" ? "text-[11px]" : l.focused ? "text-[12px] font-semibold" : "text-[12px]"}`}
+          style={{ color: l.kind === "tick" ? house.muted : house.text, left: l.x, top: l.y, transform: `translate(${l.anchor === "middle" ? "-50%" : l.anchor === "end" ? "-100%" : "0"}, -50%)` }}
         >
           {l.text}
         </span>
@@ -112,7 +146,17 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
         {focus ? describeChartSelectionIn(spec, focus) : ""}
       </p>
     </div>
-      <div className="flex items-center gap-2 text-xs text-slate-600">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+        <label className="flex items-center gap-1">
+          3-D house style
+          <select className="rounded border border-slate-300 bg-white px-1 py-0.5 text-slate-800" value={styleId} onChange={(e) => setStyleId(e.currentTarget.value)} data-testid="chart-3d-style">
+            {Object.entries(HOUSE_STYLES).map(([id, s]) => (
+              <option key={id} value={id}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <button type="button" className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100" onClick={exportPng} data-testid="chart-3d-export">
           Export PNG (2×)
         </button>

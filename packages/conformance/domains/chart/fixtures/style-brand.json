@@ -107,7 +107,7 @@
           "skipped": [
             {
               "check": "no-such-check",
-              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"fonts-allowed\"."
+              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"three-contrast\", \"fonts-allowed\"."
             }
           ]
         }
@@ -249,7 +249,7 @@
           "skipped": [
             {
               "check": "no-such-check",
-              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"fonts-allowed\"."
+              "reason": "There is no \"no-such-check\" check for chart; it has \"palette-only\", \"distinguishable\", \"min-contrast\", \"allowed-type\", \"three-contrast\", \"fonts-allowed\"."
             }
           ]
         }

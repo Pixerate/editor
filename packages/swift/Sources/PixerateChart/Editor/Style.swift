@@ -175,7 +175,8 @@ private let CHART_STYLE_PROFILE_SCHEMA: JSONValue = {
     "fontFamily":{"type":"string","minLength":1},"fontSize":{"type":"number","minimum":6,"maximum":48},"titleSize":{"type":"number","minimum":6,"maximum":72}},"additionalProperties":false},
     "defaults":{"type":"object","properties":{"dataLabels":{"type":"boolean"},"points":{"type":"boolean"},"curve":{"type":"string","enum":["linear","smooth","step"]},
     "stacking":{"type":"string","enum":["none","stacked","percent"]},"orientation":{"type":"string","enum":["vertical","horizontal"]},
-    "labelPosition":{"type":"string","enum":["auto","inside","outside","center"]}},"additionalProperties":false}
+    "labelPosition":{"type":"string","enum":["auto","inside","outside","center"]}},"additionalProperties":false},
+    "three":{"type":"object","properties":{"version":{"type":"integer","minimum":1,"maximum":1},"materials":{"type":"object","properties":{"mark":{"type":"object","properties":{"roughness":{"type":"number","minimum":0,"maximum":1},"metalness":{"type":"number","minimum":0,"maximum":1},"opacity":{"type":"number","minimum":0,"maximum":1},"transmission":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false},"ribbon":{"type":"object","properties":{"roughness":{"type":"number","minimum":0,"maximum":1},"metalness":{"type":"number","minimum":0,"maximum":1},"opacity":{"type":"number","minimum":0,"maximum":1},"transmission":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false},"floor":{"type":"object","properties":{"color":\(c),"roughness":{"type":"number","minimum":0,"maximum":1},"metalness":{"type":"number","minimum":0,"maximum":1},"opacity":{"type":"number","minimum":0,"maximum":1},"transmission":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false},"wall":{"type":"object","properties":{"color":\(c),"roughness":{"type":"number","minimum":0,"maximum":1},"metalness":{"type":"number","minimum":0,"maximum":1},"opacity":{"type":"number","minimum":0,"maximum":1},"transmission":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false},"highlight":{"type":"object","properties":{"color":\(c),"intensity":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false}},"additionalProperties":false},"light":{"type":"object","properties":{"preset":{"type":"string","enum":["studio","soft","rim","flat"]},"intensity":{"type":"number","minimum":0,"maximum":4},"azimuth":{"type":"number","minimum":-360,"maximum":360},"elevation":{"type":"number","minimum":-89,"maximum":89}},"additionalProperties":false},"shadow":{"type":"object","properties":{"enabled":{"type":"boolean"},"softness":{"type":"number","minimum":0,"maximum":1}},"additionalProperties":false},"ambientOcclusion":{"type":"boolean"},"background":\(c)},"additionalProperties":false}
     },"additionalProperties":false}
     """)
 }()
@@ -188,6 +189,7 @@ private let CHART_STYLE_CHECK_OPTIONS: [(id: String, schema: JSONValue)] = [
     ("allowed-type", styleSchema("""
     {"type":"object","properties":{"types":{"type":"array","items":{"type":"string","enum":[\(STYLE_CHART_TYPES.map { "\"\($0)\"" }.joined(separator: ","))]},"minItems":1}},"required":["types"],"additionalProperties":false}
     """)),
+    ("three-contrast", styleSchema(#"{"type":"object","properties":{"text":{"type":"number","minimum":1,"maximum":21},"marks":{"type":"number","minimum":1,"maximum":21}},"additionalProperties":false}"#)),
     // Shared checks the chart does not replace (`styleChecksOf`): fonts-allowed.
     ("fonts-allowed", SHARED_STYLE_CHECK_OPTIONS.first(where: { $0.id == "fonts-allowed" })!.schema),
 ]
@@ -284,7 +286,7 @@ public func runChartStyleChecks(
     let ownIds = own.map(idOf)
     let fromBrand = (brand?["checks"]?.arrayValue ?? []).filter { e in !ownIds.contains(where: { $0 == idOf(e) }) }
     let checkEntries = own.map { (entry: $0, layer: layer) } + fromBrand.map { (entry: $0, layer: brandLayer) }
-    let knownChecks = ["palette-only", "distinguishable", "min-contrast", "allowed-type", "fonts-allowed"]
+    let knownChecks = ["palette-only", "distinguishable", "min-contrast", "allowed-type", "three-contrast", "fonts-allowed"]
     for (entry, layer) in checkEntries {
         let id: String
         let options: JSONObject
@@ -384,6 +386,46 @@ public func runChartStyleChecks(
                     message: "\(item.label) (\(item.color)) has contrast \(JSONValue.jsString(rounded)):1 against the background \(background); want at least \(JSONValue.jsString(ratio)):1, so use a darker or lighter palette colour.",
                     target: item.target
                 ))
+            }
+        case "three-contrast":
+            // 3-D charts (#810): label text against the 3-D background and floor, and the palette
+            // against the floor and wall, from the profile's `three` section (`chart3dContrastCheck`).
+            guard spec.view3d != nil else { break }
+            let textRatio = options["text"]?.numberValue ?? 4.5
+            let marksRatio = options["marks"]?.numberValue ?? 1.5
+            let themeObj = profile["theme"]?.objectValue ?? JSONObject()
+            let three = profile["three"]?.objectValue ?? JSONObject()
+            let materials = three["materials"]?.objectValue ?? JSONObject()
+            let themeBackground = themeObj["background"]?.stringValue ?? "#ffffff"
+            let themeSurface = themeObj["surface"]?.stringValue ?? "#ffffff"
+            let background = three["background"]?.stringValue ?? (themeBackground == "transparent" ? themeSurface : themeBackground)
+            let floor = materials["floor"]?.objectValue?["color"]?.stringValue ?? themeObj["grid"]?.stringValue ?? "#e5e7eb"
+            let wall = materials["wall"]?.objectValue?["color"]?.stringValue ?? themeSurface
+            for (label, color) in [("label text", themeObj["text"]?.stringValue ?? "#1f2937"), ("tick text", themeObj["mutedText"]?.stringValue ?? "#6b7280")] {
+                for (place, behind) in [("background", background), ("floor", floor)] {
+                    guard let r = chartContrastRatio(color, behind), r < textRatio else { continue }
+                    let rounded = JS.round(r * 100.0) / 100.0
+                    findings.append(ChartStyleFinding(
+                        check: id,
+                        layer: layer,
+                        severity: "warning",
+                        message: "In 3-D, \(label) (\(color)) has contrast \(JSONValue.jsString(rounded)):1 on the \(place) (\(behind)); want \(JSONValue.jsString(textRatio)):1. Change the theme text colour or the 3-D \(place == "floor" ? "floor colour" : "background").",
+                        target: .chart
+                    ))
+                }
+            }
+            for color in profile["palette"]?.arrayValue?.compactMap({ $0.stringValue }) ?? [] {
+                for (place, behind) in [("floor", floor), ("wall", wall)] {
+                    guard let r = chartContrastRatio(color, behind), r < marksRatio else { continue }
+                    let rounded = JS.round(r * 100.0) / 100.0
+                    findings.append(ChartStyleFinding(
+                        check: id,
+                        layer: layer,
+                        severity: "warning",
+                        message: "In 3-D, marks in \(color) have contrast \(JSONValue.jsString(rounded)):1 against the \(place) (\(behind)); want \(JSONValue.jsString(marksRatio)):1. Change the 3-D \(place) colour or the palette colour.",
+                        target: .chart
+                    ))
+                }
             }
         case "fonts-allowed":
             // The shared check on the chart surface, which has no fonts: it runs with no findings
