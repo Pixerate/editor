@@ -13,6 +13,7 @@ export * from "./editor.svelte.js";
 export * from "./promptEditor.svelte.js";
 export * from "./navigationGuard.js";
 export * from "./createNavigationGuard.svelte.js";
+export * from "./linkFocus.svelte.js";
 export * from "./history/index.js";
 export * from "./fileImport.svelte.js";
 export * from "./docxExport.svelte.js";

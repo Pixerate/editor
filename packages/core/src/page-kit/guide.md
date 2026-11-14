@@ -73,8 +73,16 @@ Measure with `canvasMeasure(font)` in the page. It uses the page's own fonts. `e
 | `theme.onChange(redraw)` | Redrawing when the host switches theme or the system scheme changes. | A function that stops it |
 | `defineMotion(draw, { duration, name, autoplay })` | The page's motion. `draw(p)` must draw progress `p` (0–1) from `p` alone, and `p = 1` must be the finished picture. It sets `window.pageMotion` (`{ duration, seek(p), play(), stop(), progress, playing }`) for the host and draws the rest state at once. When you redraw (on resize or a theme change), call it again: it keeps the frame the host last showed, and carries on if it was playing. It never animates under reduced motion or while the page is hidden. Use `autoplay` only when the brief asks for it. | The motion |
 | `ease.linear`, `ease.in`, `ease.out`, `ease.inOut` | Easing curves (0–1 → 0–1). | Number |
+| `drawPieces(pieces, { total, at, span, ease })` | Drawing one line on from several paths (a thin lead-in then a thick span, or a strand's back and front runs) as one continuous stroke. Each piece is `{ from, to }` along the line, for example a run's `from` and `to` from `splitByDepth`. `ease` is a name such as `'ease-in-out'` or a function. In `draw(p)`, set each path's `stroke-dasharray` to `plan.drawAt(p)[i].dasharray` and hide it unless `.shown`. | `{ total, headAt(p), drawAt(p), windows }` |
 | `phase(p, start, end, curve)` | Staggering pieces of one motion: a piece runs from `start` to `end` of the overall `p`. It is 0 before, 1 after and eased in between. | Number |
 | `version` | The kit's version. | String |
+
+## Linked focus
+
+| Helper | Use it for | Returns |
+| --- | --- | --- |
+| `linkFocus({ marks, links, order, labels, dim })` | Hover and keyboard focus that light linked marks and dim the rest (items and their tags, many-to-many). Each mark has keys: `['item']`, `['tag']`, or `['item', 'tag']` for a link between them. `links` maps each item to its tags. A link lights only when both its ends are in focus. Call `focus(key)` on `pointerenter` and `focus`, and `clear()` on `pointerleave` and Escape. Pass key presses to `handleKey(event)` (arrows walk `order`, Home, End, Escape), and set each mark's opacity from `opacity()`. Put `describe()` in an `aria-live` element. | `{ focus, clear, handleKey, opacity, describe, related, getState, subscribe, order, dim }` |
+| `linkFocusLit(marks, links, key)` | Which marks are lit for a key, without keeping state. | Booleans, in the marks' order |
 
 ## The page contract
 

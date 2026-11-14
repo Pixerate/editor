@@ -203,6 +203,18 @@ describe('page kit in a page', () => {
 		redrawn.stop();
 	});
 
+	it('draws a line in pieces and lights linked marks', () => {
+		const { kit } = page();
+		const plan = kit.drawPieces([{ from: 0, to: 20 }, { from: 20, to: 100 }]);
+		expect(plan.drawAt(0.5).map((d: any) => d.dasharray)).toEqual(['20 20', '30 80']);
+		expect(plan.drawAt(1).every((d: any) => d.shown)).toBe(true);
+		const focus = kit.linkFocus({ marks: [['a'], ['x'], ['a', 'x'], ['b']], links: { a: ['x'] }, dim: 0.2 });
+		focus.focus('x');
+		expect(focus.opacity()).toEqual([1, 1, 1, 0.2]);
+		expect(focus.handleKey({ key: 'Escape' })).toBe(true);
+		expect(kit.linkFocusLit([['a'], ['b']], { a: [] }, 'a')).toEqual([true, false]);
+	});
+
 	it('eases and phases', () => {
 		const { kit } = page();
 		for (const name of ['linear', 'in', 'out', 'inOut']) {

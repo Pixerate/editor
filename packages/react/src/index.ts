@@ -4,6 +4,7 @@ export { formatCommandsFor, type FormatManifest, type FormatManifestCommand, typ
 export * from "./hooks/useNavigationGuard";
 export * from "./hooks/useDismissGuard";
 export * from "./hooks/useHistory";
+export * from "./hooks/useLinkFocus";
 export * from "./hooks/useHistoryDirty";
 export * from "./hooks/useHistoryShortcuts";
 export * from "./hooks/useFileImport";

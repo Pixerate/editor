@@ -19,9 +19,11 @@ import { helix, splitByDepth } from '../geom/helix.js';
 import { isoFaceColors, isoOrder, isoProjector } from '../geom/iso.js';
 import { labelHull, placeLabels } from '../geom/labels.js';
 import { estimatedMeasure, fitText, staggerRows, type MeasureText } from '../typography/fit.js';
+import { drawPieces } from '../animation/draw.js';
+import { createLinkFocus, linkFocusLit } from '../interaction/linkFocus.js';
 
 /** The kit's own version, bumped when its exports or the page contract change. */
-export const KIT_VERSION = '1.0.0';
+export const KIT_VERSION = '1.1.0';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -324,7 +326,11 @@ export const kit = {
 	theme,
 	defineMotion,
 	ease,
-	phase
+	phase,
+	drawPieces,
+	// Linked focus
+	linkFocus: createLinkFocus,
+	linkFocusLit
 };
 
 (globalThis as unknown as { pixerateKit: typeof kit }).pixerateKit = kit;

@@ -323,7 +323,8 @@ lineage fans, braids, isometric stacks, ridge waves. When you write that page, u
 kit**, which the host inlines as `window.pixerateKit` (`@pixerate/editor/page-kit`: `PAGE_KIT`, with
 `PAGE_KIT_GUIDE` as its guide). It holds the editors' own label placement, connectors and fans,
 helices with over/under runs, path lengths and trims, text fitting, contrast and ink, nice scales
-and number formats, and the page motion contract (`defineMotion`: frame-pure, `p = 1` at rest,
+and number formats, lines drawn on in pieces (`drawPieces`), linked focus for many-to-many
+pictures (`linkFocus`), and the page motion contract (`defineMotion`: frame-pure, `p = 1` at rest,
 which the host can seek). Don't re-derive these in the page. Read the guide the host gives you.
 The page loads nothing from the network.
 
