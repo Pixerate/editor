@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { DEFAULT_CHART_THEME } from '../chart/spec.js';
 import { chartContrastRatio } from '../chart/color.js';
 import { chart3dMarkInFocus, layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
+import { layoutChartParticles, settleFrame, type ChartParticlesLayout, type ChartParticlesOptions } from '../chart/particles.js';
 import { chart3dStyleColors, resolveChart3dStyle, type Chart3dMaterial, type Chart3dStyle, type Chart3dStyleInput } from '../chart/style3d.js';
 import type { ChartSelection, ChartSpec, ChartTheme } from '../chart/types.js';
 import { registerCaptureSource } from '../tools/dom-capture.js';
@@ -36,6 +37,11 @@ export interface Chart3dOptions {
 	 * shadows, contact darkening, background). Absent: the defaults, unchanged from unstyled 3-D.
 	 */
 	style?: Chart3dStyleInput;
+	/**
+	 * Draw the first series as particles (#806) instead of bars: each category a layer of grains
+	 * that settle on top of each other, one grain per `unit`. `setProgress` drops them in.
+	 */
+	particles?: ChartParticlesOptions & { /** An outline of the container (default true). */ outline?: boolean };
 }
 
 /** A label for the overlay, in CSS px from the top left. */
@@ -53,7 +59,7 @@ export interface Chart3dLabel {
 }
 
 /** What `pick` found: the bar, or the line or area point, under the pointer. */
-export type Chart3dPick = Extract<ChartSelection, { kind: 'point' }>;
+export type Chart3dPick = Extract<ChartSelection, { kind: 'point' }> & { /** With particles: the grain under the pointer. */ instance?: number };
 
 export interface Chart3dFocusOptions {
 	/** How far marks out of focus fade towards the background, 0–1 (default 0.7). */
@@ -68,6 +74,10 @@ export interface Chart3dScene {
 	style: Chart3dStyle;
 	/** The colour behind the chart (the style's, else the theme's). */
 	background: string;
+	/** With `particles`: the pile (which category each layer is, the settled grains, the notes). */
+	particles?: ChartParticlesLayout;
+	/** With `particles`: drops the grains in to progress `p` (frame-pure; 1 at rest). Takes effect on the next render. */
+	setProgress(p: number): void;
 	/** The overlay labels for the current size. */
 	labels(): Chart3dLabel[];
 	/** Changes the size (the camera's aspect and fit follow). */
@@ -120,7 +130,16 @@ function ribbonGeometry(points: { x: number; y: number }[], z0: number, z1: numb
 /** The scene and fitted camera for `spec` (its `view3d`, or Office's default view). */
 export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Chart3dScene {
 	const theme: ChartTheme = { ...DEFAULT_CHART_THEME, ...options.theme };
-	const layout = layoutChart3d(spec);
+	const pile = options.particles ? layoutChartParticles(spec, options.particles) : undefined;
+	const base3d = layoutChart3d(spec);
+	// Particles: the container takes the bars' place; the camera fits it and the pile above it.
+	const layout = pile
+		? (() => {
+				const { width, depth } = pile.settled.container;
+				const top = pile.settled.levels * pile.settled.cell;
+				return { ...base3d, width, depth, height: Math.max(top * 1.15, width * 0.4), boxes: [], ribbons: [], ticks: [], categories: [], warnings: pile.notes };
+			})()
+		: base3d;
 	const scene = new THREE.Scene();
 	const disposables: { dispose(): void }[] = [];
 	// The layout's z runs back into the picture; three.js' camera sees +x on its left when it looks
@@ -241,6 +260,49 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		mesh.userData = { seriesId: r.seriesId };
 		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: r.seriesId, ribbon: r });
 	}
+	// Particles: one instanced mesh, a colour per grain from its layer, matrices from the frame.
+	let grains: THREE.InstancedMesh | null = null;
+	const grainBase: THREE.Color[] = [];
+	const setProgress = (p: number) => {
+		if (!grains || !pile) return;
+		const frame = settleFrame(pile.settled, p);
+		const m = new THREE.Matrix4();
+		for (let i = 0; i < pile.settled.count; i++) {
+			const sc = frame.visible[i] ? 1 : 0;
+			m.makeScale(sc, sc, sc);
+			m.setPosition(frame.positions[i * 3]!, frame.positions[i * 3 + 1]!, frame.positions[i * 3 + 2]!);
+			grains.setMatrixAt(i, m);
+		}
+		grains.instanceMatrix.needsUpdate = true;
+		grains.computeBoundingSphere();
+	};
+	if (pile) {
+		const r = pile.settled.size / 2;
+		const g = new THREE.SphereGeometry(r, 12, 8);
+		const m = material('#ffffff', style.materials.mark);
+		disposables.push(g);
+		grains = add(new THREE.InstancedMesh(g, m, Math.max(1, pile.settled.count)));
+		grains.count = pile.settled.count;
+		grains.name = 'particles';
+		grains.castShadow = style.shadow.enabled;
+		for (let i = 0; i < pile.settled.count; i++) {
+			const c = color(pile.settled.layers[pile.settled.layerOf[i]!]!.color ?? '#888888', '#888888');
+			grainBase.push(c);
+			grains.setColorAt(i, c);
+		}
+		if (grains.instanceColor) grains.instanceColor.needsUpdate = true;
+		setProgress(1);
+		if (options.particles?.outline !== false) {
+			const { width, depth } = pile.settled.container;
+			const h = Math.max(pile.settled.levels * pile.settled.cell, pile.settled.cell);
+			const eg = new THREE.EdgesGeometry(new THREE.BoxGeometry(width, h, depth));
+			const em = new THREE.LineBasicMaterial({ color: color(theme.axis, '#999999'), transparent: true, opacity: 0.6 });
+			disposables.push(eg, em);
+			const box = add(new THREE.LineSegments(eg, em));
+			box.position.set(width / 2, h / 2, depth / 2);
+			box.name = 'outline';
+		}
+	}
 	const fadeTo = color(surfaces.background, '#ffffff');
 	const glow = style.materials.highlight.color ? color(style.materials.highlight.color, '#ffffff') : null;
 	let focused: ChartSelection | null = null;
@@ -287,6 +349,8 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		layout,
 		style,
 		background: surfaces.background,
+		...(pile ? { particles: pile } : {}),
+		setProgress,
 		labels() {
 			const out: Chart3dLabel[] = [];
 			const at = focusedIndex();
@@ -297,6 +361,15 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 			for (const t of layout.ticks) {
 				const p = toScreen(world(0, t.y, layout.depth + 0.2));
 				out.push({ kind: 'tick', text: t.label, x: p.x - 6, y: p.y, anchor: 'end' });
+			}
+			if (pile) {
+				// A label beside each layer, at the middle of its band, on the right of the container.
+				pile.settled.layers.forEach((l, k) => {
+					if (!l.count) return;
+					const index = pile.categories[k]!;
+					const p = toScreen(world(layout.width + 0.08, (l.bottom + l.top) / 2, layout.depth / 2));
+					out.push({ kind: 'category', text: pile.labels[k]!, x: p.x + 6, y: p.y, anchor: 'start', index, ...(at === index ? { focused: true } : {}) });
+				});
 			}
 			if (spec.title) out.push({ kind: 'title', text: spec.title, x: size.width / 2, y: Math.max(14, size.height * 0.05), anchor: 'middle' });
 			return out;
@@ -309,8 +382,14 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 			if (!(size.width > 0 && size.height > 0)) return null;
 			scene.updateMatrixWorld();
 			raycaster.setFromCamera(new THREE.Vector2((x / size.width) * 2 - 1, 1 - (y / size.height) * 2), camera);
-			const hit = raycaster.intersectObjects(marks.map((m) => m.mesh), false)[0];
+			const targets: THREE.Object3D[] = marks.map((m) => m.mesh);
+			if (grains) targets.push(grains);
+			const hit = raycaster.intersectObjects(targets, false)[0];
 			if (!hit) return null;
+			if (grains && hit.object === grains && pile && hit.instanceId !== undefined) {
+				const index = pile.categories[pile.settled.layerOf[hit.instanceId]!]!;
+				return { kind: 'point', seriesId: pile.seriesId, index, instance: hit.instanceId };
+			}
 			const mark = marks.find((m) => m.mesh === hit.object)!;
 			if (mark.index !== undefined) return { kind: 'point', seriesId: mark.seriesId, index: mark.index };
 			// A ribbon: the point nearest the hit along the categories (x is not mirrored).
@@ -329,10 +408,39 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 				m.material.emissive.setRGB(0, 0, 0);
 				if (glow && selection && lit) m.material.emissive.copy(glow).multiplyScalar(style.materials.highlight.intensity);
 			}
+			if (grains && pile) {
+				const c = new THREE.Color();
+				for (let i = 0; i < pile.settled.count; i++) {
+					const lit = chart3dMarkInFocus(selection, pile.seriesId, pile.categories[pile.settled.layerOf[i]!]);
+					c.copy(grainBase[i]!);
+					if (!lit) c.lerp(fadeTo, dim);
+					else if (glow && selection) c.lerp(glow, style.materials.highlight.intensity * 0.5);
+					grains.setColorAt(i, c);
+				}
+				if (grains.instanceColor) grains.instanceColor.needsUpdate = true;
+			}
 		},
 		getFocus: () => focused,
 		anchor(selection) {
 			if (selection.kind !== 'point') return null;
+			if (pile) {
+				const k = pile.categories.indexOf(selection.index);
+				const l = pile.settled.layers[k];
+				if (selection.seriesId !== pile.seriesId || !l || !l.count) return null;
+				// A grain of the layer where it is seen: the front row, near the middle and the band's middle.
+				const pos = pile.settled.positions;
+				const mid = (l.bottom + l.top) / 2;
+				let best = l.start;
+				let score = Infinity;
+				for (let i = l.start; i < l.start + l.count; i++) {
+					const sc = pos[i * 3 + 2]! * 4 + Math.abs(pos[i * 3]! - layout.width / 2) + Math.abs(pos[i * 3 + 1]! - mid) * 0.5;
+					if (sc < score) {
+						score = sc;
+						best = i;
+					}
+				}
+				return toScreen(world(pos[best * 3]!, pos[best * 3 + 1]!, pos[best * 3 + 2]!));
+			}
 			const box = layout.boxes.find((b) => b.seriesId === selection.seriesId && b.index === selection.index);
 			if (box) return toScreen(world((box.x0 + box.x1) / 2, Math.max(box.y0, box.y1), (box.z0 + box.z1) / 2));
 			const ribbon = layout.ribbons.find((r) => r.seriesId === selection.seriesId);
@@ -399,6 +507,8 @@ export interface Chart3dRenderer {
 	getFocus(): ChartSelection | null;
 	/** Where a tooltip for a point goes, in CSS px. */
 	anchor(selection: ChartSelection): { x: number; y: number } | null;
+	/** With particles: drops the grains in to progress `p`; call `render` after. */
+	setProgress(p: number): void;
 	dispose(): void;
 }
 
@@ -464,6 +574,7 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 		focus: (selection, focusOptions) => view.focus(selection, focusOptions),
 		getFocus: () => view.getFocus(),
 		anchor: (selection) => view.anchor(selection),
+		setProgress: (p) => view.setProgress(p),
 		dispose() {
 			unregister();
 			canvas.removeEventListener('webglcontextlost', onLost);
@@ -510,6 +621,7 @@ export function renderChart3dImage(spec: ChartSpec, options: Chart3dOptions & { 
 }
 
 export { resolveChart3dStyle, chart3dStyleColors, DEFAULT_CHART_3D_STYLE, CHART_3D_LIGHT_PRESETS, CHART_3D_STYLE_VERSION, type Chart3dStyle, type Chart3dStyleInput, type Chart3dMaterial } from '../chart/style3d.js';
+export { settleParticles, settleFrame, layoutChartParticles, type SettledParticles, type SettledLayer, type ChartParticlesLayout, type ChartParticlesOptions } from '../chart/particles.js';
 export { layoutChart3d, CHART_3D_TYPES, chart3dMarkSeries, chart3dMarkInFocus, nextChart3dFocus, type Chart3dLayout, type Chart3dBox, type Chart3dRibbon } from '../chart/layout3d.js';
 export { describeChartSelectionIn } from '../chart/interaction.js';
 export { chartTooltipFor, type ChartTooltip } from '../chart/tooltip.js';
