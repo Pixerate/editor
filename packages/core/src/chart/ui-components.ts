@@ -7,6 +7,8 @@
  * stores it as it is; `render` draws the type from data as a standalone SVG string.
  */
 
+import { deltaEOK } from '../color/gamut.js';
+import { parseColor } from '../color/parse.js';
 import { hashValue } from '../generation/hash.js';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema.js';
 import { layoutSparkline } from './sparkline.js';
@@ -192,7 +194,26 @@ export interface ChartUiComponent {
  * Per-type render versions. Bump a type's version when its drawing changes in a way its contract
  * and example renders do not show (they are hashed too), so `contentHash` changes with it.
  */
-export const CHART_UI_RENDER_VERSIONS: Readonly<Record<ChartUiComponentId, number>> = { sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 1, lineage: 1, braid: 1, weave: 1 };
+export const CHART_UI_RENDER_VERSIONS: Readonly<Record<ChartUiComponentId, number>> = { sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 2, lineage: 1, braid: 2, weave: 1 };
+
+/** Palette colours closer than this to the accent (OKLab ΔE) are left out after it. */
+export const ACCENT_PALETTE_MIN_DISTANCE = 0.1;
+
+/**
+ * The colours for series, slices or strands when the first takes `accent`: the accent, then the
+ * rest of the categorical palette without any colour within `ACCENT_PALETTE_MIN_DISTANCE` of it
+ * (an aesthetic's coral accent would otherwise sit beside the palette's coral). An accent that
+ * can't be read (a CSS variable) keeps the palette as it is.
+ */
+export function chartPaletteWithAccent(accent: string, palette: readonly string[] = DEFAULT_CHART_PALETTE): string[] {
+	const a = parseColor(accent);
+	const rest = palette.slice(1).filter((color) => {
+		if (!a) return true;
+		const c = parseColor(color);
+		return !c || deltaEOK(a, c) >= ACCENT_PALETTE_MIN_DISTANCE;
+	});
+	return [accent, ...rest];
+}
 
 const DARK = { surface: '#0f172a', ink: '#e2e8f0', inkMuted: '#94a3b8', border: '#334155', axis: '#64748b' } as const;
 
@@ -336,7 +357,7 @@ function barChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract:
 				title: d.title ?? '',
 				categories: [...d.categories],
 				series: d.series.map((s, i) => ({ id: `s${i + 1}`, name: s.name, values: [...s.values] })),
-				palette: [c.accent!, ...DEFAULT_CHART_PALETTE.slice(1)],
+				palette: chartPaletteWithAccent(c.accent!),
 				legend: { ...base.legend, show: d.series.length > 1 },
 				yAxis: { ...base.yAxis, format }
 			});
@@ -449,7 +470,7 @@ function lineChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract
 				title: d.title ?? '',
 				categories: [...d.categories],
 				series: d.series.map((s, i) => ({ id: `s${i + 1}`, name: s.name, values: [...s.values] })),
-				palette: [c.accent!, ...DEFAULT_CHART_PALETTE.slice(1)],
+				palette: chartPaletteWithAccent(c.accent!),
 				legend: { ...base.legend, show: d.series.length > 1 },
 				yAxis: { ...base.yAxis, format: d.unit ? { suffix: d.unit } : {} }
 			});
@@ -493,8 +514,9 @@ function donutChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contrac
 				title: d.title ?? '',
 				categories: d.slices.map((s) => s.label),
 				series: [{ id: 's1', name: d.title || 'Values', values: d.slices.map((s) => s.value) }],
-				palette: [c.accent!, ...DEFAULT_CHART_PALETTE.slice(1)],
-				legend: { ...base.legend, show: true },
+				palette: chartPaletteWithAccent(c.accent!),
+				// Beside the ring when there is width for it, so the ring takes the height.
+				legend: { ...base.legend, show: true, position: options.width >= options.height * 1.2 ? 'right' : 'bottom' },
 				yAxis: { ...base.yAxis, format: d.unit ? { suffix: d.unit } : {} }
 			});
 			const theme: Partial<ChartTheme> = { background: c.surface!, surface: c.surface!, text: c.ink!, mutedText: c.ink!, axis: c.ink!, grid: c.ink! };
@@ -530,7 +552,7 @@ const BRAID_PROPS: JsonSchema = {
 			description: 'The strands, each labelled at the braid\'s open end.',
 			items: { type: 'object', properties: { name: LABEL, value: { type: 'number', minimum: 0, description: 'Optional weight: the heaviest strand is drawn thickest.' } }, required: ['name'], additionalProperties: false }
 		},
-		turns: { type: 'number', minimum: 0.5, maximum: 6, description: 'Whole twists along the braid (default 2.5).' },
+		turns: { type: 'number', minimum: 0.5, maximum: 6, description: 'Whole twists along the braid (default 2.5); a short braid takes fewer, so each twist keeps its shape.' },
 		title: { type: 'string', description: 'Accessible name (default: built from the data).' }
 	},
 	required: ['strands'],
@@ -660,7 +682,7 @@ function braidComponent(): VisualParts {
 		roleUse: { surface: 'Background.', ink: 'The root, its label and the strand labels.', accent: 'The first strand; further strands take the next colours of the categorical chart palette.' },
 		sizing: { mode: 'fill', minWidth: 280, minHeight: 120 },
 		interaction: braidInteraction,
-		draw: (data, input) => renderBraid(data, input, [input.colors.accent!, ...UI_VISUAL_PALETTE.slice(1)])
+		draw: (data, input) => renderBraid(data, input, chartPaletteWithAccent(input.colors.accent!, UI_VISUAL_PALETTE))
 	});
 }
 
