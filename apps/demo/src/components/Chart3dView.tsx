@@ -44,6 +44,21 @@ const HOUSE_STYLES: Record<string, { label: string; three: Chart3dStyleInput; te
 export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSpec; width?: number; height?: number }) {
   const [styleId, setStyleId] = useState("none");
   const house = HOUSE_STYLES[styleId] ?? HOUSE_STYLES.none;
+  // Particles (#806): the first series as layers of grains, one per unit, dropped in on demand.
+  const [particles, setParticles] = useState(false);
+  const [notes, setNotes] = useState<string[]>([]);
+  const dropIn = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / 2600);
+      view.setProgress(p);
+      view.render();
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewRef = useRef<Chart3dRenderer | null>(null);
   const [labels, setLabels] = useState<Chart3dLabel[]>([]);
@@ -66,7 +81,8 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const view = renderChart3d(canvas, spec, { width, height, style: house.three });
+      const view = renderChart3d(canvas, spec, { width, height, style: house.three, ...(particles ? { particles: {} } : {}) });
+      setNotes(particles ? (view.layout.warnings ?? []) : []);
       viewRef.current = view;
       view.render();
       setLabels(view.labels());
@@ -80,7 +96,7 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [spec, width, height, house]);
+  }, [spec, width, height, house, particles]);
 
   // Draw the focus (no clock: one render per change) and place the tooltip.
   const show = (next: ChartSelection | null) => {
@@ -157,6 +173,15 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
             ))}
           </select>
         </label>
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={particles} onChange={(e) => setParticles(e.currentTarget.checked)} data-testid="chart-3d-particles" /> Particles
+        </label>
+        {particles && (
+          <button type="button" className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100" onClick={dropIn} data-testid="chart-3d-drop">
+            Drop in
+          </button>
+        )}
+        {notes.length > 0 && <span className="text-slate-500">{notes.join(" ")}</span>}
         <button type="button" className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100" onClick={exportPng} data-testid="chart-3d-export">
           Export PNG (2×)
         </button>
