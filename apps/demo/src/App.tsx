@@ -18,6 +18,7 @@ const ColorTab = lazy(() => import("./components/ColorTab").then((m) => ({ defau
 const TypographyTab = lazy(() => import("./components/TypographyTab").then((m) => ({ default: m.TypographyTab })));
 const ParityMatrixTab = lazy(() => import("./components/ParityMatrixTab").then((m) => ({ default: m.ParityMatrixTab })));
 const BrushesTab = lazy(() => import("./components/BrushesTab").then((m) => ({ default: m.BrushesTab })));
+const PageKitTab = lazy(() => import("./components/PageKitTab").then((m) => ({ default: m.PageKitTab })));
 const EffectAuthoringTab = lazy(() => import("./components/EffectAuthoringTab").then((m) => ({ default: m.EffectAuthoringTab })));
 import {
   Sparkles,
@@ -36,9 +37,10 @@ import {
   Wand2,
   Type,
   Paintbrush,
+  Boxes,
 } from "lucide-react";
 
-type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "typography" | "params" | "brushes" | "effects" | "parity";
+type TabId = "prompt" | "rich" | "sheet" | "canvas" | "vector" | "animation" | "video" | "chart" | "image" | "paint" | "color" | "typography" | "params" | "brushes" | "effects" | "pagekit" | "parity";
 
 interface TabInfo {
   id: TabId;
@@ -83,6 +85,7 @@ const GROUPS: Array<{ label: string; tabs: TabInfo[] }> = [
       { id: "color", label: "Colour & A11y", icon: Palette, hint: "Perceptual spaces, WCAG, CVD" },
       { id: "typography", label: "Typography", icon: Type, hint: "Fonts, scales, readability" },
       { id: "params", label: "Parameters", icon: SlidersHorizontal, hint: "Typed controls from a schema" },
+      { id: "pagekit", label: "Page kit", icon: Boxes, hint: "Helpers for sandboxed, model-written pages" },
       { id: "parity", label: "Feature parity", icon: CheckCircle2, hint: "Core, React, Svelte and Swift" },
     ],
   },
@@ -258,6 +261,7 @@ export default function App() {
           {activeTab === "typography" && <TypographyTab />}
           {activeTab === "brushes" && <BrushesTab />}
           {activeTab === "effects" && <EffectAuthoringTab />}
+          {activeTab === "pagekit" && <PageKitTab />}
           {activeTab === "parity" && <ParityMatrixTab />}
         </Suspense>
       </main>

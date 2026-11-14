@@ -4834,3 +4834,21 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `bezierPathLength(elbow(...).d)` differs from `elbow(...).length` by a few thousandths of a px per corner, and a dash or trim driven by one drifts slightly from one driven by the other.
 - **Root Cause**: Connectors (`geom/connectors.ts`) return quarter-circle corners with the exact length πr/2. pathops reads the `A` commands in `d` through `arcToCubics`, and a cubic quarter circle is about 0.03 % longer.
 - **Solution / Workaround**: Drive draw-on (`stroke-dasharray`, `pathLength`) from the connector's own `length` when you draw its `d`; use pathops lengths only together with pathops trimming (`trimSegments`) on the same converted path. Don't mix the two in one animation.
+
+### [core/page-kit] A `const` String Export Puts the Whole Bundle in the Declarations
+
+- **Issue / Symptom**: `dist/page-kit/bundle.generated.d.ts` was as large as the bundle (53 kB) and repeated it.
+- **Root Cause**: `tsc` declares an unannotated `export const X = "…"` with its literal type, so the declaration carries the whole string.
+- **Solution / Workaround**: `scripts/build-page-kit.mjs` writes `export const PAGE_KIT: string = …`. Annotate any large generated string constant as `string`.
+
+### [core/page-kit] `formatChartNumber` Brings the Spreadsheet Format-Code Parser
+
+- **Issue / Symptom**: The page kit came to 63 kB, over its 60 kB budget; about 20 kB was `spreadsheet/numfmt`.
+- **Root Cause**: `formatChartNumber` handles `format.code` through `formatChartValueWithCode`, so anything that bundles it keeps the whole format-code parser, even if it never passes a code.
+- **Solution / Workaround**: Bundles that only need plain number text use `formatPlainChartNumber` (`chart/number-text.ts`), which `formatChartNumber` calls for everything but codes. Check what a bundle holds with esbuild's `metafile` before adding exports to the kit.
+
+### [demo/page-kit] A Zero-Length Dash With Round Caps Still Draws a Dot
+
+- **Issue / Symptom**: A braid drawn on with `stroke-dasharray` showed a row of dots where runs hadn't started yet.
+- **Root Cause**: With `stroke-linecap: round` (or `square`), a dash of length 0 still paints its caps, so `stroke-dasharray: 0 L` draws a dot at the start of the path.
+- **Solution / Workaround**: Hide the path (`visibility: hidden`) until its drawn length is above 0. The page kit's guide says so for model-written pages.

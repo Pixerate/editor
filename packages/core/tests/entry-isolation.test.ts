@@ -45,6 +45,11 @@ describe("subpath entry isolation", () => {
     }
   });
 
+  it("page-kit/index.js imports nothing: it is strings only (#814)", () => {
+    const source = readFileSync(path.join(dist, "page-kit/index.js"), "utf8");
+    expect([...source.matchAll(/(?<![\w$."'])(?:import|export)\s*(?:[^'"]*?\sfrom\s*)?['"]([^'"]+)['"]|(?<![\w$."'])(?:import|require)\(\s*['"]([^'"]+)['"]\s*\)/g)].map((m) => m[1] ?? m[2])).toEqual([]);
+  });
+
   it("canvas/index.js only pulls in dagre", () => {
     expect([...reachablePackages("canvas/index.js")]).toEqual(["@dagrejs/dagre"]);
   });
