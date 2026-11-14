@@ -8,7 +8,7 @@
  */
 import { CHART_VIEW3D_DEFAULTS, chartPointColor, chartSeriesColor } from './spec.js';
 import { formatChartNumber, niceScale } from './scale.js';
-import type { ChartSpec, ChartView3d } from './types.js';
+import type { ChartSelection, ChartSpec, ChartView3d } from './types.js';
 
 /** One bar (or one stacked segment) as a box. */
 export interface Chart3dBox {
@@ -157,4 +157,71 @@ export function layoutChart3d(spec: ChartSpec): Chart3dLayout {
 		view,
 		warnings
 	};
+}
+
+/** The series drawn in 3-D, bars first then ribbons, each with the category indices it has marks at. */
+export function chart3dMarkSeries(layout: Chart3dLayout): { seriesId: string; indices: number[] }[] {
+	const out: { seriesId: string; indices: number[] }[] = [];
+	const add = (seriesId: string, index: number) => {
+		let entry = out.find((e) => e.seriesId === seriesId);
+		if (!entry) out.push((entry = { seriesId, indices: [] }));
+		if (!entry.indices.includes(index)) entry.indices.push(index);
+	};
+	for (const b of layout.boxes) add(b.seriesId, b.index);
+	for (const r of layout.ribbons) for (const p of r.points) add(r.seriesId, p.index);
+	for (const e of out) e.indices.sort((a, b) => a - b);
+	return out.filter((e) => e.indices.length > 0);
+}
+
+/**
+ * Keyboard focus on a 3-D chart (#808), the same walk as the flat chart's: ← → move between
+ * categories within the series, ↑ ↓ move to the series in front or behind (bars, then ribbons
+ * from front to back), Home and End jump to the series' first and last category, Escape clears.
+ * From no focus, an arrow, Home or End focuses the first series. Returns the new focus (a point
+ * selection, or null to clear), or `undefined` when the key isn't one of these.
+ */
+export function nextChart3dFocus(layout: Chart3dLayout, selection: ChartSelection | null, key: string): ChartSelection | null | undefined {
+	const series = chart3dMarkSeries(layout);
+	if (key === 'Escape') return selection ? null : undefined;
+	if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(key) || series.length === 0) return undefined;
+	const si = selection && (selection.kind === 'point' || selection.kind === 'series') ? series.findIndex((e) => e.seriesId === selection.seriesId) : -1;
+	if (si < 0) {
+		const first = series[0]!;
+		return { kind: 'point', seriesId: first.seriesId, index: key === 'End' ? first.indices[first.indices.length - 1]! : first.indices[0]! };
+	}
+	const current = series[si]!;
+	const index = selection?.kind === 'point' ? selection.index : current.indices[0]!;
+	const nearest = (indices: number[], target: number) => indices.reduce((best, i) => (Math.abs(i - target) < Math.abs(best - target) ? i : best), indices[0]!);
+	switch (key) {
+		case 'ArrowLeft':
+		case 'ArrowRight': {
+			const at = current.indices.indexOf(nearest(current.indices, index));
+			const next = Math.max(0, Math.min(current.indices.length - 1, at + (key === 'ArrowRight' ? 1 : -1)));
+			return { kind: 'point', seriesId: current.seriesId, index: current.indices[next]! };
+		}
+		case 'ArrowUp':
+		case 'ArrowDown': {
+			const target = series[Math.max(0, Math.min(series.length - 1, si + (key === 'ArrowDown' ? 1 : -1)))]!;
+			return { kind: 'point', seriesId: target.seriesId, index: nearest(target.indices, index) };
+		}
+		case 'Home':
+			return { kind: 'point', seriesId: current.seriesId, index: current.indices[0]! };
+		default:
+			return { kind: 'point', seriesId: current.seriesId, index: current.indices[current.indices.length - 1]! };
+	}
+}
+
+/** Whether a 3-D mark (a box, or a ribbon's point) belongs to `selection`. */
+export function chart3dMarkInFocus(selection: ChartSelection | null, seriesId: string, index?: number): boolean {
+	if (!selection) return true;
+	switch (selection.kind) {
+		case 'series':
+			return selection.seriesId === seriesId;
+		case 'point':
+			return selection.seriesId === seriesId && (index === undefined || selection.index === index);
+		case 'category':
+			return index === selection.index;
+		default:
+			return true;
+	}
 }

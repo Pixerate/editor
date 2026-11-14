@@ -9,11 +9,16 @@
  * when asked (no animation loop), so the same chart gives the same pixels. Labels are not drawn
  * in WebGL: `labels()` gives each category, tick and title position in CSS px for an HTML or SVG
  * overlay, so text stays crisp and selectable.
+ *
+ * People can point at the marks (#808): `pick(x, y)` maps CSS px back to the bar, or the line or
+ * area point, under them; `focus(selection)` keeps the focused marks' colours and dims the rest
+ * towards the background; `anchor(selection)` places a tooltip (`chartTooltipFor`); and
+ * `nextChart3dFocus` / `describeChartSelectionIn` give the flat chart's keyboard walk and wording.
  */
 import * as THREE from 'three';
 import { DEFAULT_CHART_THEME } from '../chart/spec.js';
-import { layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
-import type { ChartSpec, ChartTheme } from '../chart/types.js';
+import { chart3dMarkInFocus, layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
+import type { ChartSelection, ChartSpec, ChartTheme } from '../chart/types.js';
 
 export interface Chart3dOptions {
 	/** Size in CSS px. */
@@ -33,6 +38,18 @@ export interface Chart3dLabel {
 	y: number;
 	/** How the text sits on the point. */
 	anchor: 'start' | 'middle' | 'end';
+	/** For category labels: the category's index. */
+	index?: number;
+	/** The label belongs to the focused selection (its category), so an overlay can highlight it. */
+	focused?: boolean;
+}
+
+/** What `pick` found: the bar, or the line or area point, under the pointer. */
+export type Chart3dPick = Extract<ChartSelection, { kind: 'point' }>;
+
+export interface Chart3dFocusOptions {
+	/** How far marks out of focus fade towards the background, 0–1 (default 0.7). */
+	dim?: number;
 }
 
 export interface Chart3dScene {
@@ -43,6 +60,17 @@ export interface Chart3dScene {
 	labels(): Chart3dLabel[];
 	/** Changes the size (the camera's aspect and fit follow). */
 	resize(width: number, height: number): void;
+	/** The bar, or the line or area point, under (x, y) in CSS px from the top left, or null. */
+	pick(x: number, y: number): Chart3dPick | null;
+	/**
+	 * Keeps the marks in `selection` (a point, series or category) in their colours and fades the
+	 * rest towards the background; null shows every mark as it is. Takes effect on the next render.
+	 */
+	focus(selection: ChartSelection | null, options?: Chart3dFocusOptions): void;
+	/** The focus last set. */
+	getFocus(): ChartSelection | null;
+	/** Where a tooltip for a point goes: the top of its bar or its point on the line, in CSS px. */
+	anchor(selection: ChartSelection): { x: number; y: number } | null;
 	/** Frees the geometries and materials. */
 	dispose(): void;
 }
@@ -128,20 +156,32 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		add(new THREE.LineSegments(g, m)).name = 'gridlines';
 	}
 
-	// Bars as boxes; lines and areas as extruded ribbons.
+	// Bars as boxes; lines and areas as extruded ribbons. Each is a mark that can be picked and
+	// focused, with its own material and its colour at rest.
+	const marks: { mesh: THREE.Mesh; material: THREE.MeshStandardMaterial; base: THREE.Color; seriesId: string; index?: number; ribbon?: (typeof layout.ribbons)[number] }[] = [];
 	for (const b of layout.boxes) {
 		const g = new THREE.BoxGeometry(b.x1 - b.x0, Math.max(1e-4, b.y1 - b.y0), b.z1 - b.z0);
 		disposables.push(g);
-		const mesh = add(new THREE.Mesh(g, material(b.color)));
+		const m = material(b.color);
+		const mesh = add(new THREE.Mesh(g, m));
 		mesh.position.set((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2);
 		mesh.name = `bar-${b.seriesId}-${b.index}`;
+		mesh.userData = { seriesId: b.seriesId, index: b.index };
+		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: b.seriesId, index: b.index });
 	}
+	const ribbonThickness = layout.height * 0.02;
 	for (const r of layout.ribbons) {
 		if (r.points.length < 2) continue;
-		const g = ribbonGeometry(r.points, r.z0, r.z1, r.kind, layout.height * 0.02);
+		const g = ribbonGeometry(r.points, r.z0, r.z1, r.kind, ribbonThickness);
 		disposables.push(g);
-		add(new THREE.Mesh(g, material(r.color))).name = `${r.kind}-${r.seriesId}`;
+		const m = material(r.color);
+		const mesh = add(new THREE.Mesh(g, m));
+		mesh.name = `${r.kind}-${r.seriesId}`;
+		mesh.userData = { seriesId: r.seriesId };
+		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: r.seriesId, ribbon: r });
 	}
+	const fadeTo = color(theme.background === 'transparent' ? theme.surface : theme.background, '#ffffff');
+	let focused: ChartSelection | null = null;
 
 	// The camera: around the chart's centre, from the view's azimuth and elevation.
 	const camera = new THREE.PerspectiveCamera(CHART_3D_FOV, Math.max(1e-3, options.width / options.height), 0.01, 1000);
@@ -177,16 +217,19 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		const p = v.clone().project(camera);
 		return { x: ((p.x + 1) / 2) * size.width, y: ((1 - p.y) / 2) * size.height };
 	};
+	const raycaster = new THREE.Raycaster();
+	const focusedIndex = () => (focused?.kind === 'point' || focused?.kind === 'category' ? focused.index : null);
 	return {
 		scene,
 		camera,
 		layout,
 		labels() {
 			const out: Chart3dLabel[] = [];
-			for (const c of layout.categories) {
+			const at = focusedIndex();
+			layout.categories.forEach((c, index) => {
 				const p = toScreen(world(c.x, 0, -0.25));
-				out.push({ kind: 'category', text: c.label, x: p.x, y: p.y + 4, anchor: 'middle' });
-			}
+				out.push({ kind: 'category', text: c.label, x: p.x, y: p.y + 4, anchor: 'middle', index, ...(at === index ? { focused: true } : {}) });
+			});
 			for (const t of layout.ticks) {
 				const p = toScreen(world(0, t.y, layout.depth + 0.2));
 				out.push({ kind: 'tick', text: t.label, x: p.x - 6, y: p.y, anchor: 'end' });
@@ -198,6 +241,38 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 			size = { width, height };
 			fit();
 		},
+		pick(x, y) {
+			if (!(size.width > 0 && size.height > 0)) return null;
+			scene.updateMatrixWorld();
+			raycaster.setFromCamera(new THREE.Vector2((x / size.width) * 2 - 1, 1 - (y / size.height) * 2), camera);
+			const hit = raycaster.intersectObjects(marks.map((m) => m.mesh), false)[0];
+			if (!hit) return null;
+			const mark = marks.find((m) => m.mesh === hit.object)!;
+			if (mark.index !== undefined) return { kind: 'point', seriesId: mark.seriesId, index: mark.index };
+			// A ribbon: the point nearest the hit along the categories (x is not mirrored).
+			const points = mark.ribbon!.points;
+			const nearest = points.reduce((best, p) => (Math.abs(p.x - hit.point.x) < Math.abs(best.x - hit.point.x) ? p : best), points[0]!);
+			return { kind: 'point', seriesId: mark.seriesId, index: nearest.index };
+		},
+		focus(selection, options = {}) {
+			focused = selection;
+			const dim = Math.min(1, Math.max(0, options.dim ?? 0.7));
+			for (const m of marks) {
+				const lit = chart3dMarkInFocus(selection, m.seriesId, m.index);
+				m.material.color.copy(m.base);
+				if (!lit) m.material.color.lerp(fadeTo, dim);
+			}
+		},
+		getFocus: () => focused,
+		anchor(selection) {
+			if (selection.kind !== 'point') return null;
+			const box = layout.boxes.find((b) => b.seriesId === selection.seriesId && b.index === selection.index);
+			if (box) return toScreen(world((box.x0 + box.x1) / 2, Math.max(box.y0, box.y1), (box.z0 + box.z1) / 2));
+			const ribbon = layout.ribbons.find((r) => r.seriesId === selection.seriesId);
+			const point = ribbon?.points.find((p) => p.index === selection.index);
+			if (!ribbon || !point) return null;
+			return toScreen(world(point.x, ribbon.kind === 'area' ? point.y : point.y + ribbonThickness / 2, (ribbon.z0 + ribbon.z1) / 2));
+		},
 		dispose() {
 			for (const d of disposables) d.dispose();
 		}
@@ -205,6 +280,8 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 }
 
 export interface Chart3dRenderer {
+	/** The chart's 3-D layout (for `nextChart3dFocus` and the like). */
+	readonly layout: Chart3dLayout;
 	/** Draws the chart once (call after a change; there is no animation loop). */
 	render(): void;
 	/** The canvas as a PNG data URL (call `render` first). */
@@ -212,6 +289,13 @@ export interface Chart3dRenderer {
 	resize(width: number, height: number): void;
 	/** The overlay labels for the current size. */
 	labels(): Chart3dLabel[];
+	/** The bar, or the line or area point, under (x, y) in CSS px, or null (see `Chart3dScene.pick`). */
+	pick(x: number, y: number): Chart3dPick | null;
+	/** Focuses a selection, dimming the rest; call `render` after (see `Chart3dScene.focus`). */
+	focus(selection: ChartSelection | null, options?: Chart3dFocusOptions): void;
+	getFocus(): ChartSelection | null;
+	/** Where a tooltip for a point goes, in CSS px. */
+	anchor(selection: ChartSelection): { x: number; y: number } | null;
 	dispose(): void;
 }
 
@@ -229,6 +313,7 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 	if (theme.background !== 'transparent') renderer.setClearColor(color(theme.background, '#ffffff'), 1);
 	const view = createChart3dScene(spec, options);
 	return {
+		layout: view.layout,
 		render: () => renderer.render(view.scene, view.camera),
 		capture: () => canvas.toDataURL('image/png'),
 		resize(width, height) {
@@ -236,6 +321,10 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 			view.resize(width, height);
 		},
 		labels: () => view.labels(),
+		pick: (x, y) => view.pick(x, y),
+		focus: (selection, focusOptions) => view.focus(selection, focusOptions),
+		getFocus: () => view.getFocus(),
+		anchor: (selection) => view.anchor(selection),
 		dispose() {
 			view.dispose();
 			renderer.dispose();
@@ -278,4 +367,6 @@ export function renderChart3dImage(spec: ChartSpec, options: Chart3dOptions & { 
 	}
 }
 
-export { layoutChart3d, CHART_3D_TYPES, type Chart3dLayout, type Chart3dBox, type Chart3dRibbon } from '../chart/layout3d.js';
+export { layoutChart3d, CHART_3D_TYPES, chart3dMarkSeries, chart3dMarkInFocus, nextChart3dFocus, type Chart3dLayout, type Chart3dBox, type Chart3dRibbon } from '../chart/layout3d.js';
+export { describeChartSelectionIn } from '../chart/interaction.js';
+export { chartTooltipFor, type ChartTooltip } from '../chart/tooltip.js';

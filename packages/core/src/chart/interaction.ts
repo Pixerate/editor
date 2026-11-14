@@ -6,7 +6,7 @@ import type { ChartController } from './controller.js';
 import { chartValueAtPoint, chartXAtPoint, snapChartValue } from './layout.js';
 import { chartScaleToPixel } from './scale.js';
 import { chartFamily } from './spec.js';
-import type { ChartScene, ChartSelection, ChartValueScale } from './types.js';
+import type { ChartScene, ChartSelection, ChartSpec, ChartValueScale } from './types.js';
 
 /** Scene coordinates of a pointer, given the rendered element's box (the scene is scaled to fit it). */
 export function chartClientToScene(scene: Pick<ChartScene, 'width' | 'height'>, box: { left: number; top: number; width: number; height: number }, clientX: number, clientY: number): { x: number; y: number } {
@@ -250,10 +250,13 @@ export function handleChartKey(controller: ChartController, scene: ChartScene | 
 	}
 }
 
-/** A short description of the selection for an inspector heading or a screen reader. */
-export function describeChartSelection(controller: ChartController, selection: ChartSelection | null = controller.getState().selection): string {
+/**
+ * A short description of a selection in `spec`, for an inspector heading or a screen reader. The
+ * same words for the 2-D chart, the 3-D view (#808) and anything else that selects marks.
+ */
+export function describeChartSelectionIn(spec: ChartSpec, selection: ChartSelection | null): string {
+	const seriesOf = (id: string) => spec.series.find((s) => s.id === id);
 	if (!selection) return 'Nothing selected';
-	const spec = controller.getSpec();
 	switch (selection.kind) {
 		case 'chart':
 			return 'Chart';
@@ -266,22 +269,27 @@ export function describeChartSelection(controller: ChartController, selection: C
 		case 'axis':
 			return selection.axis === 'x' ? (chartFamily(spec) === 'xy' ? 'X axis' : 'Category axis') : selection.axis === 'y' ? 'Value axis' : 'Secondary value axis';
 		case 'series':
-			return `Series "${controller.getSeries(selection.seriesId)?.name ?? selection.seriesId}"`;
+			return `Series "${seriesOf(selection.seriesId)?.name ?? selection.seriesId}"`;
 		case 'category':
 			return `Category "${spec.categories[selection.index] ?? selection.index}"`;
 		case 'trendline': {
-			const series = controller.getSeries(selection.seriesId);
+			const series = seriesOf(selection.seriesId);
 			const line = series?.trendlines?.[selection.index];
 			return `${line ? line.type.replace('-', ' ') : 'Trendline'} trendline on "${series?.name ?? selection.seriesId}"`;
 		}
 		case 'point': {
-			const series = controller.getSeries(selection.seriesId);
+			const series = seriesOf(selection.seriesId);
 			const value = series?.values[selection.index];
 			const x = series?.x?.[selection.index];
 			if (x !== undefined && x !== null && chartFamily(spec) === 'xy') return `${series?.name ?? selection.seriesId}: (${x}, ${value ?? 'blank'})`;
 			return `${series?.name ?? selection.seriesId} · ${spec.categories[selection.index] ?? selection.index}: ${value ?? 'blank'}`;
 		}
 	}
+}
+
+/** A short description of the selection for an inspector heading or a screen reader. */
+export function describeChartSelection(controller: ChartController, selection: ChartSelection | null = controller.getState().selection): string {
+	return describeChartSelectionIn(controller.getSpec(), selection);
 }
 
 /**

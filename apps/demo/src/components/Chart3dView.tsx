@@ -1,41 +1,100 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { ChartSpec } from "@pixerate/editor/chart";
-import { renderChart3d, type Chart3dLabel } from "@pixerate/editor/three";
+import type { ChartSelection, ChartSpec } from "@pixerate/editor/chart";
+import { chartTooltipFor, describeChartSelectionIn, nextChart3dFocus, renderChart3d, type Chart3dLabel, type Chart3dRenderer, type ChartTooltip } from "@pixerate/editor/three";
 
 /**
  * A chart drawn in 3-D with `@pixerate/editor/three` (#795): a WebGL canvas, drawn once per change
- * (no animation loop), with its labels as HTML on top so the text stays crisp.
+ * (no animation loop), with its labels as HTML on top so the text stays crisp. Point at a bar or a
+ * line (#808), or focus the chart and use the arrow keys: the focused mark keeps its colour, the
+ * rest dim, and the tooltip and description are the flat chart's.
  */
 export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSpec; width?: number; height?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const viewRef = useRef<Chart3dRenderer | null>(null);
   const [labels, setLabels] = useState<Chart3dLabel[]>([]);
   const [error, setError] = useState("");
+  const [focus, setFocus] = useState<ChartSelection | null>(null);
+  const [tip, setTip] = useState<ChartTooltip | null>(null);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
       const view = renderChart3d(canvas, spec, { width, height });
+      viewRef.current = view;
       view.render();
       setLabels(view.labels());
+      setFocus(null);
+      setTip(null);
       setError("");
-      return () => view.dispose();
+      return () => {
+        viewRef.current = null;
+        view.dispose();
+      };
     } catch (e) {
       setError((e as Error).message);
     }
   }, [spec, width, height]);
+
+  // Draw the focus (no clock: one render per change) and place the tooltip.
+  const show = (next: ChartSelection | null) => {
+    const view = viewRef.current;
+    if (!view) return;
+    setFocus(next);
+    view.focus(next);
+    view.render();
+    setLabels(view.labels());
+    const at = next ? view.anchor(next) : null;
+    setTip(next && next.kind === "point" && at ? chartTooltipFor(spec, next.index, next.seriesId, at) : null);
+  };
+  const same = (a: ChartSelection | null, b: ChartSelection | null) => JSON.stringify(a) === JSON.stringify(b);
+
   if (error) return <p className="text-xs text-rose-400">3-D view unavailable: {error}</p>;
   return (
-    <div className="relative" style={{ width, height }} data-testid="chart-3d">
+    <div
+      className="relative rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+      style={{ width, height }}
+      data-testid="chart-3d"
+      tabIndex={0}
+      aria-label="3-D chart: point at a mark, or use the arrow keys"
+      onPointerMove={(e) => {
+        const box = e.currentTarget.getBoundingClientRect();
+        const next = viewRef.current?.pick(e.clientX - box.left, e.clientY - box.top) ?? null;
+        if (!same(next, focus)) show(next);
+      }}
+      onPointerLeave={() => show(null)}
+      onKeyDown={(e) => {
+        const view = viewRef.current;
+        if (!view) return;
+        const next = nextChart3dFocus(view.layout, focus, e.key);
+        if (next === undefined) return;
+        e.preventDefault();
+        show(next);
+      }}
+    >
       <canvas ref={canvasRef} style={{ width, height }} className="rounded-lg" />
       {labels.map((l, i) => (
         <span
           key={i}
-          className={`pointer-events-none absolute whitespace-nowrap ${l.kind === "title" ? "text-[15px] font-semibold text-slate-900" : l.kind === "tick" ? "text-[11px] text-slate-500" : "text-[12px] text-slate-700"}`}
+          className={`pointer-events-none absolute whitespace-nowrap ${l.kind === "title" ? "text-[15px] font-semibold text-slate-900" : l.kind === "tick" ? "text-[11px] text-slate-500" : l.focused ? "text-[12px] font-semibold text-slate-950" : "text-[12px] text-slate-700"}`}
           style={{ left: l.x, top: l.y, transform: `translate(${l.anchor === "middle" ? "-50%" : l.anchor === "end" ? "-100%" : "0"}, -50%)` }}
         >
           {l.text}
         </span>
       ))}
+      {tip && (
+        <div className="pointer-events-none absolute z-10 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 shadow" style={{ left: tip.x, top: tip.y - 8, transform: "translate(-50%, -100%)" }}>
+          <div className="font-semibold">{tip.title}</div>
+          {tip.items.map((item) => (
+            <div key={item.seriesId} className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: item.color }} />
+              {item.name}: {item.text}
+            </div>
+          ))}
+        </div>
+      )}
+      <p aria-live="polite" className="sr-only">
+        {focus ? describeChartSelectionIn(spec, focus) : ""}
+      </p>
     </div>
   );
 }
