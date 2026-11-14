@@ -149,7 +149,9 @@ the pitfalls, and uses the tools below.
   it again. Perspective distorts lengths, so prefer flat charts for comparison; keep 3-D for
   a look the user wants or an Office chart that came in 3-D (it imports with its view, and is
   written back as an Office 3-D chart; a mix of series types or a secondary axis is saved flat). Check it with `render_chart` `format: "png"`: hosts that draw 3-D return
-  the 3-D picture; the SVG is always flat.
+  the 3-D picture; the SVG is always flat. In a host's 3-D view, people point at bars and line
+  points or walk them with the arrow keys like the flat chart: the focused mark keeps its colour,
+  the rest dim, and the tooltip and wording are the flat chart's.
 - **Highlight instead of recolouring.** To show one bar or series against the rest, use
   `highlight_chart` (it mutes the rest and keeps the palette) rather than greying series by
   hand. Name categories to pick bars or points, series to pick whole lines. Clear it with
