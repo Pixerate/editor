@@ -14,6 +14,22 @@ import { DEFAULT_CHART_PALETTE, DEFAULT_CHART_THEME, createChartSpec } from './s
 import { describeChart } from './summary.js';
 import { chartSceneToSvg, chartToSvg } from './svg.js';
 import type { ChartTheme } from './types.js';
+import type { LinkFocusOptions } from '../interaction/linkFocus.js';
+import {
+	UI_VISUAL_DARK,
+	UI_VISUAL_LIGHT,
+	UI_VISUAL_PALETTE,
+	braidInteraction,
+	lineageInteraction,
+	renderBraid,
+	renderLineage,
+	renderWeave,
+	weaveInteraction,
+	type BraidUiData,
+	type LineageUiData,
+	type UiVisualRenderInput,
+	type WeaveUiData
+} from './ui-visuals.js';
 
 // --- Mirrors of @pixerate/schemas `genui.ts` (Pixerate/schemas#80). This library does not depend
 // on @pixerate/schemas, so the shapes are copied here (as `effects/types.ts` mirrors Flair's).
@@ -100,7 +116,7 @@ export interface UiDescriptor {
 
 // --- Chart UI components ---
 
-export type ChartUiComponentId = 'sparkline' | 'bar-chart';
+export type ChartUiComponentId = 'sparkline' | 'bar-chart' | 'line-chart' | 'donut-chart' | 'lineage' | 'braid' | 'weave';
 
 export type ChartUiThemeMode = 'light' | 'dark';
 
@@ -116,6 +132,18 @@ export interface ChartUiRenderOptions {
 	 * defaults. Roles the component does not list in `contract.colorRoles` are ignored.
 	 */
 	colors?: Partial<Record<UiColorRole, string>>;
+	/**
+	 * For components with `contract.motion`: the progress to draw, 0–1 (default 1, the picture at
+	 * rest). Frame-pure, so a host animates by drawing again (the page motion contract's `seek`).
+	 */
+	progress?: number;
+	/**
+	 * For components with `interaction`: the focused key (from `interaction(data).order`), whose
+	 * linked marks stay lit while the rest dim; null or absent for none.
+	 */
+	focus?: string | null;
+	/** Opacity of marks out of focus, 0–1 (default 0.25). */
+	dim?: number;
 }
 
 /** A sparkline's data (`sparkline` contract props). */
@@ -152,13 +180,19 @@ export interface ChartUiComponent {
 	 * saying what is wrong.
 	 */
 	render(data: unknown, options: ChartUiRenderOptions): string;
+	/**
+	 * For components that respond to pointer and keyboard: the `createLinkFocus` options for
+	 * `data` (each mark's keys, the links, the keyboard order and labels). Drive a model with
+	 * hover, focus and keys, and pass its `focus` to `render`. Marks carry `data-link-focus`.
+	 */
+	interaction?(data: unknown): LinkFocusOptions;
 }
 
 /**
  * Per-type render versions. Bump a type's version when its drawing changes in a way its contract
  * and example renders do not show (they are hashed too), so `contentHash` changes with it.
  */
-export const CHART_UI_RENDER_VERSIONS: Readonly<Record<ChartUiComponentId, number>> = { sparkline: 1, 'bar-chart': 1 };
+export const CHART_UI_RENDER_VERSIONS: Readonly<Record<ChartUiComponentId, number>> = { sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 1, lineage: 1, braid: 1, weave: 1 };
 
 const DARK = { surface: '#0f172a', ink: '#e2e8f0', inkMuted: '#94a3b8', border: '#334155', axis: '#64748b' } as const;
 
@@ -220,6 +254,8 @@ function check(id: ChartUiComponentId, data: unknown, schema: JsonSchema, option
 		if (typeof v !== 'number' || !Number.isFinite(v) || v < 1 || v > 4096) throw new Error(`${id}: ${name} must be a number of CSS px from 1 to 4096 (got ${String(v)}).`);
 	}
 	if (options.theme !== undefined && options.theme !== 'light' && options.theme !== 'dark') throw new Error(`${id}: theme must be "light" or "dark" (got ${String(options.theme)}).`);
+	if (options.progress !== undefined && (typeof options.progress !== 'number' || !(options.progress >= 0 && options.progress <= 1))) throw new Error(`${id}: progress must be a number from 0 to 1 (got ${String(options.progress)}).`);
+	if (options.dim !== undefined && (typeof options.dim !== 'number' || !(options.dim >= 0 && options.dim <= 1))) throw new Error(`${id}: dim must be a number from 0 to 1 (got ${String(options.dim)}).`);
 }
 
 function roleColors(roles: readonly UiColorRole[], defaults: ChartUiComponent['defaultColors'], options: ChartUiRenderOptions): Record<UiColorRole, string> {
@@ -311,14 +347,360 @@ function barChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract:
 	return self;
 }
 
-const EXAMPLE_SIZES: Record<ChartUiComponentId, { width: number; height: number }> = { sparkline: { width: 120, height: 24 }, 'bar-chart': { width: 480, height: 300 } };
+const LINE_CHART_PROPS: JsonSchema = {
+	...BAR_CHART_PROPS,
+	properties: {
+		...(BAR_CHART_PROPS.properties as Record<string, JsonSchema>),
+		categories: { type: 'array', items: { type: 'string' }, minItems: 2, maxItems: 1000, description: 'Labels along the x axis, in order.' },
+		series: { ...((BAR_CHART_PROPS.properties as Record<string, JsonSchema>).series as JsonSchema), description: 'One line per series, one value per category.' }
+	}
+};
+
+const LINE_CHART_EXAMPLE: BarChartUiData = {
+	title: 'Active users',
+	unit: 'k',
+	categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+	series: [
+		{ name: 'Web', values: [42, 45, 51, 49, 58, 63] },
+		{ name: 'Mobile', values: [30, 34, 33, 41, 46, 52] }
+	]
+};
+
+/** A donut chart's data (`donut-chart` contract props). */
+export interface DonutChartUiData {
+	slices: { label: string; value: number }[];
+	title?: string;
+	unit?: string;
+}
+
+const DONUT_CHART_PROPS: JsonSchema = {
+	type: 'object',
+	properties: {
+		slices: {
+			type: 'array',
+			minItems: 1,
+			maxItems: 12,
+			description: 'Parts of the whole, largest first reads best.',
+			items: {
+				type: 'object',
+				properties: { label: { type: 'string', description: 'Slice label (legend).' }, value: { type: 'number', minimum: 0, description: 'Slice size, 0 or more.' } },
+				required: ['label', 'value'],
+				additionalProperties: false
+			}
+		},
+		title: { type: 'string', description: 'Title drawn above the chart and used as its accessible name.' },
+		unit: { type: 'string', description: 'Written after every value, e.g. "%".' }
+	},
+	required: ['slices'],
+	additionalProperties: false
+};
+
+const DONUT_CHART_EXAMPLE: DonutChartUiData = {
+	title: 'Traffic by channel',
+	unit: '%',
+	slices: [
+		{ label: 'Search', value: 46 },
+		{ label: 'Direct', value: 27 },
+		{ label: 'Social', value: 17 },
+		{ label: 'Email', value: 10 }
+	]
+};
+
+const CHART_ROLES = ['surface', 'ink', 'ink-muted', 'border', 'accent'];
+const chartLight = (): Record<UiColorRole, string> => ({ surface: DEFAULT_CHART_THEME.surface, ink: DEFAULT_CHART_THEME.text, 'ink-muted': DEFAULT_CHART_THEME.mutedText, border: DEFAULT_CHART_THEME.grid, accent: DEFAULT_CHART_PALETTE[0]! });
+const chartDark = (): Record<UiColorRole, string> => ({ surface: DARK.surface, ink: DARK.ink, 'ink-muted': DARK.inkMuted, border: DARK.border, accent: DEFAULT_CHART_PALETTE[7]! });
+const chartRoleUse = (accent: string) => ({
+	surface: 'Background behind the chart (theme background and surface).',
+	ink: 'Title and legend text (theme text).',
+	'ink-muted': 'Tick labels and axis lines (theme mutedText and axis).',
+	border: 'Grid lines (theme grid).',
+	accent
+});
+const chartTheme = (c: Record<UiColorRole, string>): Partial<ChartTheme> => ({ background: c.surface!, surface: c.surface!, text: c.ink!, mutedText: c['ink-muted']!, axis: c['ink-muted']!, grid: c.border! });
+
+function lineChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract: UiComponentContract; example: BarChartUiData } {
+	const contract: UiComponentContract = {
+		props: LINE_CHART_PROPS as Record<string, UiJsonValue>,
+		state: [],
+		events: [],
+		a11y: { role: 'img', keyboard: {}, labelFrom: 'content' },
+		colorRoles: CHART_ROLES,
+		motion: false,
+		sizing: { mode: 'fill', minWidth: 200, minHeight: 120 }
+	};
+	const self = {
+		id: 'line-chart' as const,
+		title: 'Line chart',
+		description: 'Lines showing how values change across ordered categories (time), one colour per series, with a value axis and a legend for several series.',
+		contract,
+		example: LINE_CHART_EXAMPLE,
+		colorRoleUse: chartRoleUse('The first line; further lines take the next colours of the categorical chart palette.'),
+		defaultColors: { light: chartLight(), dark: chartDark() },
+		render(data: unknown, options: ChartUiRenderOptions): string {
+			check('line-chart', data, LINE_CHART_PROPS, options);
+			const d = data as BarChartUiData;
+			for (const s of d.series) {
+				if (s.values.length !== d.categories.length) throw new Error(`line-chart: series "${s.name}" has ${s.values.length} values for ${d.categories.length} categories; give one value per category.`);
+			}
+			const c = roleColors(contract.colorRoles, self.defaultColors, options);
+			const base = createChartSpec({ type: 'line' });
+			const spec = createChartSpec({
+				type: 'line',
+				title: d.title ?? '',
+				categories: [...d.categories],
+				series: d.series.map((s, i) => ({ id: `s${i + 1}`, name: s.name, values: [...s.values] })),
+				palette: [c.accent!, ...DEFAULT_CHART_PALETTE.slice(1)],
+				legend: { ...base.legend, show: d.series.length > 1 },
+				yAxis: { ...base.yAxis, format: d.unit ? { suffix: d.unit } : {} }
+			});
+			return chartToSvg(spec, { width: options.width, height: options.height, theme: chartTheme(c), ariaLabel: d.title || describeChart(spec) });
+		}
+	};
+	return self;
+}
+
+function donutChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract: UiComponentContract; example: DonutChartUiData } {
+	const contract: UiComponentContract = {
+		props: DONUT_CHART_PROPS as Record<string, UiJsonValue>,
+		state: [],
+		events: [],
+		a11y: { role: 'img', keyboard: {}, labelFrom: 'content' },
+		colorRoles: ['surface', 'ink', 'accent'],
+		motion: false,
+		sizing: { mode: 'intrinsic', minWidth: 160, minHeight: 140, aspectRatio: 1.4 }
+	};
+	const roles = ['surface', 'ink', 'accent'];
+	const pick = (all: Record<UiColorRole, string>) => Object.fromEntries(roles.map((r) => [r, all[r]!]));
+	const self = {
+		id: 'donut-chart' as const,
+		title: 'Donut chart',
+		description: 'Parts of a whole as slices of a ring, one colour per slice, with a legend.',
+		contract,
+		example: DONUT_CHART_EXAMPLE,
+		colorRoleUse: {
+			surface: 'Background behind the chart (theme background and surface).',
+			ink: 'Title, legend and value text (theme text and mutedText).',
+			accent: 'The first slice; further slices take the next colours of the categorical chart palette.'
+		},
+		defaultColors: { light: pick(chartLight()), dark: pick(chartDark()) },
+		render(data: unknown, options: ChartUiRenderOptions): string {
+			check('donut-chart', data, DONUT_CHART_PROPS, options);
+			const d = data as DonutChartUiData;
+			const c = roleColors(contract.colorRoles, self.defaultColors, options);
+			const base = createChartSpec({ type: 'donut' });
+			const spec = createChartSpec({
+				type: 'donut',
+				title: d.title ?? '',
+				categories: d.slices.map((s) => s.label),
+				series: [{ id: 's1', name: d.title || 'Values', values: d.slices.map((s) => s.value) }],
+				palette: [c.accent!, ...DEFAULT_CHART_PALETTE.slice(1)],
+				legend: { ...base.legend, show: true },
+				yAxis: { ...base.yAxis, format: d.unit ? { suffix: d.unit } : {} }
+			});
+			const theme: Partial<ChartTheme> = { background: c.surface!, surface: c.surface!, text: c.ink!, mutedText: c.ink!, axis: c.ink!, grid: c.ink! };
+			return chartToSvg(spec, { width: options.width, height: options.height, theme, ariaLabel: d.title || describeChart(spec) });
+		}
+	};
+	return self;
+}
+
+// --- Data visuals on core's geometry, motion and focus (ui-visuals.ts) ---
+
+const LABEL: JsonSchema = { type: 'string', minLength: 1, maxLength: 80, description: 'A short label.' };
+
+const LINEAGE_PROPS: JsonSchema = {
+	type: 'object',
+	properties: {
+		root: { ...LABEL, description: 'The root everything descends from, e.g. a team or a product.' },
+		items: { type: 'array', minItems: 1, maxItems: 24, description: 'The row it fans out to, in order.', items: { type: 'object', properties: { label: LABEL }, required: ['label'], additionalProperties: false } },
+		title: { type: 'string', description: 'Accessible name (default: built from the data).' }
+	},
+	required: ['root', 'items'],
+	additionalProperties: false
+};
+
+const BRAID_PROPS: JsonSchema = {
+	type: 'object',
+	properties: {
+		root: { ...LABEL, description: 'What the strands twist into, labelled at the braid\'s start.' },
+		strands: {
+			type: 'array',
+			minItems: 2,
+			maxItems: 6,
+			description: 'The strands, each labelled at the braid\'s open end.',
+			items: { type: 'object', properties: { name: LABEL, value: { type: 'number', minimum: 0, description: 'Optional weight: the heaviest strand is drawn thickest.' } }, required: ['name'], additionalProperties: false }
+		},
+		turns: { type: 'number', minimum: 0.5, maximum: 6, description: 'Whole twists along the braid (default 2.5).' },
+		title: { type: 'string', description: 'Accessible name (default: built from the data).' }
+	},
+	required: ['strands'],
+	additionalProperties: false
+};
+
+const WEAVE_PROPS: JsonSchema = {
+	type: 'object',
+	properties: {
+		items: {
+			type: 'array',
+			minItems: 1,
+			maxItems: 24,
+			description: 'Items along the top, each with the tags it has; tags along the bottom in order of first appearance (at most 24).',
+			items: { type: 'object', properties: { label: LABEL, tags: { type: 'array', items: LABEL, maxItems: 24, description: 'The tags this item has.' } }, required: ['label', 'tags'], additionalProperties: false }
+		},
+		title: { type: 'string', description: 'Accessible name (default: built from the data).' }
+	},
+	required: ['items'],
+	additionalProperties: false
+};
+
+const LINEAGE_EXAMPLE: LineageUiData = { root: 'Platform', items: [{ label: 'Research' }, { label: 'Design' }, { label: 'Engineering' }, { label: 'Operations' }, { label: 'Customer success' }] };
+const BRAID_EXAMPLE: BraidUiData = { root: '2026', strands: [{ name: 'Product', value: 5 }, { name: 'Design', value: 3 }, { name: 'Research', value: 2 }], turns: 2.5 };
+const WEAVE_EXAMPLE: WeaveUiData = {
+	items: [
+		{ label: 'Atlas', tags: ['Design', 'Research'] },
+		{ label: 'Beacon', tags: ['Data', 'Platform'] },
+		{ label: 'Cinder', tags: ['Design', 'Data'] },
+		{ label: 'Delta', tags: ['Platform'] },
+		{ label: 'Ember', tags: ['Research', 'Data', 'Design'] }
+	]
+};
+
+const FOCUS_EVENT: UiEvent = { name: 'focus', payload: { type: 'object', properties: { key: { type: ['string', 'null'] } }, required: ['key'] }, description: 'The focused key changed (hover, focus or arrow keys); null when cleared.' };
+const FOCUS_STATE: UiStateField = { name: 'focus', schema: { type: ['string', 'null'] }, event: 'focus', description: 'The focused key, from interaction(data).order; its linked marks stay lit and the rest dim.' };
+const FOCUS_KEYS: Record<string, string> = {
+	ArrowRight: 'focus the next key',
+	ArrowDown: 'focus the next key',
+	ArrowLeft: 'focus the previous key',
+	ArrowUp: 'focus the previous key',
+	Home: 'focus the first key',
+	End: 'focus the last key',
+	Escape: 'clear the focus'
+};
+
+type VisualParts = Omit<ChartUiComponent, 'descriptor'> & { contract: UiComponentContract; example: object };
+
+function visualComponent<D>(spec: {
+	id: 'lineage' | 'braid' | 'weave';
+	title: string;
+	description: string;
+	props: JsonSchema;
+	example: D;
+	roles: UiColorRole[];
+	roleUse: Record<UiColorRole, string>;
+	sizing: UiSizing;
+	validate?: (data: D) => void;
+	interaction: (data: D) => LinkFocusOptions;
+	draw: (data: D, input: UiVisualRenderInput) => string;
+}): VisualParts {
+	const contract: UiComponentContract = {
+		props: spec.props as Record<string, UiJsonValue>,
+		state: [FOCUS_STATE],
+		events: [FOCUS_EVENT],
+		a11y: { role: 'img', keyboard: FOCUS_KEYS, labelFrom: 'content', reducedMotionAt: 1 },
+		colorRoles: spec.roles,
+		motion: true,
+		sizing: spec.sizing
+	};
+	const all = {
+		light: { surface: UI_VISUAL_LIGHT.surface, 'surface-raised': UI_VISUAL_LIGHT.raised, ink: UI_VISUAL_LIGHT.ink, 'ink-muted': UI_VISUAL_LIGHT.inkMuted, border: UI_VISUAL_LIGHT.border, accent: UI_VISUAL_PALETTE[0]! },
+		dark: { surface: UI_VISUAL_DARK.surface, 'surface-raised': UI_VISUAL_DARK.raised, ink: UI_VISUAL_DARK.ink, 'ink-muted': UI_VISUAL_DARK.inkMuted, border: UI_VISUAL_DARK.border, accent: UI_VISUAL_PALETTE[7]! }
+	};
+	const defaultColors = {
+		light: Object.fromEntries(spec.roles.map((r) => [r, all.light[r as keyof typeof all.light]])),
+		dark: Object.fromEntries(spec.roles.map((r) => [r, all.dark[r as keyof typeof all.dark]]))
+	};
+	const self: VisualParts = {
+		id: spec.id,
+		title: spec.title,
+		description: spec.description,
+		contract,
+		example: spec.example as object,
+		colorRoleUse: spec.roleUse,
+		defaultColors,
+		render(data: unknown, options: ChartUiRenderOptions): string {
+			check(spec.id, data, spec.props, options);
+			spec.validate?.(data as D);
+			const model = spec.interaction(data as D);
+			const focus = options.focus ?? null;
+			if (focus !== null && !(model.order ?? []).includes(focus)) throw new Error(`${spec.id}: focus "${focus}" is not one of its keys (${(model.order ?? []).join(', ')}).`);
+			return spec.draw(data as D, { width: options.width, height: options.height, colors: roleColors(contract.colorRoles, defaultColors, options), progress: options.progress ?? 1, focus, dim: options.dim ?? 0.25 });
+		},
+		interaction(data: unknown): LinkFocusOptions {
+			const errors = validateJsonSchema(data, spec.props);
+			if (errors.length) throw new Error(`${spec.id}: invalid data: ${errors.map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
+			return spec.interaction(data as D);
+		}
+	};
+	return self;
+}
+
+function lineageComponent(): VisualParts {
+	return visualComponent<LineageUiData>({
+		id: 'lineage',
+		title: 'Lineage',
+		description: 'One root fanned out to a row of items with rounded connectors that never cross, labels sized to fit their columns; draws on from the root, and focusing an item lights its branch.',
+		props: LINEAGE_PROPS,
+		example: LINEAGE_EXAMPLE,
+		roles: ['surface', 'ink', 'ink-muted', 'accent'],
+		roleUse: { surface: 'Background.', ink: 'Root and item labels.', 'ink-muted': 'Connectors.', accent: 'Root and item dots.' },
+		sizing: { mode: 'fill', minWidth: 240, minHeight: 160 },
+		interaction: lineageInteraction,
+		draw: renderLineage
+	});
+}
+
+function braidComponent(): VisualParts {
+	return visualComponent<BraidUiData>({
+		id: 'braid',
+		title: 'Braid',
+		description: 'Strands twisted into one root, passing over and under, weighted by value and labelled at the open end; draws on along the braid, and focusing a strand lights it.',
+		props: BRAID_PROPS,
+		example: BRAID_EXAMPLE,
+		roles: ['surface', 'ink', 'accent'],
+		roleUse: { surface: 'Background.', ink: 'The root, its label and the strand labels.', accent: 'The first strand; further strands take the next colours of the categorical chart palette.' },
+		sizing: { mode: 'fill', minWidth: 280, minHeight: 120 },
+		interaction: braidInteraction,
+		draw: (data, input) => renderBraid(data, input, [input.colors.accent!, ...UI_VISUAL_PALETTE.slice(1)])
+	});
+}
+
+function weaveComponent(): VisualParts {
+	return visualComponent<WeaveUiData>({
+		id: 'weave',
+		title: 'Weave',
+		description: 'Items along the top joined to the tags they share along the bottom, many to many; focusing an item lights its tags, and focusing a tag lights its items.',
+		props: WEAVE_PROPS,
+		example: WEAVE_EXAMPLE,
+		roles: ['surface', 'surface-raised', 'ink', 'ink-muted', 'border', 'accent'],
+		roleUse: { surface: 'Background.', 'surface-raised': 'Tag chips.', ink: 'Item labels and dots.', 'ink-muted': 'Tag labels.', border: 'Tag chip outlines.', accent: 'Links between items and tags.' },
+		sizing: { mode: 'fill', minWidth: 280, minHeight: 180 },
+		validate: (data) => {
+			const tags = new Set(data.items.flatMap((it) => it.tags));
+			if (tags.size > 24) throw new Error(`weave: ${tags.size} different tags; at most 24 fit along the bottom.`);
+		},
+		interaction: weaveInteraction,
+		draw: renderWeave
+	});
+}
+
+const EXAMPLE_SIZES: Record<ChartUiComponentId, { width: number; height: number }> = {
+	sparkline: { width: 120, height: 24 },
+	'bar-chart': { width: 480, height: 300 },
+	'line-chart': { width: 480, height: 300 },
+	'donut-chart': { width: 360, height: 260 },
+	lineage: { width: 560, height: 220 },
+	braid: { width: 560, height: 200 },
+	weave: { width: 560, height: 280 }
+};
 
 let cache: ChartUiComponent[] | null = null;
 
 /**
- * The chart types offered as UI components: `sparkline` and `bar-chart` (group `data-visual`),
- * each with a `UiDescriptor`, which colour roles drive which chart colours, and a `render` from
- * data, size, theme and role colours to SVG.
+ * The chart types and data visuals offered as UI components (group `data-visual`): `sparkline`,
+ * `bar-chart`, `line-chart` and `donut-chart`, and `lineage`, `braid` and `weave`, which draw on
+ * (`contract.motion`, `progress`) and light linked marks (`interaction`, `focus`). Each has a
+ * `UiDescriptor`, which colour roles drive which colours, and a `render` from data, size, theme
+ * and role colours to SVG.
  *
  * `descriptor.contentHash` is `hashValue` (stable JSON, FNV-1a, `h1-…`) of the type's id, its
  * render version (`CHART_UI_RENDER_VERSIONS`), contract, platforms, example, and the SVG of the
@@ -327,7 +709,7 @@ let cache: ChartUiComponent[] | null = null;
  */
 export function uiComponents(): ChartUiComponent[] {
 	if (!cache) {
-		cache = [sparklineComponent(), barChartComponent()].map(({ contract, example, ...rest }) => {
+		cache = ([sparklineComponent(), barChartComponent(), lineChartComponent(), donutChartComponent(), lineageComponent(), braidComponent(), weaveComponent()] as VisualParts[]).map(({ contract, example, ...rest }) => {
 			const platforms: UiPlatformTarget[] = ['html-page'];
 			const size = EXAMPLE_SIZES[rest.id];
 			const renders = (['light', 'dark'] as const).map((theme) => rest.render(example, { ...size, theme }));
