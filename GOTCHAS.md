@@ -153,11 +153,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `XML_ENTITIES[code] ?? match` looked the name up in a plain object, which finds `Object.prototype` members, and `String.fromCodePoint` throws for code points out of range.
 - **Solution / Workaround**: `decodeXmlEntities` reads only its own five names (`Object.hasOwn`), and `xmlCharRef` turns a reference into text only for a Unicode scalar value (at most U+10FFFF, not a surrogate); anything else stays as the literal reference text, as an unknown entity does. Swift's `decodeXmlEntities` (`OoxmlRead.swift`) matches and no longer throws; the vectors in `swift-chart-office-vectors.test.ts` record it.
 
-### [core|swift] `validateJsonSchema` Lets `Object.prototype` Names Through `additionalProperties: false`
+### [core|swift] `validateJsonSchema` Let `Object.prototype` Names Through `additionalProperties: false` (Fixed in #766)
 
-- **Issue / Symptom**: A tool argument or style profile with a `toString`, `valueOf`, `hasOwnProperty` or `__defineGetter__` key passes a schema with `additionalProperties: false`; Swift reported `Unknown property "toString"`.
-- **Root Cause**: `tools/schema.ts` tests `key in properties`, and `properties` is a plain object, so inherited names count as declared; it then validates the value against a function, which checks nothing. (`required: ["toString"]` is likewise always met.)
-- **Solution / Workaround**: Swift's `validateJSONSchema` skips those twelve names (`OBJECT_PROTOTYPE_NAMES` in `Schema.swift`) to match. The `required` case is not mirrored (no schema requires such a name). A TS fix (`Object.hasOwn(properties, key)`) must change both.
+- **Issue / Symptom**: A tool argument or style profile with a `toString`, `valueOf`, `hasOwnProperty` or `__defineGetter__` key passed a schema with `additionalProperties: false`, and `required: ["toString"]` was always met.
+- **Root Cause**: `tools/schema.ts` tested `key in properties` (and `obj[key] === undefined` for `required`), and both walk the prototype chain of a plain object, so inherited names counted as declared or present; the value was then validated against a function, which checks nothing.
+- **Solution / Workaround**: Both checks use `Object.hasOwn`, so those names are unknown properties like any other (and a required one must be an own key). Swift's `validateJSONSchema` dropped its `OBJECT_PROTOTYPE_NAMES` skip; the `schema` vectors in `swift-vectors.test.ts` and `style-invalid-profile` record it. Never use `in` or bracket lookups on a plain object to test whether text from a tool call or document names a declared key.
 
 ### [core|swift/chart] A House-Style Profile That Is Itself a `$token` Reference
 
