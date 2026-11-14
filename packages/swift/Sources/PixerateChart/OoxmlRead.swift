@@ -161,36 +161,21 @@ private let xmlPiRegex = try! NSRegularExpression(pattern: #"<\?[\s\S]*?\?>"#)
 private let xmlCommentRegex = try! NSRegularExpression(pattern: #"<!--[\s\S]*?-->"#)
 private let xmlDoctypeRegex = try! NSRegularExpression(pattern: #"<!DOCTYPE[^>]*>"#, options: [.caseInsensitive])
 
-/// The error `String.fromCodePoint` throws for a character reference past U+10FFFF
-/// (`RangeError: Invalid code point 1114112`). The TS fallback parser lets it escape `parseFromString`.
-internal struct ChartXmlRangeError: Error, LocalizedError, CustomStringConvertible, Sendable {
-    let message: String
-    var errorDescription: String? { message }
-    var description: String { message }
-}
-
-/// `XML_ENTITIES[code]`: a plain object, so `&toString;` finds `Object.prototype.toString` and the
-/// replacement is the function's source text (see GOTCHAS, "Name Lookups in Plain Objects").
+/// The five XML entities. A name that is not one of them stays as text (#767).
 private let XML_ENTITIES: [String: String] = [
     "lt": "<", "gt": ">", "amp": "&", "quot": "\"", "apos": "'",
-    "constructor": "function Object() { [native code] }",
-    "hasOwnProperty": "function hasOwnProperty() { [native code] }",
-    "isPrototypeOf": "function isPrototypeOf() { [native code] }",
-    "propertyIsEnumerable": "function propertyIsEnumerable() { [native code] }",
-    "toLocaleString": "function toLocaleString() { [native code] }",
-    "toString": "function toString() { [native code] }",
-    "valueOf": "function valueOf() { [native code] }",
 ]
 
-/// `String.fromCodePoint(n)`. A lone surrogate (U+D800–U+DFFF) is a valid JS string but not a Swift
-/// one; it becomes U+FFFD.
-private func fromCodePoint(_ n: Double) throws -> String {
-    guard n >= 0, n <= 0x10FFFF else { throw ChartXmlRangeError(message: "Invalid code point \(JSONValue.jsString(n))") }
-    return String(Unicode.Scalar(UInt32(n)) ?? "\u{FFFD}")
+/// `xmlCharRef` in `chart/contract.ts`: a Unicode scalar value (not a surrogate, at most U+10FFFF), or nil.
+private func xmlCharRef(_ n: Double) -> String? {
+    guard n.isFinite, n >= 0, n <= 0x10FFFF, n.rounded() == n else { return nil }
+    guard let scalar: Unicode.Scalar = Unicode.Scalar(UInt32(n)) else { return nil }
+    return String(scalar)
 }
 
-/// `decodeXmlEntities` in `chart/contract.ts` (the fallback DOMParser): throws like `String.fromCodePoint`.
-internal func decodeXmlEntities(_ input: String) throws -> String {
+/// `decodeXmlEntities` in `chart/contract.ts` (the fallback DOMParser): unknown names and references
+/// past U+10FFFF or to a surrogate stay as text.
+internal func decodeXmlEntities(_ input: String) -> String {
     guard input.jsIncludes("&") else { return input }
     let ns = input as NSString
     let matches = xmlEntityRegex.matches(in: input, range: NSRange(location: 0, length: ns.length))
@@ -203,13 +188,14 @@ internal func decodeXmlEntities(_ input: String) throws -> String {
             out += ns.substring(with: NSRange(location: lastPos, length: range.location - lastPos))
         }
         let code = ns.substring(with: m.range(at: 1))
+        let whole: String = ns.substring(with: range)
         if code.hasPrefix("#x") {
             // parseInt(code.slice(2), 16): strtod rounds a long hex literal correctly, as V8 does.
-            out += try fromCodePoint(Double("0x" + code.dropFirst(2)) ?? .nan)
+            out += xmlCharRef(Double("0x" + code.dropFirst(2)) ?? .nan) ?? whole
         } else if code.hasPrefix("#") {
-            out += try fromCodePoint(Double(code.dropFirst(1)) ?? .nan)
+            out += xmlCharRef(Double(code.dropFirst(1)) ?? .nan) ?? whole
         } else {
-            out += XML_ENTITIES[code] ?? ns.substring(with: range)
+            out += XML_ENTITIES[code] ?? whole
         }
         lastPos = range.location + range.length
     }
@@ -289,7 +275,7 @@ internal func parseChartXml(_ xml: String) throws -> MiniXmlDocument {
                 } else {
                     rawVal = ""
                 }
-                let aVal = try decodeXmlEntities(rawVal)
+                let aVal = decodeXmlEntities(rawVal)
                 rawAttrs.append((name: aName, value: aVal))
                 if aName == "xmlns" {
                     nsScope[""] = aVal
@@ -347,7 +333,7 @@ internal func parseChartXml(_ xml: String) throws -> MiniXmlDocument {
             let endPos = nextLt.location == NSNotFound ? len : nextLt.location
             let rawText = nsSrc.substring(with: NSRange(location: pos, length: endPos - pos))
             if let top = stack.last {
-                top.el.childNodes.append(.text(try decodeXmlEntities(rawText)))
+                top.el.childNodes.append(.text(decodeXmlEntities(rawText)))
             } else if !rawText.jsTrimmed.isEmpty {
                 hasError = true
                 break
