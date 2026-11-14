@@ -100,6 +100,8 @@ final class WetStrokeDriver {
     var vortexSummary: VortexStrokeSummary? = nil
     /// The world's clock at which each raw point was applied (recorded with the stroke).
     private(set) var steps: [Int] = []
+    /// The world's clock at which the end (pen-up) was applied, once it has been (nil before).
+    private(set) var endStep: Int?
     let initValues: WetStrokeInit
     private let smoother: PenSmoother
     private let states: [WetCopyState]
@@ -186,6 +188,7 @@ final class WetStrokeDriver {
     func finish() throws -> [RasterRect] {
         var rects: [RasterRect] = []
         if done { return rects }
+        endStep = initValues.world.clock
         if initValues.brush.wet.tool == "vortex" {
             try applyVortex(&rects)
             done = true
@@ -624,6 +627,8 @@ public final class PaintWetLayers {
     private var gpu: WetMetalEngine?
     private var gpuSupport: WetGpuSupport?
     private let host: PaintWetHost
+    /// The clock while there is no world: a world made later starts at it, and dropping one keeps its clock here.
+    private var clockBase = 0
 
     init(_ host: PaintWetHost, _ options: PaintWetOptions = PaintWetOptions()) {
         self.host = host
@@ -687,6 +692,26 @@ public final class PaintWetLayers {
         return out
     }
 
+    /**
+     * The simulation clock (steps, `clock`). It never goes back on its own: a world made again
+     * (after a resize, a new canvas, or once all paint dried and the world was dropped) goes on from
+     * it, so the clocks a document logs only grow. Only opening a document (`setClock`) or undo (a
+     * restored snapshot) sets it back.
+     */
+    public var clock: Int { world?.clock ?? clockBase }
+
+    /// Sets the clock while nothing is wet (no world, or one without wet layers): opening a document, a replay catching up, a restored checkpoint. False when there is wet paint (`setClock`).
+    @discardableResult
+    func setClock(_ value: Int) -> Bool {
+        let c = Swift.max(0, value)
+        if let w = world {
+            if !w.laneIds().isEmpty { return w.clock == c }
+            w.setClock(c)
+        }
+        clockBase = c
+        return true
+    }
+
     /// The world (made on first use, at the canvas size).
     func ensureWorld() throws -> WetWorld {
         let c = host.canvas()
@@ -700,6 +725,7 @@ public final class PaintWetLayers {
 
     private func makeWorld(_ width: Int, _ height: Int, _ paper: PaperSettings) throws -> WetWorld {
         let w = try WetWorld(width: width, height: height, paper: wetPaperInput(paper))
+        w.setClock(clockBase)
         _ = w.setTilt(tilt)
         w.gpuMinTiles = gpuMinTiles
         if let gpu { w.attachGpu(gpu) } else { startGpu(w) }
@@ -1113,7 +1139,7 @@ public final class PaintWetLayers {
         }
         guard let w, !w.laneIds().isEmpty else {
             if patSnaps.isEmpty { return nil }
-            return WetSnapshot(clock: w?.clock ?? 0, tilt: tilt, lanes: [], slots: [], patterns: patSnaps, bytes: patternBytes)
+            return WetSnapshot(clock: clock, tilt: tilt, lanes: [], slots: [], patterns: patSnaps, bytes: patternBytes)
         }
         let snap = w.snapshot()
         if patSnaps.isEmpty { return snap }
@@ -1161,12 +1187,14 @@ public final class PaintWetLayers {
     }
 
     private func dropWorld() {
+        if let w = world { clockBase = w.clock }
         world = nil
         driver = nil
     }
 
-    /// Forgets everything wet (a new canvas, a resize, opening a document).
+    /// Forgets everything wet (a new canvas, a resize, opening a document); the clock goes on (see `clock`).
     func reset() {
+        if let w = world { clockBase = w.clock }
         world = nil
         driver = nil
         settings = OrderedMap()

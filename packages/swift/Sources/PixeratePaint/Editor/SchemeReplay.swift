@@ -68,15 +68,7 @@ private func liveStrokeKey(_ st: RecordedStroke) -> String {
 }
 
 /// The clock an item happens at (nil: it doesn't depend on the clock).
-private func itemClock(_ item: ReplayItem) -> Int? {
-    switch item {
-    case .wet(let e): return e.clock
-    case .stroke(let st):
-        if st.brush.engine == "wet", let steps = st.steps, let first = steps.first { return first }
-        return nil
-    case .paint: return nil
-    }
-}
+private func itemClock(_ item: ReplayItem) -> Int? { itemClocks(item)?.first }
 
 /// The stroke a scheme replay mirrors while the editor paints it.
 private final class LiveMirror {
@@ -295,8 +287,9 @@ final class SchemeReplay {
         let now = host.liveStroke()
         if try await followLive(now) { return true }
         let editorClock = host.clock()
-        // A wet stroke holds the clock at its last point (a replay ends it there; one that isn't
-        // followed replays from its first point once it is logged).
+        // A wet stroke holds the clock at its last point until it is logged (with the clock its end was
+        // applied at, which the replay steps to before ending it; one that isn't followed replays from its
+        // first point once it is logged).
         let liveWet: Bool = live?.wet ?? false
         var unfollowedWet = false
         if let now { unfollowedWet = now.wet && !now.follow }
@@ -312,7 +305,7 @@ final class SchemeReplay {
     }
 
     private func clock() -> Int {
-        target.wet.world?.clock ?? 0
+        target.wet.clock
     }
 
     private func apply(_ item: ReplayItem) async throws {
@@ -450,6 +443,8 @@ final class SchemeReplay {
         guard let live else { return }
         _ = try await pushLive(st)
         self.live = nil
+        // Pen-up at a later clock: the paint flowed under the open stroke until then, as the replay of the log does.
+        if live.wet, let end = st.endStep { try await advanceReplayClock(target, end, options) }
         try finishReplayStroke(target, live.session)
     }
 

@@ -68,7 +68,7 @@ extension PaintEditorController {
 
     /// Records a wet event (for replays) for the document being built.
     func logWet(_ kind: String, layerId: String? = nil, data: JSONValue? = nil, at: Int? = nil) {
-        pendingWetEvents.append(WetEvent(clock: wet.world?.clock ?? 0, at: at ?? doc.strokes.count, kind: kind, layerId: layerId, data: data))
+        pendingWetEvents.append(WetEvent(clock: wet.clock, at: at ?? doc.strokes.count, kind: kind, layerId: layerId, data: data))
     }
 
     /// The document with the pending wet events appended.
@@ -82,7 +82,7 @@ extension PaintEditorController {
     /// Records a settings change as a wet event (not an undo step).
     func recordWetSetting(_ kind: String, layerId: String? = nil, data: JSONValue? = nil) {
         let d = doc
-        doc = d.with { $0.wetEvents = (d.wetEvents ?? []) + [WetEvent(clock: wet.world?.clock ?? 0, at: d.strokes.count, kind: kind, layerId: layerId, data: data)] }
+        doc = d.with { $0.wetEvents = (d.wetEvents ?? []) + [WetEvent(clock: wet.clock, at: d.strokes.count, kind: kind, layerId: layerId, data: data)] }
     }
 
     func wetLayer(_ layerId: String?, _ what: String) throws -> PaintLayer {
@@ -110,7 +110,7 @@ extension PaintEditorController {
     public var wetStateInfo: JSONObject {
         [
             "layerIds": .array(wet.wetLayerIds().map { .string($0) }), "wet": .bool(wet.isWet()), "paused": .bool(wet.paused), "overlay": .bool(wet.overlay),
-            "instantDry": .bool(wet.instantDry), "speed": .number(wet.speed), "clock": .number(Double(wet.world?.clock ?? 0)), "tilt": wet.tilt.json,
+            "instantDry": .bool(wet.instantDry), "speed": .number(wet.speed), "clock": .number(Double(wet.clock)), "tilt": wet.tilt.json,
             "gpu": .string(wet.gpuMode), "gpuActive": false,
         ]
     }
@@ -463,8 +463,12 @@ extension PaintEditorController {
         return out
     }
 
-    /// Wet settings saved with the document (nil when they are all defaults).
-    func wetJSON() -> JSONValue? {
+    /// Wet settings saved with the document (nil when they are all defaults), with the wet clock
+    /// (`clock`) when it is past the latest clock the saved log records: the paint flowed on after the
+    /// last logged item before this save dried it, and a reader's replay steps to it (`wetJSON`).
+    func wetJSON(_ d: PaintDocumentState, savesLog: Bool) -> JSONValue? {
+        let logged = loggedWetClock(strokes: savesLog ? d.strokes : [], wetEvents: d.wetEvents)
+        let clock: Int? = wet.clock > logged ? wet.clock : nil
         var layers = JSONObject()
         for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
             var params = s.params
@@ -475,8 +479,10 @@ extension PaintEditorController {
             if let lp = s.livePatterns { entry["livePatterns"] = lp.json }
             layers[id] = .object(entry)
         }
-        if layers.isEmpty && wet.tilt.angle == 0 { return nil }
-        return ["tilt": wet.tilt.json, "layers": .object(layers)]
+        if layers.isEmpty && wet.tilt.angle == 0 && clock == nil { return nil }
+        var out: JSONObject = ["tilt": wet.tilt.json, "layers": .object(layers)]
+        if let clock { out["clock"] = .number(Double(clock)) }
+        return .object(out)
     }
 }
 

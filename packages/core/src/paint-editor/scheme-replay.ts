@@ -30,7 +30,7 @@ import type { PaintEditorController, ReplayCheckpoint } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeSession } from './stroke';
 import type { RecordedStroke } from './strokes';
-import { advanceReplayClock, finishReplayStroke, replayItem, replayItems, replayStrokeInit, type ReplayItem, type ReplayItemOptions } from './replay';
+import { advanceReplayClock, finishReplayStroke, itemClocks, replayItem, replayItems, replayStrokeInit, type ReplayItem, type ReplayItemOptions } from './replay';
 
 /** What a scheme replay reads from the editor it shows. */
 export interface SchemeReplayHost {
@@ -66,7 +66,7 @@ const MAX_CHECKPOINTS = 64;
 const itemKey = (item: ReplayItem): object => (item.kind === 'stroke' ? item.stroke : item.event);
 const strokeKey = (st: RecordedStroke): string => `${st.layerId}|${st.seed}|${st.brush.id}|${st.points[0]?.x},${st.points[0]?.y}`;
 /** The clock an item happens at (`null`: it doesn't depend on the clock). */
-const itemClock = (item: ReplayItem): number | null => (item.kind === 'wet' ? item.event.clock : item.kind === 'stroke' && item.stroke.brush.engine === 'wet' && item.stroke.steps?.length ? item.stroke.steps[0] : null);
+const itemClock = (item: ReplayItem): number | null => itemClocks(item)?.first ?? null;
 const yieldToHost = () => new Promise<void>((r) => setTimeout(r, 0));
 
 export class SchemeReplay {
@@ -228,8 +228,9 @@ export class SchemeReplay {
     const now = this.host.liveStroke();
     if (await this.followLive(now)) return true;
     const clock = this.host.clock();
-    // A wet stroke holds the clock at its last point (a replay ends it there; one that isn't
-    // followed replays from its first point once it is logged).
+    // A wet stroke holds the clock at its last point until it is logged (with the clock its end was
+    // applied at, which the replay steps to before ending it; one that isn't followed replays from its
+    // first point once it is logged).
     if (this.clock() < clock && !this.live?.wet && !(now?.wet && !now.follow)) {
       if ((await advanceReplayClock(this.target, Math.min(clock, this.clock() + STEP_CHUNK))) > 0) return true;
     }
@@ -374,6 +375,11 @@ export class SchemeReplay {
     const live = this.live!;
     await this.pushLive(st);
     this.live = null;
+    // Pen-up at a later clock: the paint flowed under the open stroke until then, as the replay of the log does.
+    if (live.wet && st.endStep !== undefined) {
+      await this.target.wetIdle();
+      await advanceReplayClock(this.target, st.endStep, this.options);
+    }
     await finishReplayStroke(this.target, live.session);
   }
 

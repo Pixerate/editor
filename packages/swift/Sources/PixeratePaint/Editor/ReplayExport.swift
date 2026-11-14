@@ -158,7 +158,9 @@ extension PaintEditorController {
     }
 
     /// Repaints this painting into `target`, calling `onStroke` after each stroke (`replayPainting`).
-    func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, maxStrokes: Int? = nil, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
+    /// `clock`: the wet clock the painting had reached; a replay of the whole painting lets the paint
+    /// flow on to it after the last item, as it did after the last logged item.
+    func replayPainting(into target: PaintEditorController, scale s: Double = 1, wetChunk: Int = 0, maxStrokes: Int? = nil, clock: Int? = nil, onWetSteps: (() throws -> Void)? = nil, onStroke: ((Int) throws -> Void)? = nil) async throws {
         // Live growth not yet committed is part of the painting shown: replay it too.
         let source = withCulturePreviewEvents()
         let m: Affine = [s, 0, 0, s, 0, 0]
@@ -184,6 +186,10 @@ extension PaintEditorController {
             try await replayItem(target, entry.item, options)
             if case .stroke = entry.item { try onStroke?(strokes) }
         }
+        // Paint that flowed on after the last logged item (the whole painting only).
+        if let clock, (maxStrokes ?? source.strokes.count) >= source.strokes.count {
+            try await advanceReplayClock(target, clock, options)
+        }
     }
 
     /**
@@ -207,7 +213,7 @@ extension PaintEditorController {
         }
         shoot()
         let wetEvery = wetStepsPerFrame ?? 60
-        try await replayPainting(into: target, wetChunk: wetEvery > 0 ? wetEvery : 0, onWetSteps: wetEvery > 0 ? { shoot() } : nil) { i in if i % perFrame == 0 || i == total { shoot() } }
+        try await replayPainting(into: target, wetChunk: wetEvery > 0 ? wetEvery : 0, clock: wet.clock, onWetSteps: wetEvery > 0 ? { shoot() } : nil) { i in if i % perFrame == 0 || i == total { shoot() } }
         let (video, ffmpeg, durationMs) = try timeLapseVideo(frames.count, width, height, fps, holdMs ?? 1500)
         return PaintTimeLapse(fps: fps, width: width, height: height, frames: frames, video: video, ffmpeg: ffmpeg, durationMs: durationMs)
     }
@@ -219,7 +225,7 @@ extension PaintEditorController {
      */
     public func renderHighRes(scale: Double, paper: Bool? = nil) async throws -> (width: Int, height: Int, data: [UInt8]) {
         let target = try createReplayTarget(scale: scale)
-        try await replayPainting(into: target, scale: scale)
+        try await replayPainting(into: target, scale: scale, clock: wet.clock)
         return target.compositePixels(paper: paper)
     }
 }

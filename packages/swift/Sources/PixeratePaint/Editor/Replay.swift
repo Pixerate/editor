@@ -55,6 +55,140 @@ func replayItems(_ doc: PaintDocumentState) -> [ReplayItem] {
     replayItemsAt(doc).map(\.item)
 }
 
+/// The clocks a replay item happens at: its first and its last (nil: it doesn't depend on the clock; `itemClocks`).
+func itemClocks(_ item: ReplayItem) -> (first: Int, last: Int)? {
+    switch item {
+    case .wet(let e): return (e.clock, e.clock)
+    case .stroke(let st):
+        guard st.brush.engine == "wet", let steps = st.steps, let first = steps.first, let last = steps.last else { return nil }
+        return (first, st.endStep ?? last)
+    case .paint: return nil
+    }
+}
+
+/// The latest wet clock a document's log records (its strokes' points and pen-ups, its wet events); 0 for none (`loggedWetClock`).
+func loggedWetClock(strokes: [RecordedStroke], wetEvents: [WetEvent]?) -> Int {
+    var most = 0
+    for st in strokes where st.brush.engine == "wet" {
+        if let last = st.steps?.last { most = Swift.max(most, st.endStep ?? last) }
+    }
+    for e in wetEvents ?? [] { most = Swift.max(most, e.clock) }
+    return most
+}
+
+/// Whether a document's log has anything a wet clock is recorded for (`hasWetLog`).
+func hasWetLog(_ doc: PaintDocumentState) -> Bool {
+    if !(doc.wetEvents ?? []).isEmpty { return true }
+    return doc.strokes.contains { $0.brush.engine == "wet" && !($0.steps ?? []).isEmpty }
+}
+
+/// The largest wet clock (steps) a document's log is taken at its word for (`MAX_WET_CLOCK`).
+let MAX_WET_CLOCK = 2_147_483_647
+
+/// Whether every clock a document's log records is a whole number of steps in 0...`MAX_WET_CLOCK` (`wetClocksInRange`).
+private func wetClocksInRange(_ doc: PaintDocumentState) -> Bool {
+    let ok: (Int) -> Bool = { v in v >= 0 && v <= MAX_WET_CLOCK }
+    for st in doc.strokes where st.brush.engine == "wet" {
+        guard let steps = st.steps else { continue }
+        if !steps.allSatisfy(ok) { return false }
+        if let end = st.endStep, !ok(end) { return false }
+    }
+    return (doc.wetEvents ?? []).allSatisfy { ok($0.clock) }
+}
+
+/// Whether `e` dries every layer at once, everywhere: no layer, no rectangle (`isDryAll`; a saved `layerId` or `data` that is there and not empty or null counts).
+func isDryAll(_ e: WetEvent) -> Bool {
+    if e.kind != "dry" { return false }
+    if let raw = e.saved?["layerId"] { if raw != .string("") { return false } } else if let id = e.layerId, !id.isEmpty { return false }
+    if let d = e.data, d != .null { return false }
+    return true
+}
+
+/// A document's log as it is opened (`openedWetLog`).
+struct OpenedWetLog {
+    var strokes: [RecordedStroke]
+    var wetEvents: [WetEvent]
+    /// The clock the document's simulation goes on from.
+    var clock: Int
+    /// The dry added at the end (nil when the log already ended with one).
+    var dry: WetEvent?
+}
+
+/**
+ * The log of a document as it is opened, so a replay sees what happened (`openedWetLog`, #720): a
+ * `dry` of every layer at the clock the save dried the paint (the saved wet clock, else the log's
+ * latest) ends it, and the sessions of an older document, whose clocks start again at 0, are put in
+ * order: each place the clocks go back gets a `dry` of everything at the latest clock before it, and
+ * its clocks go on from the next multiple of `FREE_INTERVAL`. Nil when there is no wet log or a clock
+ * is past `MAX_WET_CLOCK`.
+ */
+func openedWetLog(_ doc: PaintDocumentState, clock savedClock: Int?) -> OpenedWetLog? {
+    if !hasWetLog(doc) || !wetClocksInRange(doc) { return nil }
+    // Walk the log in replay order: a clock earlier than one before it starts a new session.
+    var session: [Int: (index: Int, offset: Int)] = [:]
+    var breaks: [(clock: Int, at: Double)] = []
+    var offset = 0
+    var latest = 0
+    for (item, at) in replayItemsAt(doc) {
+        guard let c = itemClocks(item) else { continue }
+        if c.first + offset < latest {
+            var breakAt = at
+            if case .stroke(let st) = item { breakAt = Double(doc.strokes.firstIndex { $0.key == st.key } ?? 0) }
+            breaks.append((clock: latest, at: breakAt))
+            // The session's 0 goes on the next multiple of FREE_INTERVAL: the simulation frees tiles on those, so it steps as it did.
+            offset = (latest + FREE_INTERVAL - 1) / FREE_INTERVAL * FREE_INTERVAL
+        }
+        session[item.key] = (index: breaks.count, offset: offset)
+        latest = Swift.max(latest, c.last + offset)
+    }
+    var strokes = doc.strokes
+    var wetEvents = doc.wetEvents ?? []
+    if !breaks.isEmpty {
+        strokes = strokes.map { st -> RecordedStroke in
+            let d = session[st.key]?.offset ?? 0
+            guard d != 0, let steps = st.steps else { return st }
+            var out = st
+            out.key = newStrokeKey()
+            out.steps = steps.map { $0 + d }
+            if let end = st.endStep { out.endStep = end + d }
+            return out
+        }
+        // Break b goes in before the first wet event after it (a later `at`, or the same `at` in a later session).
+        var next: [WetEvent] = []
+        var b = 0
+        for e in wetEvents {
+            let s = session[e.key]
+            let at = e.replayAt
+            while b < breaks.count {
+                let later: Bool = at > breaks[b].at
+                let sameLater: Bool = at == breaks[b].at && (s.map { $0.index > b } ?? false)
+                if !(later || sameLater) { break }
+                next.append(WetEvent(clock: breaks[b].clock, at: Int(breaks[b].at), kind: "dry"))
+                b += 1
+            }
+            if let s, s.offset != 0 {
+                var moved = e
+                moved.key = newStrokeKey()
+                moved.clock = e.clock + s.offset
+                next.append(moved)
+            } else {
+                next.append(e)
+            }
+        }
+        while b < breaks.count {
+            next.append(WetEvent(clock: breaks[b].clock, at: Int(breaks[b].at), kind: "dry"))
+            b += 1
+        }
+        wetEvents = next
+    }
+    let end = Swift.max(latest, savedClock ?? 0)
+    if let last = wetEvents.last, isDryAll(last), last.clock == end, last.replayAt >= Double(strokes.count) {
+        return OpenedWetLog(strokes: strokes, wetEvents: wetEvents, clock: end, dry: nil)
+    }
+    let dry = WetEvent(clock: end, at: strokes.count, kind: "dry")
+    return OpenedWetLog(strokes: strokes, wetEvents: wetEvents + [dry], clock: end, dry: dry)
+}
+
 /// How a replay paints: at what scale, and where it lets the host in while wet paint flows (`ReplayItemOptions`).
 struct ReplayItemOptions {
     /// Paint at this many times the size (default 1).
@@ -70,8 +204,8 @@ struct ReplayItemOptions {
 }
 
 /**
- * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`). Returns the steps run:
- * fewer when there is no simulation to step yet (its clock can't move).
+ * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`); without a simulation
+ * yet, its clock is set there. Returns how far the clock moved.
  *
  * The TS core's chunk is `Math.max(1, wetChunk ?? 0) || Infinity`, which is never `Infinity`: without
  * a `wetChunk` it steps one step per call (and calls `onWetSteps` after each). The steps and pixels
@@ -80,16 +214,20 @@ struct ReplayItemOptions {
 @discardableResult
 func advanceReplayClock(_ target: PaintEditorController, _ clock: Int, _ options: ReplayItemOptions = ReplayItemOptions()) async throws -> Int {
     let chunk = options.wetChunk.map { Swift.max(1, $0) } ?? Int.max
-    let start = target.wet.world?.clock ?? 0
+    let start = target.wet.clock
     var left = clock - start
     while left > 0 {
         let n = Swift.min(left, chunk)
         let ran = Int(try target.advanceWet(steps: n, seconds: nil)["steps"]?.numberValue ?? 0)
         if chunk != Int.max { try await options.onWetSteps?() }
-        if ran <= 0 { break }
+        if ran <= 0 {
+            // No simulation yet: nothing flows, but the clock goes on (a world made later starts there, as it did).
+            target.wet.setClock(clock)
+            break
+        }
         left -= ran
     }
-    return (target.wet.world?.clock ?? 0) - start
+    return (target.wet.clock) - start
 }
 
 /// What a recorded stroke replays with (`beginStroke` / `paintStroke` options without the points), at `scale` (`replayStrokeInit`).
@@ -279,6 +417,8 @@ func replayItem(_ target: PaintEditorController, _ item: ReplayItem, _ options: 
                 if options.pointChunk != nil && j < n { await options.onPoints?() }
                 k = j
             }
+            // The pen lifted later than the last point: the paint flowed under the open stroke until then.
+            if let end = st.endStep { try await advanceReplayClock(target, end, options) }
             try finishReplayStroke(target, session)
         } else {
             _ = try target.paintStroke(i, points: st.points)

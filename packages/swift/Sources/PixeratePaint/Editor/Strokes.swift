@@ -42,6 +42,9 @@ public struct RecordedStroke {
     public var effect: PaintEffectPaint?
     /// Wet brushes: the wet simulation's clock (steps) at which each point was applied.
     public var steps: [Int]?
+    /// Wet brushes: the clock the end (pen-up) was applied at, when the simulation ran on after the
+    /// last point (nil: right after the last point). A replay steps to it before ending the stroke.
+    public var endStep: Int?
     /// Antimatter brushes: the layer ids in stack order that were visible when the stroke was painted.
     public var targets: [String]?
     /// Scraper strokes: the layers it cut through, top to bottom, so a replay cuts the same ones
@@ -108,6 +111,7 @@ func strokeToJSON(_ s: RecordedStroke) -> JSONValue {
     if let copies = s.copies { o["copies"] = .array(copies.map { .array($0.map { .number($0) }) }) }
     if let load = s.load { o["load"] = loadJSON(load) }
     if let steps = s.steps { o["steps"] = .array(steps.map { .number(Double($0)) }) }
+    if let end = s.endStep { o["endStep"] = .number(Double(end)) }
     if let targets = s.targets { o["targets"] = .array(targets.map { .string($0) }) }
     if let stencils = s.stencils { o["stencils"] = .array(stencils.map { .object($0.json) }) }
     if let paint = s.paint { o["paint"] = paint.json }
@@ -202,6 +206,7 @@ func normalizeBrushStroke(_ raw: JSONValue) -> RecordedStroke? {
         }
         if ints.count == steps.count { out.steps = ints }
     }
+    if let last = out.steps?.last, let n = r["endStep"]?.finite, n == n.rounded(.towardZero), n <= 9_007_199_254_740_991, n > Double(last) { out.endStep = Int(n) }
     if let list = r["targets"]?.arrayValue {
         let targets = list.compactMap { $0.stringValue.flatMap { $0.isEmpty ? nil : $0 } }
         if !targets.isEmpty { out.targets = targets }

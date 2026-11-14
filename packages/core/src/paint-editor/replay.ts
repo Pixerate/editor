@@ -36,12 +36,19 @@ import type { WetFlowSpec } from '../paint/wet/flow';
 import type { WetParams, WetTilt } from '../paint/wet/model';
 import type { LivePatternsInput, LivePatternsSettings } from '../paint/live-patterns';
 import { downsampleRgba } from './render';
+import { FREE_INTERVAL } from '../paint/wet/model';
 
 export interface PaintReplayOptions {
   /** Paint at this many times the size (1 for a time-lapse; 1..8 for a high-resolution export). */
   scale?: number;
   /** Stop after this many strokes (default all). */
   strokes?: number;
+  /**
+   * The wet clock the painting had reached (the editor's): after the last item, a replay of the
+   * whole painting lets the paint flow on to it, as it did after the last logged item (default: stop
+   * at the last item).
+   */
+  clock?: number;
 }
 
 /** One frame of a replay. */
@@ -96,6 +103,109 @@ export function replayItems(doc: PaintDocumentState): ReplayItem[] {
   return items.map(({ at: _a, order: _o, ...item }) => item as ReplayItem);
 }
 
+/** The clocks a replay item happens at: its first and its last (`null`: it doesn't depend on the clock). */
+export function itemClocks(item: ReplayItem): { first: number; last: number } | null {
+  if (item.kind === 'wet') return { first: item.event.clock, last: item.event.clock };
+  if (item.kind !== 'stroke' || item.stroke.brush.engine !== 'wet') return null;
+  const steps = item.stroke.steps;
+  if (!steps?.length) return null;
+  return { first: steps[0], last: item.stroke.endStep ?? steps[steps.length - 1] };
+}
+
+/** The latest wet clock a document's log records (its strokes' points and pen-ups, its wet events); 0 for none. */
+export function loggedWetClock(doc: Pick<PaintDocumentState, 'strokes' | 'wetEvents'>): number {
+  let max = 0;
+  for (const st of doc.strokes) {
+    const steps = st.brush.engine === 'wet' ? st.steps : undefined;
+    if (steps?.length) max = Math.max(max, st.endStep ?? steps[steps.length - 1]);
+  }
+  for (const e of doc.wetEvents ?? []) if (Number.isFinite(e.clock)) max = Math.max(max, e.clock);
+  return max;
+}
+
+/** The largest wet clock (steps) a document's log is taken at its word for: about 200 days at 120 steps a second. */
+export const MAX_WET_CLOCK = 2147483647;
+
+/** Whether every clock a document's log records is a whole number of steps in 0..`MAX_WET_CLOCK`. */
+function wetClocksInRange(doc: Pick<PaintDocumentState, 'strokes' | 'wetEvents'>): boolean {
+  const ok = (v: number) => Number.isInteger(v) && v >= 0 && v <= MAX_WET_CLOCK;
+  for (const st of doc.strokes) if (st.brush.engine === 'wet' && st.steps && !(st.steps.every(ok) && (st.endStep === undefined || ok(st.endStep)))) return false;
+  return (doc.wetEvents ?? []).every((e) => ok(e.clock));
+}
+
+/** Whether a document's log has anything a wet clock is recorded for (a wet stroke with its clocks, or a wet event). */
+export function hasWetLog(doc: Pick<PaintDocumentState, 'strokes' | 'wetEvents'>): boolean {
+  return Boolean(doc.wetEvents?.length) || doc.strokes.some((st) => st.brush.engine === 'wet' && Boolean(st.steps?.length));
+}
+
+/**
+ * Whether `e` dries every layer at once, everywhere (no layer, no rectangle): what opening a
+ * document does to its wet paint (the save dried it), and the session break a reopened document
+ * logs (`openedWetLog`).
+ */
+export function isDryAll(e: WetEvent): boolean {
+  return e.kind === 'dry' && (e.layerId === undefined || e.layerId === '') && (e.data === undefined || e.data === null);
+}
+
+/**
+ * The log of a document as it is opened, so a replay sees what happened (#720):
+ * - The paint was dried when it was saved, at `clock` (the saved wet clock, else the log's
+ *   latest): a `dry` event for every layer at that clock ends the log, so a replay lets the paint
+ *   flow on to it (also after the last stroke) and dries it there, and paint added after opening
+ *   mixes with dry paint, as it did.
+ * - Documents saved before the wet clock went on across sessions have later sessions' clocks
+ *   starting again at 0: each place the clocks go back is such a reopening, behind a `dry` of
+ *   everything at the latest clock before it, and its clocks are moved to go on from the next
+ *   multiple of `FREE_INTERVAL` (so the simulation frees tiles on the same steps it did).
+ * A log with a clock past `MAX_WET_CLOCK` is left as it is (`null`), as is the clock.
+ * `dry` is the dry added at the end (`null` when the log already ended with one); `null` when there
+ * is no wet log.
+ */
+export function openedWetLog(doc: PaintDocumentState, clock: number | null): { strokes: RecordedStroke[]; wetEvents: WetEvent[]; clock: number; dry: WetEvent | null } | null {
+  if (!hasWetLog(doc) || !wetClocksInRange(doc)) return null;
+  // Walk the log in replay order: a clock earlier than one before it starts a new session.
+  const session = new Map<object, { index: number; offset: number }>();
+  const breaks: Array<{ clock: number; at: number }> = [];
+  let offset = 0;
+  let latest = 0;
+  for (const item of replayItems(doc)) {
+    const c = itemClocks(item);
+    if (!c) continue;
+    if (c.first + offset < latest) {
+      breaks.push({ clock: latest, at: item.kind === 'stroke' ? doc.strokes.indexOf(item.stroke) : (item.event.at ?? 0) });
+      // The session's 0 goes on the next multiple of FREE_INTERVAL: the simulation frees tiles on those, so it steps as it did.
+      offset = Math.ceil(latest / FREE_INTERVAL) * FREE_INTERVAL;
+    }
+    session.set(item.kind === 'stroke' ? item.stroke : item.event, { index: breaks.length, offset });
+    latest = Math.max(latest, c.last + offset);
+  }
+  let strokes = doc.strokes;
+  let wetEvents = doc.wetEvents ?? [];
+  if (breaks.length) {
+    strokes = strokes.map((st) => {
+      const d = session.get(st)?.offset ?? 0;
+      return d && st.steps ? { ...st, steps: st.steps.map((v) => v + d), ...(st.endStep !== undefined ? { endStep: st.endStep + d } : {}) } : st;
+    });
+    // Break b goes in before the first wet event after it (a later `at`, or the same `at` in a later session).
+    const next: WetEvent[] = [];
+    const brk = (i: number): WetEvent => ({ clock: breaks[i].clock, at: breaks[i].at, kind: 'dry' });
+    let b = 0;
+    for (const e of wetEvents) {
+      const s = session.get(e);
+      const at = e.at ?? 0;
+      while (b < breaks.length && (at > breaks[b].at || (at === breaks[b].at && s !== undefined && s.index > b))) next.push(brk(b++));
+      next.push(s?.offset ? { ...e, clock: e.clock + s.offset } : e);
+    }
+    while (b < breaks.length) next.push(brk(b++));
+    wetEvents = next;
+  }
+  const end = Math.max(latest, clock ?? 0);
+  const last = wetEvents[wetEvents.length - 1];
+  if (last && isDryAll(last) && last.clock === end && (last.at ?? 0) >= strokes.length) return { strokes, wetEvents, clock: end, dry: null };
+  const dry: WetEvent = { clock: end, at: strokes.length, kind: 'dry' };
+  return { strokes, wetEvents: [...wetEvents, dry], clock: end, dry };
+}
+
 /** The layer tree with every pixel layer empty (what a replay paints into). */
 function emptiedLayers(layers: readonly PaintLayer[]): PaintLayer[] {
   let out = [...layers] as PaintLayer[];
@@ -118,8 +228,8 @@ export interface ReplayItemOptions {
 }
 
 /**
- * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`). Returns the steps run:
- * fewer when there is no simulation to step yet (its clock can't move).
+ * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`); without a simulation
+ * yet, its clock is set there. Returns how far the clock moved.
  */
 export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
   const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
@@ -129,7 +239,11 @@ export async function advanceReplayClock(target: PaintEditorController, clock: n
     const n = Math.min(left, chunk);
     const ran = (await target.advanceWet({ steps: n })).steps;
     if (Number.isFinite(chunk)) await options.onWetSteps?.(target.getState().wet.clock);
-    if (ran <= 0) break;
+    if (ran <= 0) {
+      // No simulation yet: nothing flows, but the clock goes on (a world made later starts there, as it did).
+      target.wet.setClock(clock);
+      break;
+    }
     left -= ran;
   }
   return target.getState().wet.clock - start;
@@ -318,6 +432,8 @@ export async function replayItem(target: PaintEditorController, item: ReplayItem
       if (options.pointChunk && j < st.points.length) await options.onPoints?.();
       i = j;
     }
+    // The pen lifted later than the last point: the paint flowed under the open stroke until then.
+    if (st.endStep !== undefined) await advanceTo(st.endStep);
     await finishReplayStroke(target, session);
   } else {
     await target.wetIdle();
@@ -332,7 +448,7 @@ export async function replayItem(target: PaintEditorController, item: ReplayItem
 export async function replayPainting(
   source: PaintDocumentState,
   target: PaintEditorController,
-  options: PaintReplayOptions & { onStroke?: (index: number) => Promise<void> | void; onWetSteps?: (clock: number) => Promise<void> | void; wetChunk?: number } = {}
+  options: PaintReplayOptions & { onStroke?: (index: number) => Promise<void> | void; onWetSteps?: (clock: number) => Promise<void> | void; wetChunk?: number; clock?: number } = {}
 ): Promise<void> {
   const s = options.scale ?? 1;
   const scaleM: Affine = [s, 0, 0, s, 0, 0];
@@ -353,6 +469,11 @@ export async function replayPainting(
     }
     await replayItem(target, item, itemOptions);
     if (item.kind === 'stroke') await options.onStroke?.(strokes);
+  }
+  // Paint that flowed on after the last logged item (the whole painting only).
+  if (options.clock !== undefined && maxStrokes >= source.strokes.length) {
+    await target.wetIdle();
+    await advanceReplayClock(target, options.clock, itemOptions);
   }
 }
 
@@ -381,8 +502,11 @@ export function timeLapseVideo(frameCount: number, width: number, height: number
   return { video, ffmpeg: toVideoFfmpeg(video, { output: 'timelapse.mp4' }), durationMs };
 }
 
-/** Builds the time-lapse of a painting (see `PaintEditorController.timeLapse`). */
-export async function buildTimeLapse(source: PaintDocumentState, target: PaintEditorController, options: TimeLapseOptions = {}): Promise<TimeLapse> {
+/**
+ * Builds the time-lapse of a painting (see `PaintEditorController.timeLapse`); `clock` is the wet
+ * clock the painting had reached, so paint that flowed on after the last logged item flows in it too.
+ */
+export async function buildTimeLapse(source: PaintDocumentState, target: PaintEditorController, options: TimeLapseOptions = {}, clock?: number): Promise<TimeLapse> {
   const maxSide = Math.max(32, Math.min(4096, Math.round(options.maxSide ?? 720)));
   const total = source.strokes.length;
   const perFrame = Math.max(1, options.strokesPerFrame ?? Math.ceil(total / Math.max(1, options.frames ?? 120)));
@@ -399,6 +523,7 @@ export async function buildTimeLapse(source: PaintDocumentState, target: PaintEd
   };
   shoot(0);
   await replayPainting(source, target, {
+    clock,
     wetChunk: wetEvery > 0 ? wetEvery : 0,
     onStroke: (i) => {
       if (i % perFrame === 0 || i === total) shoot(i);

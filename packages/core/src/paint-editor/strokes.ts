@@ -50,6 +50,11 @@ export interface RecordedStroke {
   load?: MixerLoad;
   /** Wet brushes: the wet simulation's clock (steps) at which each point was applied, so a replay lets the paint flow the same. */
   steps?: number[];
+  /**
+   * Wet brushes: the clock the end (pen-up) was applied at, when the simulation ran on after the
+   * last point (missing: right after the last point). A replay steps to it before ending the stroke.
+   */
+  endStep?: number;
   /** The mask stencils it was painted through (so a replay keeps to them). */
   stencils?: Stencil[];
   /**
@@ -188,6 +193,7 @@ export function normalizeBrushStroke(raw: unknown): RecordedStroke | null {
   else if (paint && paint.type === 'gradient') out.paint = paint;
   if (Array.isArray(r.scrapeLayerIds) && r.scrapeLayerIds.every((v) => typeof v === 'string')) out.scrapeLayerIds = [...(r.scrapeLayerIds as string[])];
   if (Array.isArray(r.steps) && r.steps.length === points.length && r.steps.every((v) => Number.isInteger(v) && v >= 0)) out.steps = [...(r.steps as number[])];
+  if (out.steps && Number.isSafeInteger(r.endStep) && (r.endStep as number) > out.steps[out.steps.length - 1]) out.endStep = r.endStep as number;
   if (Array.isArray(r.targets)) {
     const targets = r.targets.filter((v): v is string => typeof v === 'string' && v.length > 0);
     if (targets.length) out.targets = targets;
