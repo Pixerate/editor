@@ -1270,14 +1270,57 @@ public func normalizeChartSpec(_ input: JSONValue?) -> (spec: ChartSpec, issues:
                 issues.append(ChartIssue(path: "view3d.\(key)", message: "view3d.\(key) must be \(what)."))
                 return fallback
             }
-            for k in v.keys where !["azimuth", "elevation", "depth"].contains(k) {
-                issues.append(ChartIssue(path: "view3d.\(k)", message: "view3d has no \"\(k)\"; it takes azimuth, elevation and depth."))
+            for k in v.keys where !["azimuth", "elevation", "depth", "particles", "relief"].contains(k) {
+                issues.append(ChartIssue(path: "view3d.\(k)", message: "view3d has no \"\(k)\"; it takes azimuth, elevation, depth, particles and relief."))
             }
-            view3d = ChartView3d(
+            var view = ChartView3d(
                 azimuth: angle("azimuth", 0, 360, CHART_VIEW3D_DEFAULTS.azimuth, "a turn from 0 to 360 degrees"),
                 elevation: angle("elevation", 0, 90, CHART_VIEW3D_DEFAULTS.elevation, "an angle from 0 to 90 degrees"),
                 depth: angle("depth", 0.2, 20, CHART_VIEW3D_DEFAULTS.depth, "a multiple of the bar width from 0.2 to 20")
             )
+            // Particles and relief (#806, #807): optional; null removes them. Mirrors `sub` in spec.ts.
+            enum Check { case ok(JSONValue), want(String) }
+            func sub(_ key: String, _ fields: [(String, (JSONValue) -> Check)], _ takes: String) -> JSONObject? {
+                guard let raw = v[key], raw != .null else { return nil }
+                guard case .object(let o) = raw else {
+                    issues.append(ChartIssue(path: "view3d.\(key)", message: "view3d.\(key) must be an object (\(takes)) or null to turn it off."))
+                    return nil
+                }
+                var out = JSONObject()
+                for (k, x) in o {
+                    guard let check = fields.first(where: { $0.0 == k })?.1 else {
+                        issues.append(ChartIssue(path: "view3d.\(key).\(k)", message: "view3d.\(key) has no \"\(k)\"; it takes \(takes)."))
+                        continue
+                    }
+                    if x == .null { continue }
+                    switch check(x) {
+                    case .ok(let value): out[k] = value
+                    case .want(let what): issues.append(ChartIssue(path: "view3d.\(key).\(k)", message: "view3d.\(key).\(k) must be \(what)."))
+                    }
+                }
+                return out
+            }
+            func num(_ lo: Double, _ hi: Double, _ what: String, integer: Bool = false) -> (JSONValue) -> Check {
+                { x in
+                    if case .bool = x { return .want(what) }
+                    guard let n = jsNumberValue(x), n.isFinite, n >= lo, n <= hi, !integer || n == n.rounded() else { return .want(what) }
+                    return .ok(.number(n))
+                }
+            }
+            view.particles = sub("particles", [
+                ("unit", num(Double.leastNonzeroMagnitude, Double.greatestFiniteMagnitude, "a positive number (what one grain stands for)")),
+                ("order", { x in
+                    if case .string(let s) = x, ["categories", "largest-first", "smallest-first"].contains(s) { return .ok(x) }
+                    return .want("\"categories\", \"largest-first\" or \"smallest-first\"")
+                }),
+            ], "unit and order")
+            view.relief = sub("relief", [
+                ("amount", num(0, 0.25, "a fraction from 0 to 0.25")),
+                ("scale", num(0.1, 20, "a number from 0.1 to 20")),
+                ("octaves", num(1, 8, "a whole number from 1 to 8", integer: true)),
+                ("seed", num(-2147483648, 2147483647, "a whole number", integer: true)),
+            ], "amount, scale, octaves and seed")
+            view3d = view
         } else {
             issues.append(ChartIssue(path: "view3d", message: "view3d must be { azimuth, elevation, depth } or null for a flat chart."))
         }

@@ -412,8 +412,16 @@ extension ChartController {
                 }
                 merged[k] = .object(existingSub)
             } else if k == "view3d", case .object(let subPatch) = v, case .object(var existingSub) = merged[k] {
-                // `{ ...s.view3d, ...patch.view3d }` in TS.
-                for (sk, sv) in subPatch { existingSub[sk] = sv }
+                // `mergeView3d` in TS: fields replace, and `particles` / `relief` merge (null removes).
+                for (sk, sv) in subPatch {
+                    if (sk == "particles" || sk == "relief"), case .object(let inner) = sv {
+                        var base = existingSub[sk]?.objectValue ?? JSONObject()
+                        for (ik, iv) in inner { base[ik] = iv }
+                        existingSub[sk] = .object(base)
+                    } else {
+                        existingSub[sk] = sv
+                    }
+                }
                 merged[k] = .object(existingSub)
             } else {
                 merged[k] = v

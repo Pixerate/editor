@@ -121,13 +121,27 @@ export interface ChartState {
 export type ChartActionResult = { ok: true } | { ok: false; message: string; issues?: ChartIssue[] };
 
 /** Top-level fields with partial axes and legend. */
+/** A view3d patch over the current view: fields merge, and so do `particles` and `relief` (null removes either). */
+function mergeView3d(current: ChartView3d | undefined, patch: Partial<ChartView3dPatch>): Record<string, unknown> {
+	const sub = (key: 'particles' | 'relief') => {
+		const p = patch[key];
+		if (p === null) return null;
+		if (p === undefined) return current?.[key];
+		return typeof p === 'object' && !Array.isArray(p) ? { ...(current?.[key] ?? {}), ...p } : p;
+	};
+	return { ...current, ...patch, particles: sub('particles'), relief: sub('relief') };
+}
+
+/** `view3d` in an update: each part optional, and `particles` / `relief` null to turn off. */
+export type ChartView3dPatch = Omit<ChartView3d, 'particles' | 'relief'> & { particles?: ChartView3d['particles'] | null; relief?: ChartView3d['relief'] | null };
+
 export type ChartSpecPatch = Partial<Omit<ChartSpec, 'version' | 'xAxis' | 'yAxis' | 'yAxis2' | 'legend' | 'view3d'>> & {
 	xAxis?: Partial<ChartAxis>;
 	yAxis?: Partial<ChartAxis>;
 	yAxis2?: Partial<ChartAxis>;
 	legend?: Partial<ChartLegend>;
 	/** A partial 3-D view merges into the current one; `null` draws the chart flat again. */
-	view3d?: Partial<ChartView3d> | null;
+	view3d?: Partial<ChartView3dPatch> | null;
 };
 
 export interface ChartSeriesInput {
@@ -390,7 +404,7 @@ export class ChartController {
 			yAxis: patch.yAxis ? { ...s.yAxis, ...patch.yAxis } : s.yAxis,
 			yAxis2: patch.yAxis2 ? { ...s.yAxis2, ...patch.yAxis2 } : s.yAxis2,
 			legend: patch.legend ? { ...s.legend, ...patch.legend } : s.legend,
-			view3d: patch.view3d === null ? undefined : patch.view3d ? { ...s.view3d, ...patch.view3d } : s.view3d,
+			view3d: patch.view3d === null ? undefined : patch.view3d ? mergeView3d(s.view3d, patch.view3d) : s.view3d,
 			version: 1
 		};
 		const { spec, issues } = normalizeChartSpec(merged);

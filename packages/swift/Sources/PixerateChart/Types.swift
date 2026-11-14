@@ -863,11 +863,19 @@ public struct ChartView3d: Sendable, Equatable {
     public var elevation: Double
     /// Depth of the bars and ribbons as a multiple of the bar width, 0.2–20.
     public var depth: Double
-    public init(azimuth: Double = 20, elevation: Double = 15, depth: Double = 1) {
+    /// Particles (#806): `{ unit?, order? }`, as normalised (the 3-D renderer is web only for now).
+    public var particles: JSONObject?
+    /// Relief (#807): `{ amount?, scale?, octaves?, seed? }`, as normalised.
+    public var relief: JSONObject?
+    public init(azimuth: Double = 20, elevation: Double = 15, depth: Double = 1, particles: JSONObject? = nil, relief: JSONObject? = nil) {
         self.azimuth = azimuth; self.elevation = elevation; self.depth = depth
+        self.particles = particles; self.relief = relief
     }
     public func toJSON() -> JSONValue {
-        .object(JSONObject([("azimuth", .number(azimuth)), ("elevation", .number(elevation)), ("depth", .number(depth))]))
+        var fields: [(String, JSONValue)] = [("azimuth", .number(azimuth)), ("elevation", .number(elevation)), ("depth", .number(depth))]
+        if let particles { fields.append(("particles", .object(particles))) }
+        if let relief { fields.append(("relief", .object(relief))) }
+        return .object(JSONObject(fields))
     }
 }
 

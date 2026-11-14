@@ -369,6 +369,28 @@ export interface ChartView3d {
 	elevation: number;
 	/** Depth of the bars and ribbons as a multiple of the bar width, 0.2–20 (default 1). */
 	depth: number;
+	/**
+	 * Draw the first series as particles (#806): each category a layer of grains, one per `unit`
+	 * (default a round unit for about 600 grains), layers in `order` from the floor up.
+	 */
+	particles?: ChartView3dParticles;
+	/** Sculpt area tops with seeded noise (#807); no thickness changes by more than `amount`. */
+	relief?: ChartView3dRelief;
+}
+
+export interface ChartView3dParticles {
+	unit?: number;
+	order?: 'categories' | 'largest-first' | 'smallest-first';
+}
+
+export interface ChartView3dRelief {
+	/** Largest change to a thickness, as a fraction of the value, 0–0.25 (default 0.04). */
+	amount?: number;
+	/** Noise frequency per category width, 0.1–20 (default 1.5). */
+	scale?: number;
+	/** Octaves of noise, 1–8 (default 4). */
+	octaves?: number;
+	seed?: number;
 }
 
 /** What a click selects. */

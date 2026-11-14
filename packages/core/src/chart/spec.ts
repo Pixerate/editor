@@ -718,8 +718,39 @@ export function normalizeChartSpec(input: unknown): { spec: ChartSpec; issues: C
 				issues.push({ path: `view3d.${key}`, message: `view3d.${key} must be ${what}.` });
 				return CHART_VIEW3D_DEFAULTS[key];
 			};
-			for (const k of Object.keys(v)) if (!['azimuth', 'elevation', 'depth'].includes(k)) issues.push({ path: `view3d.${k}`, message: `view3d has no "${k}"; it takes azimuth, elevation and depth.` });
+			for (const k of Object.keys(v)) if (!['azimuth', 'elevation', 'depth', 'particles', 'relief'].includes(k)) issues.push({ path: `view3d.${k}`, message: `view3d has no "${k}"; it takes azimuth, elevation, depth, particles and relief.` });
 			view3d = { azimuth: angle('azimuth', 0, 360, 'a turn from 0 to 360 degrees'), elevation: angle('elevation', 0, 90, 'an angle from 0 to 90 degrees'), depth: angle('depth', 0.2, 20, 'a multiple of the bar width from 0.2 to 20') };
+			// Particles and relief (#806, #807): optional; null removes them.
+			type Check = (x: unknown) => { ok: unknown } | { want: string };
+			const sub = (key: 'particles' | 'relief', fields: Record<string, Check>, takes: string) => {
+				const raw = v[key];
+				if (raw === undefined || raw === null) return undefined;
+				if (!isRecord(raw)) {
+					issues.push({ path: `view3d.${key}`, message: `view3d.${key} must be an object (${takes}) or null to turn it off.` });
+					return undefined;
+				}
+				const out: Record<string, unknown> = {};
+				for (const [k, x] of Object.entries(raw)) {
+					const check = fields[k];
+					if (!check) {
+						issues.push({ path: `view3d.${key}.${k}`, message: `view3d.${key} has no "${k}"; it takes ${takes}.` });
+						continue;
+					}
+					if (x === undefined || x === null) continue;
+					const r = check(x);
+					if ('want' in r) issues.push({ path: `view3d.${key}.${k}`, message: `view3d.${key}.${k} must be ${r.want}.` });
+					else out[k] = r.ok;
+				}
+				return out;
+			};
+			const num = (lo: number, hi: number, what: string, integer = false): Check => (x) => {
+				const n = Number(x);
+				return typeof x !== 'boolean' && Number.isFinite(n) && n >= lo && n <= hi && (!integer || Number.isInteger(n)) ? { ok: n } : { want: what };
+			};
+			const particles = sub('particles', { unit: num(Number.MIN_VALUE, Number.MAX_VALUE, 'a positive number (what one grain stands for)'), order: (x) => (x === 'categories' || x === 'largest-first' || x === 'smallest-first' ? { ok: x } : { want: '"categories", "largest-first" or "smallest-first"' }) }, 'unit and order');
+			const relief = sub('relief', { amount: num(0, 0.25, 'a fraction from 0 to 0.25'), scale: num(0.1, 20, 'a number from 0.1 to 20'), octaves: num(1, 8, 'a whole number from 1 to 8', true), seed: num(-2147483648, 2147483647, 'a whole number', true) }, 'amount, scale, octaves and seed');
+			if (particles) view3d.particles = particles as ChartView3d['particles'];
+			if (relief) view3d.relief = relief as ChartView3d['relief'];
 		}
 	}
 	let radarTicks: number | null = null;
