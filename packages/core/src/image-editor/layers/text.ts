@@ -21,6 +21,7 @@ import type { AffineMatrix } from '../../geom/types';
 import { transformBezierPath, type BezierPath } from '../../canvas/pathops/bezier';
 import { flattenPath, rasterizeCoverageSampled, type FlatPath } from './vector-raster';
 import { parseCssColor } from './css-color';
+import { checkAnnotationFontWeight, checkTextAnnotationFields } from './annotation-fields';
 import { LayerOperationError, requireLayer, requireUnlocked } from './ops';
 import {
   mapLayer,
@@ -499,15 +500,21 @@ export function toTextSpace(layer: Pick<TypeLayer, 'transform'>, p: { x: number;
 // Text annotations → type layers (migration) and back
 // ---------------------------------------------------------------------------
 
-/** The type layer data a text annotation draws, or `null` when its colour can't be read. */
+/**
+ * The type layer data a text annotation draws, or `null` when its colour or weight can't be read.
+ * Throws a `LayerOperationError` naming the field when one it draws with has the wrong type (a
+ * `text` that is not a string, an `x` that is not a number, …).
+ */
 export function typeFromAnnotation(a: Annotation): TypeLayerData | null {
   if (a.type !== 'text') return null;
   const t = a as TextAnnotation;
   const c = parseCssColor(t.color);
   if (!c) return null;
-  const weight = t.fontWeight === undefined || t.fontWeight === 'normal' ? 400 : t.fontWeight === 'bold' ? 700 : Number(t.fontWeight);
+  checkAnnotationFontWeight(t);
+  const weight = t.fontWeight === undefined || t.fontWeight === null || t.fontWeight === 'normal' ? 400 : t.fontWeight === 'bold' ? 700 : Number(t.fontWeight);
   if (!Number.isFinite(weight)) return null;
-  const style: TextStyle = { fontFamily: t.fontFamily || 'sans-serif', fontWeight: weight, fontSize: t.fontSize, color: c.hex };
+  checkTextAnnotationFields(t);
+  const style: TextStyle = { fontFamily: t.fontFamily || 'sans-serif', fontWeight: weight, fontSize: t.fontSize ?? undefined, color: c.hex };
   const op = c.alpha * (t.opacity ?? 1);
   if (op !== 1) style.opacity = op;
   // The canvas drew the text unbroken on one line from its top-left (textBaseline top).

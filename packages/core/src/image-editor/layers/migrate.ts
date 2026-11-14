@@ -16,6 +16,7 @@
 import { DEFAULT_ADJUSTMENTS_VALUES, DEFAULT_DEPTH_MASK_VALUES } from './defaults';
 import { normalizeAdjustmentLayers } from '../adjustment-layers';
 import { normalizeProcessVersion } from '../color';
+import { isBlendMode } from '../blend';
 import { decodeLayerMask, normalizeLayerMask } from '../selection/layer-mask';
 import { encodeSelectionRle, resizeSelection } from '../selection/mask';
 import type {
@@ -154,7 +155,7 @@ export function annotationLayerName(annotation: Annotation): string {
     case 'line':
       return 'Line';
     case 'text':
-      return annotation.text ? annotation.text.slice(0, 32) : 'Text';
+      return typeof annotation.text === 'string' && annotation.text ? annotation.text.slice(0, 32) : 'Text';
     case 'image':
       return 'Image';
   }
@@ -164,10 +165,12 @@ export function annotationLayerName(annotation: Annotation): string {
  * The layer an annotation becomes, for a `canvas` of that size: a shape layer (pen, rectangle,
  * ellipse, line, arrow) or a type layer (text; drawn with `canvas.shaper`, or kept undrawn until
  * one can) that remembers it, else an annotation layer (image, or a colour we can't read). Without
- * a canvas nothing is migrated.
+ * a canvas nothing is migrated. Throws a `LayerOperationError` naming the field when a field the
+ * migration draws with has the wrong type (see `annotation-fields.ts`).
  */
 export function annotationLayerFor(annotation: Annotation, canvas?: { width: number; height: number } & Partial<TextEnv>): AnnotationLayer | ShapeLayer | TypeLayer {
-  const blend = annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal';
+  // A blend mode the editor does not have draws normally (as a layer's own `blend`).
+  const blend = isBlendMode(annotation.blend) ? annotation.blend : 'normal';
   const type = canvas ? typeFromAnnotation(annotation) : null;
   if (type) {
     const layer = createTypeLayer({ ...type, name: annotationLayerName(annotation) }, { shaper: null, ...canvas! }, annotation.id, true);
@@ -176,7 +179,7 @@ export function annotationLayerFor(annotation: Annotation, canvas?: { width: num
   const shape = canvas ? shapeFromAnnotation(annotation) : null;
   if (shape) {
     const layer = createShapeLayer(
-      { ...shape, name: annotationLayerName(annotation), blend: annotation.blend && annotation.blend !== 'normal' ? annotation.blend : 'normal' },
+      { ...shape, name: annotationLayerName(annotation), blend },
       canvas!,
       annotation.id
     );

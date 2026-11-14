@@ -73,7 +73,7 @@ final class PaintVectorLayersTests: XCTestCase {
 
     func testShapeAndTypeChecks() {
         XCTAssertNil(shapeLayerProblem(["components": [["live": ["kind": "ellipse", "x": 0, "y": 0, "width": 2, "height": 2]]], "fill": "constructor"]))
-        XCTAssertEqual(shapeLayerProblem(["annotation": ["type": "pen", "strokeColor": "#00f"]]), "Cannot read properties of undefined (reading 'length')")
+        XCTAssertEqual(shapeLayerProblem(["annotation": ["type": "pen", "strokeColor": "#00f"]]), "points must be an array of { x, y } points.")
         XCTAssertEqual(shapeLayerProblem(["components": [["subpaths": []]], "fill": ["type": "gradient", "gradient": ["stops": [.null]]]]), "Cannot read properties of null (reading 'position')")
         XCTAssertEqual(shapeLayerProblem(["components": [["subpaths": []]], "stroke": ["width": 1, "paint": "#000", "join": .null]]), "stroke.join must be one of miter, round, bevel, got null.")
         XCTAssertEqual(typeLayerProblem(["text": "x", "runs": [.null, ["style": ["bold"]]]]), "runs[1].style.0 is not a character style field; use fontFamily, fontWeight, italic, fontSize, color, opacity, tracking, leading, baselineShift, underline, strikethrough, upright, postScriptName.")
@@ -82,12 +82,26 @@ final class PaintVectorLayersTests: XCTestCase {
     }
 
     func testAnnotationsReportTheLayerTheyMigrateTo() throws {
-        XCTAssertEqual(try migratedAnnotationType(["type": "rect", "strokeColor": "#f00"]), "shape")
+        XCTAssertEqual(try migratedAnnotationType(["type": "rect", "x": 1, "y": 1, "width": 4, "height": 3, "strokeColor": "#f00"]), "shape")
         XCTAssertEqual(try migratedAnnotationType(["type": "circle", "strokeColor": "red", "fillColor": "nope"]), "annotation")
-        XCTAssertEqual(try migratedAnnotationType(["type": "text", "text": "a", "color": "#123", "fontWeight": "600"]), "type")
+        XCTAssertEqual(try migratedAnnotationType(["type": "text", "x": 2, "y": 2, "text": "a", "color": "#123", "fontWeight": "600"]), "type")
         XCTAssertEqual(try migratedAnnotationType(["type": "text", "text": "a", "color": "#123", "fontWeight": "heavy"]), "annotation")
         XCTAssertEqual(try migratedAnnotationType(["type": "image"]), "annotation")
-        XCTAssertEqual(message { try self.load([["id": "a", "type": "annotation", "annotation": ["type": "text", "color": "#000", "text": 5]]]) }, "t.text.replace is not a function")
-        XCTAssertEqual(message { try self.load([["id": "a", "type": "annotation", "annotation": ["type": "pen", "strokeColor": "#000", "rotation": 5, "points": ["length": 2]]]]) }, "a.points.map is not a function")
+        XCTAssertEqual(message { try migratedAnnotationType(["type": "rect", "x": 1, "y": 1, "width": "4", "height": 3, "strokeColor": "#f00"]) }, "width must be a finite number.")
+        XCTAssertEqual(message { try migratedAnnotationType(["type": "text", "x": 2, "y": 2, "color": "#123", "text": "a", "fontWeight": true]) }, "fontWeight must be normal, bold or a number from 1 to 1000.")
+        // #848: a malformed annotation is reported and left out; the rest of the document loads.
+        let loaded = try load([
+            ["id": "p", "name": "Kept", "type": "pixel"],
+            ["id": "a", "type": "annotation", "annotation": ["type": "text", "x": 2, "y": 2, "color": "#000", "text": 5]],
+            ["id": "b", "type": "annotation", "annotation": ["type": "pen", "strokeColor": "#000", "rotation": 5, "points": ["length": 2]]],
+            ["id": "c", "type": "annotation", "annotation": ["type": "pen", "strokeColor": "#000", "points": [["x": 1, "y": 1], .null]]],
+        ])
+        XCTAssertEqual(loaded.problems, [
+            "Layer \"a\": the annotation could not be read (text must be a string.)",
+            "Layer \"b\": the annotation could not be read (points must be an array of { x, y } points.)",
+            "Layer \"c\": the annotation could not be read (points[1] must be a point { x, y } with finite numbers.)",
+        ])
+        let ids: [String] = (loaded.saved["layers"]?.arrayValue ?? []).compactMap { (layer: JSONValue) -> String? in layer.objectValue?["id"]?.stringValue }
+        XCTAssertEqual(ids, ["p"])
     }
 }

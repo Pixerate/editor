@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "document-load-vector-layers",
-  "description": "Opening documents with the image editor's vector parts, read as the TS core reads them: vector masks on pixel layers and groups (live rectangles with radii and transforms, ellipses, polygons, stars, lines with arrowheads, anchor lists with handles and corners, SVG path data with quadratics, arcs and closing anchors, hybrid edges kept only when well formed and on a segment the path has) are normalised, kept and saved back, and damaged ones are left out with the reason; shape and type layers are checked as the image editor checks them (components, live shapes, paints, gradients, patterns, strokes, text styles, paragraph styles, PSD blocks, stored pixels) and report its problem before the paint editor leaves them out; annotation layers are reported as the shape, type or annotation layers the image editor migrates them to; and a pen annotation without points or a text annotation whose text is not a string refuses the document with the TS core's TypeError. Anchor lists keep their points, handles, anchor types and corners, so SVG path data saves with the anchor types it infers (a merged closing anchor writes `in` before `out`) and every mask, SVG path data included, saves and reopens unchanged.",
+  "description": "Opening documents with the image editor's vector parts, read as the TS core reads them: vector masks on pixel layers and groups (live rectangles with radii and transforms, ellipses, polygons, stars, lines with arrowheads, anchor lists with handles and corners, SVG path data with quadratics, arcs and closing anchors, hybrid edges kept only when well formed and on a segment the path has) are normalised, kept and saved back, and damaged ones are left out with the reason; shape and type layers are checked as the image editor checks them (components, live shapes, paints, gradients, patterns, strokes, text styles, paragraph styles, PSD blocks, stored pixels) and report its problem before the paint editor leaves them out; annotation layers are reported as the shape, type or annotation layers the image editor migrates them to, and one whose fields the migration reads have the wrong type (a pen without points or with points that are not { x, y } numbers, a text annotation whose text is not a string, geometry, stroke width, opacity, rotation, font size, family or weight that is not a number or string) is reported with that field and left out while the rest of the document loads. Anchor lists keep their points, handles, anchor types and corners, so SVG path data saves with the anchor types it infers (a merged closing anchor writes `in` before `out`) and every mask, SVG path data included, saves and reopens unchanged.",
   "setup": {
     "width": 24,
     "height": 20
@@ -6182,8 +6182,8 @@
           "Layer \"Stroke dashes\": the shape could not be read (stroke.dashes must be at most 32 lengths 0..10000 (multiples of the width).)",
           "Layer \"Stroke dash sum\": the shape could not be read (stroke.dashes must add up to at least 0.01 widths.)",
           "Layer \"Stroke offset\": the shape could not be read (stroke.dashOffset must be between -1000000 and 1000000, got 2000000.)",
-          "Layer \"From a pen\": the shape could not be read (Cannot read properties of undefined (reading 'length'))",
-          "Layer \"From a rotated pen\": the shape could not be read (Cannot read properties of null (reading 'x'))",
+          "Layer \"From a pen\": the shape could not be read (points must be an array of { x, y } points.)",
+          "Layer \"From a rotated pen\": the shape could not be read (points[1] must be a point { x, y } with finite numbers.)",
           "Layer \"From a text\": the shape could not be read (it has no components)",
           "Layer \"PSD\": the shape could not be read (Invalid base64 data.)",
           "Layer \"Missing pixels\": asset \"gone\" is missing",
@@ -6356,107 +6356,60 @@
         "layers": [
           {
             "id": "p",
+            "name": "Kept pixels",
             "type": "pixel"
           },
           {
-            "id": "a",
+            "id": "pen-good",
+            "name": "pen-good",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "x": 3,
+                  "y": 2
+                }
+              ]
+            }
+          },
+          {
+            "id": "pen-no-points",
+            "name": "pen-no-points",
             "type": "annotation",
             "annotation": {
               "type": "pen",
               "strokeColor": "#000"
             }
-          }
-        ],
-        "assets": {}
-      },
-      "expect": {
-        "result": {
-          "activeLayerId": "keep",
-          "layers": [
-            {
-              "active": true,
-              "blend": "normal",
-              "bounds": null,
-              "clipped": false,
-              "depth": 0,
-              "id": "keep",
-              "locks": {},
-              "name": "Kept",
-              "opacity": 1,
-              "parentId": null,
-              "type": "pixel",
-              "visible": true
-            }
-          ]
-        },
-        "loaded": {
-          "error": "Cannot read properties of undefined (reading 'length')"
-        }
-      }
-    },
-    {
-      "tool": "list_layers",
-      "arguments": {},
-      "load": {
-        "format": "pixerate-paint",
-        "version": 2,
-        "width": 24,
-        "height": 20,
-        "paper": {
-          "color": "#ffffff"
-        },
-        "layers": [
+          },
           {
-            "id": "a",
+            "id": "pen-points-null",
+            "name": "pen-points-null",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "points": null
+            }
+          },
+          {
+            "id": "pen-points-string",
+            "name": "pen-points-string",
             "type": "annotation",
             "annotation": {
               "type": "pen",
               "strokeColor": "#000",
               "points": "ab"
             }
-          }
-        ],
-        "assets": {}
-      },
-      "expect": {
-        "result": {
-          "activeLayerId": "keep",
-          "layers": [
-            {
-              "active": true,
-              "blend": "normal",
-              "bounds": null,
-              "clipped": false,
-              "depth": 0,
-              "id": "keep",
-              "locks": {},
-              "name": "Kept",
-              "opacity": 1,
-              "parentId": null,
-              "type": "pixel",
-              "visible": true
-            }
-          ]
-        },
-        "loaded": {
-          "error": "pts.map is not a function"
-        }
-      }
-    },
-    {
-      "tool": "list_layers",
-      "arguments": {},
-      "load": {
-        "format": "pixerate-paint",
-        "version": 2,
-        "width": 24,
-        "height": 20,
-        "paper": {
-          "color": "#ffffff"
-        },
-        "layers": [
+          },
           {
-            "id": "a",
+            "id": "pen-points-object",
+            "name": "pen-points-object",
             "type": "annotation",
             "annotation": {
               "type": "pen",
@@ -6466,109 +6419,347 @@
                 "length": 2
               }
             }
-          }
-        ],
-        "assets": {}
-      },
-      "expect": {
-        "result": {
-          "activeLayerId": "keep",
-          "layers": [
-            {
-              "active": true,
-              "blend": "normal",
-              "bounds": null,
-              "clipped": false,
-              "depth": 0,
-              "id": "keep",
-              "locks": {},
-              "name": "Kept",
-              "opacity": 1,
-              "parentId": null,
-              "type": "pixel",
-              "visible": true
+          },
+          {
+            "id": "pen-point-null",
+            "name": "pen-point-null",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                },
+                null
+              ]
             }
-          ]
-        },
-        "loaded": {
-          "error": "a.points.map is not a function"
-        }
-      }
-    },
-    {
-      "tool": "list_layers",
-      "arguments": {},
-      "load": {
-        "format": "pixerate-paint",
-        "version": 2,
-        "width": 24,
-        "height": 20,
-        "paper": {
-          "color": "#ffffff"
-        },
-        "layers": [
+          },
+          {
+            "id": "pen-point-text",
+            "name": "pen-point-text",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                },
+                {
+                  "x": "3",
+                  "y": 2
+                }
+              ]
+            }
+          },
+          {
+            "id": "pen-point-array",
+            "name": "pen-point-array",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "points": [
+                [
+                  1,
+                  2
+                ]
+              ]
+            }
+          },
+          {
+            "id": "pen-rotated-no-x",
+            "name": "pen-rotated-no-x",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "rotation": 30,
+              "y": 1,
+              "points": [
+                {
+                  "x": 1,
+                  "y": 1
+                }
+              ]
+            }
+          },
+          {
+            "id": "pen-rotation-text",
+            "name": "pen-rotation-text",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "rotation": "30",
+              "x": 1,
+              "y": 1,
+              "points": []
+            }
+          },
+          {
+            "id": "pen-width-text",
+            "name": "pen-width-text",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "#000",
+              "strokeWidth": "2",
+              "points": []
+            }
+          },
+          {
+            "id": "pen-bad-colour",
+            "name": "pen-bad-colour",
+            "type": "annotation",
+            "annotation": {
+              "type": "pen",
+              "strokeColor": "nope"
+            }
+          },
+          {
+            "id": "rect-width",
+            "name": "rect-width",
+            "type": "annotation",
+            "annotation": {
+              "type": "rect",
+              "x": 1,
+              "y": 1,
+              "width": "4",
+              "height": 3,
+              "strokeColor": "#f00",
+              "strokeWidth": 1
+            }
+          },
+          {
+            "id": "rect-no-y",
+            "name": "rect-no-y",
+            "type": "annotation",
+            "annotation": {
+              "type": "rect",
+              "x": 1,
+              "width": 4,
+              "height": 3,
+              "strokeColor": "#f00"
+            }
+          },
+          {
+            "id": "circle-radius",
+            "name": "circle-radius",
+            "type": "annotation",
+            "annotation": {
+              "type": "circle",
+              "x": 5,
+              "y": 5,
+              "radiusX": null,
+              "radiusY": 3,
+              "strokeColor": "red"
+            }
+          },
+          {
+            "id": "circle-opacity",
+            "name": "circle-opacity",
+            "type": "annotation",
+            "annotation": {
+              "type": "circle",
+              "x": 5,
+              "y": 5,
+              "radiusX": 2,
+              "radiusY": 3,
+              "strokeColor": "red",
+              "opacity": "0.5"
+            }
+          },
+          {
+            "id": "line-end",
+            "name": "line-end",
+            "type": "annotation",
+            "annotation": {
+              "type": "line",
+              "x": 1,
+              "y": 1,
+              "endX": 8,
+              "endY": [
+                4
+              ],
+              "strokeColor": "#000"
+            }
+          },
+          {
+            "id": "arrow-end",
+            "name": "arrow-end",
+            "type": "annotation",
+            "annotation": {
+              "type": "arrow",
+              "x": 1,
+              "y": 1,
+              "endX": "8",
+              "endY": 4,
+              "strokeColor": "#000",
+              "strokeWidth": 2
+            }
+          },
+          {
+            "id": "arrow-no-width",
+            "name": "arrow-no-width",
+            "type": "annotation",
+            "annotation": {
+              "type": "arrow",
+              "x": 1,
+              "y": 1,
+              "endX": 8,
+              "endY": 4,
+              "strokeColor": "#000"
+            }
+          },
           {
             "id": "g",
+            "name": "Group",
             "type": "group",
             "children": [
               {
-                "id": "a",
+                "id": "text-number",
+                "name": "text-number",
                 "type": "annotation",
                 "annotation": {
                   "type": "text",
+                  "x": 2,
+                  "y": 2,
                   "color": "#000",
                   "text": 5
                 }
+              },
+              {
+                "id": "gp",
+                "name": "Group pixels",
+                "type": "pixel"
               }
             ]
-          }
-        ],
-        "assets": {}
-      },
-      "expect": {
-        "result": {
-          "activeLayerId": "keep",
-          "layers": [
-            {
-              "active": true,
-              "blend": "normal",
-              "bounds": null,
-              "clipped": false,
-              "depth": 0,
-              "id": "keep",
-              "locks": {},
-              "name": "Kept",
-              "opacity": 1,
-              "parentId": null,
-              "type": "pixel",
-              "visible": true
-            }
-          ]
-        },
-        "loaded": {
-          "error": "t.text.replace is not a function"
-        }
-      }
-    },
-    {
-      "tool": "list_layers",
-      "arguments": {},
-      "load": {
-        "format": "pixerate-paint",
-        "version": 2,
-        "width": 24,
-        "height": 20,
-        "paper": {
-          "color": "#ffffff"
-        },
-        "layers": [
+          },
           {
-            "id": "a",
+            "id": "text-null",
+            "name": "text-null",
             "type": "annotation",
             "annotation": {
               "type": "text",
+              "x": 2,
+              "y": 2,
               "color": "#000",
               "text": null
+            }
+          },
+          {
+            "id": "text-missing",
+            "name": "text-missing",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000"
+            }
+          },
+          {
+            "id": "text-x",
+            "name": "text-x",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": "2",
+              "y": 2,
+              "color": "#000",
+              "text": "Note"
+            }
+          },
+          {
+            "id": "text-size",
+            "name": "text-size",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000",
+              "text": "Note",
+              "fontSize": "12"
+            }
+          },
+          {
+            "id": "text-family",
+            "name": "text-family",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000",
+              "text": "Note",
+              "fontFamily": 5
+            }
+          },
+          {
+            "id": "text-weight",
+            "name": "text-weight",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000",
+              "text": "Note",
+              "fontWeight": true
+            }
+          },
+          {
+            "id": "text-weight-null",
+            "name": "text-weight-null",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000",
+              "text": "Note",
+              "fontWeight": null
+            }
+          },
+          {
+            "id": "text-rotation",
+            "name": "text-rotation",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#000",
+              "text": "Note",
+              "rotation": {}
+            }
+          },
+          {
+            "id": "text-bad-colour",
+            "name": "text-bad-colour",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "color": "nope",
+              "text": 5
+            }
+          },
+          {
+            "id": "text-good",
+            "name": "text-good",
+            "type": "annotation",
+            "annotation": {
+              "type": "text",
+              "x": 2,
+              "y": 2,
+              "color": "#123",
+              "text": "Note",
+              "fontSize": 12
             }
           }
         ],
@@ -6576,17 +6767,45 @@
       },
       "expect": {
         "result": {
-          "activeLayerId": "keep",
+          "activeLayerId": "gp",
           "layers": [
+            {
+              "active": false,
+              "blend": "pass-through",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "g",
+              "locks": {},
+              "name": "Group",
+              "opacity": 1,
+              "parentId": null,
+              "type": "group",
+              "visible": true
+            },
             {
               "active": true,
               "blend": "normal",
               "bounds": null,
               "clipped": false,
-              "depth": 0,
-              "id": "keep",
+              "depth": 1,
+              "id": "gp",
               "locks": {},
-              "name": "Kept",
+              "name": "Group pixels",
+              "opacity": 1,
+              "parentId": "g",
+              "type": "pixel",
+              "visible": true
+            },
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "p",
+              "locks": {},
+              "name": "Kept pixels",
               "opacity": 1,
               "parentId": null,
               "type": "pixel",
@@ -6594,9 +6813,38 @@
             }
           ]
         },
-        "loaded": {
-          "error": "Cannot read properties of null (reading 'replace')"
-        }
+        "loaded": [
+          "Layer \"pen-no-points\": the annotation could not be read (points must be an array of { x, y } points.)",
+          "Layer \"pen-points-null\": the annotation could not be read (points must be an array of { x, y } points.)",
+          "Layer \"pen-points-string\": the annotation could not be read (points must be an array of { x, y } points.)",
+          "Layer \"pen-points-object\": the annotation could not be read (points must be an array of { x, y } points.)",
+          "Layer \"pen-point-null\": the annotation could not be read (points[1] must be a point { x, y } with finite numbers.)",
+          "Layer \"pen-point-text\": the annotation could not be read (points[1] must be a point { x, y } with finite numbers.)",
+          "Layer \"pen-point-array\": the annotation could not be read (points[0] must be a point { x, y } with finite numbers.)",
+          "Layer \"pen-rotated-no-x\": the annotation could not be read (x must be a finite number.)",
+          "Layer \"pen-rotation-text\": the annotation could not be read (rotation must be a finite number.)",
+          "Layer \"pen-width-text\": the annotation could not be read (strokeWidth must be a finite number.)",
+          "Layer \"rect-width\": the annotation could not be read (width must be a finite number.)",
+          "Layer \"rect-no-y\": the annotation could not be read (y must be a finite number.)",
+          "Layer \"circle-radius\": the annotation could not be read (radiusX must be a finite number.)",
+          "Layer \"circle-opacity\": the annotation could not be read (opacity must be a finite number.)",
+          "Layer \"line-end\": the annotation could not be read (endY must be a finite number.)",
+          "Layer \"arrow-end\": the annotation could not be read (endX must be a finite number.)",
+          "Layer \"text-number\": the annotation could not be read (text must be a string.)",
+          "Layer \"text-null\": the annotation could not be read (text must be a string.)",
+          "Layer \"text-missing\": the annotation could not be read (text must be a string.)",
+          "Layer \"text-x\": the annotation could not be read (x must be a finite number.)",
+          "Layer \"text-size\": the annotation could not be read (fontSize must be a finite number.)",
+          "Layer \"text-family\": the annotation could not be read (fontFamily must be a font family name.)",
+          "Layer \"text-weight\": the annotation could not be read (fontWeight must be normal, bold or a number from 1 to 1000.)",
+          "Layer \"text-rotation\": the annotation could not be read (rotation must be a finite number.)",
+          "Layer \"pen-good\" is an image editor shape layer, which the paint editor does not have; it was left out.",
+          "Layer \"pen-bad-colour\" is an image editor annotation layer, which the paint editor does not have; it was left out.",
+          "Layer \"arrow-no-width\" is an image editor shape layer, which the paint editor does not have; it was left out.",
+          "Layer \"text-weight-null\" is an image editor type layer, which the paint editor does not have; it was left out.",
+          "Layer \"text-bad-colour\" is an image editor annotation layer, which the paint editor does not have; it was left out.",
+          "Layer \"text-good\" is an image editor type layer, which the paint editor does not have; it was left out."
+        ]
       }
     }
   ]

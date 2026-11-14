@@ -354,8 +354,15 @@ private func deserializeLayer(_ raw: JSONValue, _ ctx: inout LayerReadContext) t
             ctx.problems.append("\(label): annotation is missing")
             return nil
         }
-        // Pen, rectangle, ellipse, line, arrow and text annotations load as shape and type layers (`annotationLayerFor`).
-        let migrated = try migratedAnnotationType(a)
+        // Pen, rectangle, ellipse, line, arrow and text annotations load as shape and type layers (`annotationLayerFor`);
+        // one whose fields can't be drawn (a pen without points, a text that is not a string) is left out.
+        let migrated: String
+        do {
+            migrated = try migratedAnnotationType(a)
+        } catch {
+            ctx.problems.append("\(label): the annotation could not be read (\(errorMessage(error)))")
+            return nil
+        }
         ctx.paintOnly.append("Layer \"\(name)\" is an image editor \(migrated) layer, which the paint editor does not have; it was left out.")
         return nil
     case "shape":

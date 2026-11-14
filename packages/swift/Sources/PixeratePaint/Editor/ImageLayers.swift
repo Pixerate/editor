@@ -17,8 +17,8 @@ import PixerateRaster
  *
  * The geometry (live shapes, live corners, SVG path data → anchors) is the TS core's, ported here
  * on JSON because the vector editor's typed port (`PixerateVector`) depends on this module.
- * Thrown `TypeError`s of the TS core (a pen annotation without points, a text annotation whose text
- * is not a string) keep V8's messages.
+ * An annotation with a field it can't draw (a pen without points, a text that is not a string)
+ * reports the TS core's field check (`layers/annotation-fields.ts`), and only that layer is left out.
  */
 
 /// A failed check, with the TS core's message (`LayerOperationError`, or V8's `TypeError`).
@@ -856,62 +856,90 @@ private func annotationPaintReadable(_ color: JSONValue?) -> Bool {
     return parseEffectColor(c.hex) != nil
 }
 
-/// What `shapeFromAnnotation` reads of a pen's points: V8's `TypeError`s where the TS core throws.
-private func checkPenPoints(_ a: JSONObject) throws {
-    let pts = a["points"]
-    if jsTruthy(a["rotation"]) {
-        // `a.points.map((p) => applyMatrix(rotation, p))`
-        switch pts {
-        case nil: throw fail("Cannot read properties of undefined (reading 'map')")
-        case .null?: throw fail("Cannot read properties of null (reading 'map')")
-        case .array(let list)?: if list.contains(.null) { throw fail("Cannot read properties of null (reading 'x')") }
-        default: throw fail("a.points.map is not a function")
+/// `checkAnnotationNumber` (`layers/annotation-fields.ts`): a finite number, or (when `optional`) left out or `null`.
+private func checkAnnotationNumber(_ a: JSONObject, _ key: String, optional: Bool = false) throws {
+    let v: JSONValue? = a[key]
+    if optional && nullish(v) { return }
+    if !isNum(v) { throw fail("\(key) must be a finite number.") }
+}
+
+/// `checkAnnotationPoints`: a pen's `points` is an array of `{ x, y }` points with finite coordinates.
+private func checkAnnotationPoints(_ a: JSONObject) throws {
+    guard let pts: [JSONValue] = a["points"]?.arrayValue else { throw fail("points must be an array of { x, y } points.") }
+    for (i, p) in pts.enumerated() {
+        guard let point: JSONObject = p.objectValue, isNum(point["x"]), isNum(point["y"]) else {
+            throw fail("points[\(i)] must be a point { x, y } with finite numbers.")
         }
-        return
-    }
-    // `pts.length > 1 ? [{ anchors: pts.map((p) => ({ x: p.x, y: p.y })) }] : []`
-    switch pts {
-    case nil: throw fail("Cannot read properties of undefined (reading 'length')")
-    case .null?: throw fail("Cannot read properties of null (reading 'length')")
-    case .array(let list)?: if list.count > 1 && list.contains(.null) { throw fail("Cannot read properties of null (reading 'x')") }
-    case .string(let s)?: if s.utf16.count > 1 { throw fail("pts.map is not a function") }
-    case .object(let o)?: if let length = o["length"], jsToNumber(length) > 1 { throw fail("pts.map is not a function") }
-    default: break
     }
 }
 
-/// `shapeFromAnnotation(a) !== null`: the annotations the image editor draws as shape layers.
+/// The geometry fields `checkShapeAnnotationFields` reads of each shape annotation, in order.
+private let ANNOTATION_GEOMETRY: [String: [String]] = [
+    "rect": ["x", "y", "width", "height"],
+    "circle": ["x", "y", "radiusX", "radiusY"],
+    "line": ["x", "y", "endX", "endY"],
+    "arrow": ["x", "y", "endX", "endY"],
+]
+
+/// `checkShapeAnnotationFields`: the geometry, then `strokeWidth`, `opacity` and `rotation`; a pen's
+/// `x` and `y` only as the centre of a rotation.
+private func checkShapeAnnotationFields(_ a: JSONObject, _ type: String) throws {
+    if type == "pen" { try checkAnnotationPoints(a) }
+    let geometry: [String] = ANNOTATION_GEOMETRY[type] ?? []
+    for key in geometry { try checkAnnotationNumber(a, key) }
+    try checkAnnotationNumber(a, "strokeWidth", optional: true)
+    try checkAnnotationNumber(a, "opacity", optional: true)
+    try checkAnnotationNumber(a, "rotation", optional: true)
+    if type == "pen" && jsTruthy(a["rotation"]) {
+        try checkAnnotationNumber(a, "x")
+        try checkAnnotationNumber(a, "y")
+    }
+}
+
+/// `checkTextAnnotationFields`: checked after the colour and weight are read.
+private func checkTextAnnotationFields(_ a: JSONObject) throws {
+    guard case .string? = a["text"] else { throw fail("text must be a string.") }
+    try checkAnnotationNumber(a, "x")
+    try checkAnnotationNumber(a, "y")
+    try checkAnnotationNumber(a, "fontSize", optional: true)
+    let family: JSONValue? = a["fontFamily"]
+    if !nullish(family) && family?.stringValue == nil { throw fail("fontFamily must be a font family name.") }
+    try checkAnnotationNumber(a, "opacity", optional: true)
+    try checkAnnotationNumber(a, "rotation", optional: true)
+}
+
+/// `shapeFromAnnotation(a) !== null`: the annotations the image editor draws as shape layers. A field
+/// it draws with that has the wrong type throws the field check's message.
 func shapeFromAnnotationReadable(_ a: JSONObject) throws -> Bool {
-    switch a["type"]?.stringValue {
+    guard let type: String = a["type"]?.stringValue else { return false }
+    switch type {
     case "rect", "circle":
         guard annotationPaintReadable(a["strokeColor"]) else { return false }
         if jsTruthy(a["fillColor"]) && !annotationPaintReadable(a["fillColor"]) { return false }
-        return true
-    case "line", "arrow":
-        return annotationPaintReadable(a["strokeColor"])
-    case "pen":
+    case "line", "arrow", "pen":
         guard annotationPaintReadable(a["strokeColor"]) else { return false }
-        try checkPenPoints(a)
-        return true
     default:
         return false
     }
+    try checkShapeAnnotationFields(a, type)
+    return true
 }
 
-/// `typeFromAnnotation(a) !== null`: text annotations with a colour and weight it reads.
+/// `typeFromAnnotation(a) !== null`: text annotations with a colour and weight it reads. A field it
+/// draws with that has the wrong type throws the field check's message.
 func typeFromAnnotationReadable(_ a: JSONObject) throws -> Bool {
     guard a["type"] == .string("text"), imageCssColor(a["color"]) != nil else { return false }
-    let w = a["fontWeight"]
-    var weight = 400.0
-    if let w, w != .string("normal") { weight = w == .string("bold") ? 700 : jsToNumber(w) }
-    if !weight.isFinite { return false }
-    // `t.text.replace(/\r?\n|\r/g, ' ')`
-    switch a["text"] {
-    case nil: throw fail("Cannot read properties of undefined (reading 'replace')")
-    case .null?: throw fail("Cannot read properties of null (reading 'replace')")
-    case .string?: return true
-    default: throw fail("t.text.replace is not a function")
+    // `checkAnnotationFontWeight`: left out, null, a string or a number.
+    let w: JSONValue? = a["fontWeight"]
+    switch w {
+    case nil, .null?, .string?, .number?: break
+    default: throw fail("fontWeight must be normal, bold or a number from 1 to 1000.")
     }
+    var weight: Double = 400
+    if let w, w != .null, w != .string("normal") { weight = w == .string("bold") ? 700 : jsToNumber(w) }
+    if !weight.isFinite { return false }
+    try checkTextAnnotationFields(a)
+    return true
 }
 
 /// The layer type the image editor migrates an annotation layer to (`annotationLayerFor`).
