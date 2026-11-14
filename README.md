@@ -646,7 +646,7 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Commands and agent tools</strong> (15)</summary>
+<summary><strong>Commands and agent tools</strong> (16)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
@@ -664,6 +664,7 @@ Every feature is available from core and from both framework packages, except wh
 | Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot) | `createEditorMcpToolProvider` & `validateAgentCommand` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` | Planned (#533) |
 | Spreadsheet Agent Tools (`get_range` with merges, `set_cell`, `set_range`, insert/delete rows and columns, `merge_cells`, `unmerge_cells`, `transpose_range` on a range) | `createSpreadsheetToolProvider` | Via core & `useAgentToolProvider` | Via core & `useAgentToolProvider` | Planned (#533) |
 | Screenshot Capture for Agents (`capture_view`: viewport, content, selection, canvas nodes by id or a rect, PNG or JPEG, with the rect and scale to map image pixels back; overlays such as selection boxes and agent cursors left out unless asked; canvas, image editor and any DOM element) | `createCaptureTool`, `createElementCaptureSurface` (`/tools`), `createCanvasCaptureToolProvider` (`/canvas`), `capture_view` in `createImageEditorToolProvider` | `useCanvasCapture` | `createCanvasCapture` | Planned (#533) |
+| Composite Capture (one picture of layered canvases, SVG and HTML labels as the person sees them, in z-order with opacity, at 1×, 2× or a largest side: canvases with a capture source draw again at the output scale instead of being stretched, and a lost WebGL context is reported instead of a blank picture; PNG or JPEG, data URL or Blob; `renderChart3d` registers its canvas, so a 3-D chart exports with its labels; web only) | `compositeCapture`, `registerCaptureSource`, `CaptureContextLostError`, `findPicture` (`/tools`), `renderChart3d` `captureAt` / `contextLost` (`/three`) | Via core | Via core | Not applicable: web pages only (Swift views draw their own snapshots) |
 | Built-in Commands (history undo/redo, canvas arrange, spreadsheet table) | `createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands` | Via core | Via core | Planned (#533) |
 
 </details>

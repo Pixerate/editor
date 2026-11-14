@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { DEFAULT_CHART_THEME } from '../chart/spec.js';
 import { chart3dMarkInFocus, layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
 import type { ChartSelection, ChartSpec, ChartTheme } from '../chart/types.js';
+import { registerCaptureSource } from '../tools/dom-capture.js';
 
 export interface Chart3dOptions {
 	/** Size in CSS px. */
@@ -286,6 +287,14 @@ export interface Chart3dRenderer {
 	render(): void;
 	/** The canvas as a PNG data URL (call `render` first). */
 	capture(): string;
+	/**
+	 * The chart drawn again at `scale` output pixels per CSS pixel, as a PNG data URL, leaving the
+	 * canvas as it was. `compositeCapture` calls it through the canvas's capture source. Throws when
+	 * the WebGL context is lost.
+	 */
+	captureAt(scale: number): string;
+	/** The WebGL context is lost (the browser took it back); draw again once it is restored. */
+	readonly contextLost: boolean;
 	resize(width: number, height: number): void;
 	/** The overlay labels for the current size. */
 	labels(): Chart3dLabel[];
@@ -312,11 +321,43 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
 	if (theme.background !== 'transparent') renderer.setClearColor(color(theme.background, '#ffffff'), 1);
 	const view = createChart3dScene(spec, options);
+	let size = { width: options.width, height: options.height };
+	let lost = false;
+	const onLost = (event: Event) => {
+		event.preventDefault();
+		lost = true;
+	};
+	const onRestored = () => {
+		lost = false;
+	};
+	canvas.addEventListener('webglcontextlost', onLost);
+	canvas.addEventListener('webglcontextrestored', onRestored);
+	const captureAt = (scale: number) => {
+		if (lost || renderer.getContext().isContextLost()) throw new Error('The 3-D chart lost its WebGL context; draw it again once the context is restored.');
+		const ratio = renderer.getPixelRatio();
+		renderer.setPixelRatio(scale);
+		renderer.setSize(size.width, size.height, false);
+		renderer.render(view.scene, view.camera);
+		const url = canvas.toDataURL('image/png');
+		renderer.setPixelRatio(ratio);
+		renderer.setSize(size.width, size.height, false);
+		renderer.render(view.scene, view.camera);
+		return url;
+	};
+	const unregister = registerCaptureSource(canvas, ({ scale }) => {
+		if (lost || renderer.getContext().isContextLost()) return { lost: true, reason: 'the browser took it back' };
+		return captureAt(scale);
+	});
 	return {
 		layout: view.layout,
 		render: () => renderer.render(view.scene, view.camera),
 		capture: () => canvas.toDataURL('image/png'),
+		captureAt,
+		get contextLost() {
+			return lost || renderer.getContext().isContextLost();
+		},
 		resize(width, height) {
+			size = { width, height };
 			renderer.setSize(width, height, false);
 			view.resize(width, height);
 		},
@@ -326,6 +367,9 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 		getFocus: () => view.getFocus(),
 		anchor: (selection) => view.anchor(selection),
 		dispose() {
+			unregister();
+			canvas.removeEventListener('webglcontextlost', onLost);
+			canvas.removeEventListener('webglcontextrestored', onRestored);
 			view.dispose();
 			renderer.dispose();
 		}

@@ -2634,6 +2634,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
+        "feature": "Composite Capture (one picture of layered canvases, SVG and HTML labels as the person sees them, in z-order with opacity, at 1×, 2× or a largest side: canvases with a capture source draw again at the output scale instead of being stretched, and a lost WebGL context is reported instead of a blank picture; PNG or JPEG, data URL or Blob; `renderChart3d` registers its canvas, so a 3-D chart exports with its labels; web only)",
+        "core": "`compositeCapture`, `registerCaptureSource`, `CaptureContextLostError`, `findPicture` (`/tools`), `renderChart3d` `captureAt` / `contextLost` (`/three`)",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "Not applicable: web pages only (Swift views draw their own snapshots)"
+      },
+      {
         "feature": "Built-in Commands (history undo/redo, canvas arrange, spreadsheet table)",
         "core": "`createHistoryCommands`, `createArrangeCommands`, `createSpreadsheetCommands`",
         "react": "Via core",

@@ -4870,3 +4870,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A braid drawn on with `stroke-dasharray` showed a row of dots where runs hadn't started yet.
 - **Root Cause**: With `stroke-linecap: round` (or `square`), a dash of length 0 still paints its caps, so `stroke-dasharray: 0 L` draws a dot at the start of the path.
 - **Solution / Workaround**: Hide the path (`visibility: hidden`) until its drawn length is above 0. The page kit's guide says so for model-written pages.
+
+### [core/tools] Capture Sources Live in One Copy of the Module
+
+- **Issue / Symptom**: A 3-D chart captured from a script came out stretched at 3×: `compositeCapture` copied the canvas's pixels instead of asking the renderer to draw again.
+- **Root Cause**: `registerCaptureSource` keeps its canvases in a module-level `WeakMap`. The script imported `@pixerate/editor/tools` by a different URL than the app (Vite serves the app's copy with a `?v=` query), so it got a second copy of the module with an empty registry.
+- **Solution / Workaround**: Capture through the same module instance the page uses: import `compositeCapture` from the app's own bundle, or call it from app code. A canvas without a source still captures, just at its own resolution.
