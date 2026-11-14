@@ -4876,3 +4876,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: A 3-D chart captured from a script came out stretched at 3×: `compositeCapture` copied the canvas's pixels instead of asking the renderer to draw again.
 - **Root Cause**: `registerCaptureSource` keeps its canvases in a module-level `WeakMap`. The script imported `@pixerate/editor/tools` by a different URL than the app (Vite serves the app's copy with a `?v=` query), so it got a second copy of the module with an empty registry.
 - **Solution / Workaround**: Capture through the same module instance the page uses: import `compositeCapture` from the app's own bundle, or call it from app code. A canvas without a source still captures, just at its own resolution.
+
+### [swift/core] An Agent's Typing Frames Must Be Put Back Before Its Commit
+
+- **Issue / Symptom**: A host that showed an agent's typing by editing its text view frame by frame got one undo step per frame, or an undo that restored half-typed text.
+- **Root Cause**: The frames are previews. Only the commit belongs in the undo history, and it must replace the *original* range, so the frames have to be gone first. `typeAgentText` (rich text) keeps its frames out of history and rolls them back in the same tick as the commit.
+- **Solution / Workaround**: `AgentTextDirector` calls `previewAgentTyping` for each frame, then again with the original text, then `commitAgentEdit` over the original range. Implement `previewAgentTyping` outside your undo manager (`disableUndoRegistration`, or a non-undoable storage edit) and `commitAgentEdit` as one undo group. Report the person's edits while an agent types with `noteEdit(in:replacement:)`. An edit inside the typed range stops the call with the original put back, and an unreported change to the text stops it too, rather than writing into the wrong place.
