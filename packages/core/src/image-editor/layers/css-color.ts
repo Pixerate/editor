@@ -60,7 +60,8 @@ export function parseCssColor(value: unknown): { hex: string; alpha: number } | 
   if (typeof value !== 'string') return null;
   const text = value.trim().toLowerCase();
   if (text === 'transparent') return { hex: '#000000', alpha: 0 };
-  const named = NAMED[text];
+  // Own names only: `NAMED[text]` would also find `constructor`, `__proto__` (#849).
+  const named = Object.hasOwn(NAMED, text) ? NAMED[text] : undefined;
   if (named) return { hex: `#${named}`, alpha: 1 };
   let m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/.exec(text);
   if (m) {
