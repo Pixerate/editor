@@ -440,6 +440,34 @@ private func inlinePngs(_ value: JSONValue, _ assets: JSONObject, _ problems: in
     }
 }
 
+/// Whether `s` is a stroke log entry referring to a stroke layer's stroke (`isStrokeLogReference`).
+private func isStrokeLogReference(_ s: JSONValue) -> Bool {
+    guard let o = s.objectValue, o["liveStroke"]?.stringValue != nil, o["layerId"]?.stringValue != nil else { return false }
+    return !o.contains("points")
+}
+
+/**
+ `strokes` with each `{ liveStroke, layerId }` replaced by that stroke from `liveStrokes`
+ (`resolveStrokeLog`); one that is not there is reported and left out.
+ */
+private func resolveStrokeLog(_ strokes: JSONValue, _ liveStrokes: JSONValue?, _ problems: inout [String]) -> JSONValue {
+    guard let list = strokes.arrayValue, list.contains(where: isStrokeLogReference) else { return strokes }
+    let live = liveStrokes?.objectValue ?? JSONObject()
+    var out: [JSONValue] = []
+    for (i, s) in list.enumerated() {
+        guard isStrokeLogReference(s), let id = s["liveStroke"]?.stringValue, let layerId = s["layerId"]?.stringValue else {
+            out.append(s)
+            continue
+        }
+        if let found = live[layerId]?.arrayValue?.first(where: { $0.objectValue?["id"] == .string(id) }) {
+            out.append(found)
+        } else {
+            problems.append("strokes[\(i)] refers to stroke \"\(id)\" of stroke layer \"\(layerId)\", which the document does not have; skipped.")
+        }
+    }
+    return .array(out)
+}
+
 /// Reads a saved document with inline assets (`deserializePaintDocument`). Throws when it is not a paint document at all.
 func deserializePaintDocument(_ raw: JSONValue) throws -> LoadedPaintDocument {
     guard let r = raw.objectValue else { throw PaintEditorError("Not a paint document: expected a JSON object.") }
@@ -450,8 +478,12 @@ func deserializePaintDocument(_ raw: JSONValue) throws -> LoadedPaintDocument {
     var problems: [String] = []
     let rawAssets = r["assets"]?.objectValue ?? JSONObject()
     var used = Set<String>()
+    // Stroke data saved with an asset store is in runs of JSON (`{ chunks }`): the lists come back first.
+    let unchunked = inlineStrokeData(r, rawAssets, &problems, &used)
     var inlined = JSONObject()
-    for (k, v) in r { inlined[k] = NO_EXTENSION_PNGS.contains(k) ? v : inlinePngs(v, rawAssets, &problems, k, &used) }
+    for (k, v) in unchunked { inlined[k] = NO_EXTENSION_PNGS.contains(k) ? v : inlinePngs(v, rawAssets, &problems, k, &used) }
+    // A log saved with `.replay` refers to strokes kept on stroke layers.
+    if let strokes = inlined["strokes"] { inlined["strokes"] = resolveStrokeLog(strokes, inlined["liveStrokes"], &problems) }
     var assets = JSONObject()
     for (id, v) in rawAssets where !used.contains(id) { assets[id] = v }
     return try readDocument(inlined, assets, problems)

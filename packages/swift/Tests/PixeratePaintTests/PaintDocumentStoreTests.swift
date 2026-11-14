@@ -169,11 +169,15 @@ final class PaintDocumentStoreTests: XCTestCase {
         let store = MemoryPaintStore()
         let out = try await d.toJSONExternal(store)
         _ = try await d.toJSONExternal(store)
-        // Each PNG is put once per store: the layer, the same PNG as an extension asset, and the small one.
-        XCTAssertEqual(store.puts.count, 3)
+        // Each PNG is put once per store: the layer, the same PNG as an extension asset, and the small
+        // one; then the stroke log, as one run of JSON.
+        XCTAssertEqual(store.puts.count, 4)
         let layerId = try XCTUnwrap(out["layers"]?.arrayValue?.first?["asset"]?.stringValue)
         let extId = "ext-\(fnv1a(layerUrl))-\(String(layerUrl.utf16.count, radix: 36))"
-        XCTAssertEqual(out["assets"], .object([layerId: "mem:1", extId: "mem:2", "ext-380f6147-3a": "mem:3"]))
+        let runId = try XCTUnwrap(out["strokes"]?["chunks"]?.arrayValue?.first?.stringValue)
+        XCTAssertTrue(runId.hasPrefix(STROKE_CHUNK_PREFIX))
+        XCTAssertEqual([store.puts[3].id, String(store.puts[3].width), String(store.puts[3].height)], [runId, "0", "0"])
+        XCTAssertEqual(out["assets"], .object([layerId: "mem:1", extId: "mem:2", "ext-380f6147-3a": "mem:3", runId: "mem:4"]))
         XCTAssertEqual(out["later"], ["png": .string("asset:\(extId)"), "again": [.string("asset:\(extId)")], "other": "asset:ext-380f6147-3a"])
         XCTAssertEqual(store.puts[2].id, "ext-380f6147-3a")
         XCTAssertEqual([store.puts[2].width, store.puts[2].height, store.puts[2].size], [1, 1, 70])

@@ -96,6 +96,7 @@ import {
   type PaintAssetStore,
   type PaintDocumentExtensions,
   type SerializedPaintDocument,
+  type StrokeLogOption,
 } from './serialize';
 import { brushLoadForStroke, PaintStrokeSession, type PaintStrokeResult, type StrokeSessionHost } from './stroke';
 import { AntimatterStrokeDriver, type AntimatterLayerOutput, type AntimatterTarget } from './antimatter';
@@ -7424,14 +7425,23 @@ export class PaintEditorController {
     return Object.keys(thick).length ? { ...state, thick } : state;
   }
 
-  toJSON(options: { strokes?: boolean } = {}): SerializedPaintDocument {
+  /**
+   * The document as JSON with its PNGs inline. `strokes`: the whole stroke log (`true`, default),
+   * none (`false`) or only what the colour-scheme replay needs (`'replay'`, see `StrokeLogOption`).
+   */
+  toJSON(options: { strokes?: StrokeLogOption } = {}): SerializedPaintDocument {
     this.flushCulturePreview();
     const state = this.savedState();
     return serializePaintDocument(state, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
-  /** The document as JSON with each PNG stored in `store`. */
-  toJSONExternal(store: PaintAssetStore, options: { strokes?: boolean } = {}): Promise<SerializedPaintDocument> {
+  /**
+   * The document as JSON with each PNG stored in `store`, and its stroke data (stroke log, wet and
+   * paint events, stroke layers' strokes) stored there as runs of JSON (`ChunkedList`), so the
+   * document stays small and saving after one more stroke stores one new run. Keep the same store
+   * object across saves (and pass it to `loadJSONAsync`) so unchanged assets are not stored again.
+   */
+  toJSONExternal(store: PaintAssetStore, options: { strokes?: StrokeLogOption } = {}): Promise<SerializedPaintDocument> {
     this.flushCulturePreview();
     const state = this.savedState();
     return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });

@@ -34,7 +34,9 @@ extension PaintEditorController {
         do {
             guard var r = raw.objectValue else { throw PaintEditorError("Not a paint document: expected a JSON object.") }
             var problems: [String] = []
-            let assets = try await resolveExternalAssets(r["assets"]?.objectValue ?? JSONObject(), store, &problems)
+            let refs = r["assets"]?.objectValue ?? JSONObject()
+            let assets = try await resolveExternalAssets(refs, store, &problems)
+            if let store { rememberStrokeChunks(refs, assets, store) }
             r["assets"] = .object(assets)
             loaded = try deserializePaintDocument(.object(r))
             loaded.problems = problems + loaded.problems

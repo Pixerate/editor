@@ -55,7 +55,12 @@ export interface SerializedPaintDocument {
   /** Asset id → PNG data URL (or an external reference). */
   assets: Record<string, string>;
   activeLayerId: string | null;
-  /** Recorded strokes (strokes are data), oldest first, each brush a facet `Brush`; missing when saved without them. */
+  /**
+   * Recorded strokes (strokes are data), oldest first, each brush a facet `Brush`; missing when
+   * saved without them. Saved with `strokes: 'replay'`, a stroke kept on a stroke layer is a
+   * `StrokeLogReference`; saved with an asset store, the list is a `ChunkedList` (as are
+   * `wetEvents`, `paintEvents` and each `liveStrokes` list). The loaders read every form.
+   */
   strokes?: SerializedStroke[];
   /** Everything else (document-level state of later phases), written back as read. */
   [extension: string]: unknown;
@@ -70,9 +75,18 @@ export function documentExtensions(raw: Record<string, unknown>): PaintDocumentE
   return out;
 }
 
+/**
+ * Which recorded strokes a save writes: `true` (default) the whole stroke log, `false` none, or
+ * `'replay'` only what the colour-scheme replay needs: the log when a pixel layer (not a stroke
+ * layer) holds a light / dark stroke, else none (as `false`). In it a stroke that is also on a
+ * stroke layer, unchanged, is written as a reference to it (`{ liveStroke: id, layerId }`), so
+ * stroke layers' strokes are not saved twice; loading puts the stroke back.
+ */
+export type StrokeLogOption = boolean | 'replay';
+
 export interface SerializeOptions {
-  /** Include the recorded strokes (default true). */
-  strokes?: boolean;
+  /** Which recorded strokes to include (default true, see `StrokeLogOption`). */
+  strokes?: StrokeLogOption;
   /** Later-phase fields to write as they were read. */
   extensions?: PaintDocumentExtensions;
   /** Painting guides (symmetry, perspective, tracing and reference images as PNG data URLs). */
@@ -95,7 +109,8 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
     paper: { ...state.paper, dry: { ...state.paper.dry }, wet: { ...state.paper.wet } },
     activeLayerId: state.activeLayerId,
   };
-  if (options.strokes !== false && state.strokes.length) out.strokes = state.strokes.map(strokeToJSON);
+  const log = savedStrokeLog(state, options);
+  if (log) out.strokes = log as SerializedStroke[];
   if (options.guides !== undefined) out.guides = JSON.parse(JSON.stringify(options.guides));
   if (options.swatches !== undefined) out.swatches = JSON.parse(JSON.stringify(options.swatches));
   if (options.mixingPad !== undefined) (out as Record<string, unknown>).mixingPad = JSON.parse(JSON.stringify(options.mixingPad));
@@ -110,6 +125,69 @@ function header(state: PaintDocumentState, options: SerializeOptions): Omit<Seri
   return out;
 }
 
+/** How a stroke log saved with `strokes: 'replay'` refers to a stroke kept on a stroke layer. */
+export interface StrokeLogReference {
+  liveStroke: string;
+  layerId: string;
+}
+
+/** The stroke log as `options.strokes` saves it, or `null` for none. */
+function savedStrokeLog(state: PaintDocumentState, options: SerializeOptions): Array<SerializedStroke | StrokeLogReference> | null {
+  const mode = options.strokes ?? true;
+  if (mode === false || !state.strokes.length) return null;
+  if (mode !== 'replay') return state.strokes.map(strokeToJSON);
+  // The stroke layers' strokes as this save writes them (`liveStrokes`, from the controller).
+  const raw = options.extensions?.liveStrokes;
+  const live = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const isLive = (layerId: string) => Array.isArray(live[layerId]);
+  // A replay rebuilds pixel layers only: without a light / dark stroke on one, no replay needs the log.
+  const needed = state.strokes.some((st) => st.dualColor && !isLive(st.layerId) && findLayer(state.layers, st.layerId)?.layer.type === 'pixel');
+  if (!needed) return null;
+  const byLayer = new Map<string, Map<string, string>>();
+  const savedLive = (layerId: string): Map<string, string> => {
+    let m = byLayer.get(layerId);
+    if (!m) {
+      m = new Map();
+      for (const x of live[layerId] as unknown[]) {
+        const id = (x as { id?: unknown } | null)?.id;
+        if (typeof id === 'string' && !m.has(id)) m.set(id, JSON.stringify(x));
+      }
+      byLayer.set(layerId, m);
+    }
+    return m;
+  };
+  return state.strokes.map((st) => {
+    const json = strokeToJSON(st);
+    if (isLive(st.layerId) && savedLive(st.layerId).get(st.id) === JSON.stringify(json)) return { liveStroke: st.id, layerId: st.layerId };
+    return json;
+  });
+}
+
+function isStrokeLogReference(s: unknown): s is StrokeLogReference {
+  return Boolean(s) && typeof s === 'object' && typeof (s as StrokeLogReference).liveStroke === 'string' && typeof (s as StrokeLogReference).layerId === 'string' && !('points' in (s as object));
+}
+
+/**
+ * `strokes` with each `{ liveStroke, layerId }` replaced by that stroke from `liveStrokes` (the
+ * saved stroke layers); one that is not there is reported and left out.
+ */
+function resolveStrokeLog(strokes: unknown, liveStrokes: unknown, problems: string[]): unknown {
+  if (!Array.isArray(strokes) || !strokes.some(isStrokeLogReference)) return strokes;
+  const live = liveStrokes && typeof liveStrokes === 'object' ? (liveStrokes as Record<string, unknown>) : {};
+  const out: unknown[] = [];
+  strokes.forEach((s, i) => {
+    if (!isStrokeLogReference(s)) {
+      out.push(s);
+      return;
+    }
+    const list = live[s.layerId];
+    const found = Array.isArray(list) ? list.find((x) => (x as { id?: unknown } | null)?.id === s.liveStroke) : undefined;
+    if (found) out.push(found);
+    else problems.push(`strokes[${i}] refers to stroke "${s.liveStroke}" of stroke layer "${s.layerId}", which the document does not have; skipped.`);
+  });
+  return out;
+}
+
 /** The document as JSON with inline PNG data URLs. */
 export function serializePaintDocument(state: PaintDocumentState, options: SerializeOptions = {}): SerializedPaintDocument {
   const { layers, assets } = serializeLayers(state.layers as unknown as ImageLayer[]);
@@ -117,8 +195,8 @@ export function serializePaintDocument(state: PaintDocumentState, options: Seria
 }
 
 /**
- * Top-level fields with no PNGs of their own in them (or, for strokes and events, kept inline as
- * they are), so the external writer leaves them. Every other field (the light, thick paint,
+ * Top-level fields with no PNGs of their own in them (or, for strokes and events, stored as they
+ * are, in runs of JSON: `ChunkedList`), so the PNG pass of the external writer leaves them. Every other field (the light, thick paint,
  * fluorescence, thermochromic, ferrofluid and heat channels, the mixing pad, brush source art,
  * guides and any later extension) has its PNG data URLs stored as assets.
  */
@@ -203,11 +281,203 @@ function inlinePngs(value: unknown, assets: Record<string, string>, problems: st
   return value;
 }
 
-/** The document as JSON with each PNG (layers and extension fields alike) uploaded to `store` once (by content). */
+// --- Stroke data in the asset store --------------------------------------------------------
+
+/**
+ * Lists a save with an asset store keeps in the store as JSON, not in the document: the stroke
+ * log and the wet and paint events (and each stroke layer's strokes, `liveStrokes.<layer id>`).
+ */
+const STROKE_DATA_FIELDS = ['strokes', 'wetEvents', 'paintEvents'] as const;
+
+/** A list kept in the asset store: the ids (in `assets`) of its runs, in order, each a JSON array. */
+export interface ChunkedList {
+  chunks: string[];
+}
+
+/** The most items in one run of a chunked list. */
+export const STROKE_CHUNK_SIZE = 16;
+
+/** Prefix of a stroke data asset id: `json-<53-bit hash, 14 hex digits>-<text length in base 36>`. */
+export const STROKE_CHUNK_PREFIX = 'json-';
+
+/**
+ * The run lengths a list of `n` items is cut into: as many full runs of `STROKE_CHUNK_SIZE` as fit,
+ * then the rest as powers of two, largest first (37 → 16, 16, 4, 1). Adding one item at the end
+ * changes only the last run (38 → 16, 16, 4, 2), so an append-only edit stores one new run and the
+ * others keep their ids.
+ */
+export function strokeChunkRuns(n: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < Math.floor(n / STROKE_CHUNK_SIZE); i++) out.push(STROKE_CHUNK_SIZE);
+  const rest = n % STROKE_CHUNK_SIZE;
+  for (let bit = STROKE_CHUNK_SIZE >> 1; bit >= 1; bit >>= 1) if (rest & bit) out.push(bit);
+  return out;
+}
+
+/** cyrb53 of a string's UTF-16 code units, as 14 hex digits. */
+function hash53(text: string): string {
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16).padStart(14, '0');
+}
+
+/** The asset id of a run's JSON text (its content address). */
+export function strokeChunkId(text: string): string {
+  return `${STROKE_CHUNK_PREFIX}${hash53(text)}-${text.length.toString(36)}`;
+}
+
+/**
+ * `JSON.stringify` with each object's keys sorted (by UTF-16 code units), so the same items give
+ * the same text, and the same id, however their keys were ordered (a reopened document reorders
+ * some).
+ */
+export function canonicalJSON(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map((v) => (v === undefined || typeof v === 'function' || typeof v === 'symbol' ? 'null' : canonicalJSON(v))).join(',')}]`;
+  const parts: string[] = [];
+  for (const k of Object.keys(value).sort()) {
+    const v = (value as Record<string, unknown>)[k];
+    if (v === undefined || typeof v === 'function' || typeof v === 'symbol') continue;
+    parts.push(`${JSON.stringify(k)}:${canonicalJSON(v)}`);
+  }
+  return `{${parts.join(',')}}`;
+}
+
+/** The runs already stored, by store: run id → the store's reference. */
+const storedChunks = new WeakMap<PaintAssetStore, Map<string, string>>();
+
+/** `list` cut into runs (`strokeChunkRuns`), each put in `store` once as JSON (by content). */
+async function externalizeList(list: readonly unknown[], assets: Record<string, string>, store: PaintAssetStore): Promise<ChunkedList> {
+  let refs = storedChunks.get(store);
+  if (!refs) storedChunks.set(store, (refs = new Map()));
+  const chunks: string[] = [];
+  let at = 0;
+  for (const n of strokeChunkRuns(list.length)) {
+    const text = canonicalJSON(list.slice(at, at + n));
+    at += n;
+    const id = strokeChunkId(text);
+    chunks.push(id);
+    if (assets[id]) continue;
+    let ref = refs.get(id);
+    if (!ref) {
+      ref = await store.put(new Blob([new TextEncoder().encode(text) as BlobPart], { type: 'application/json' }), { id, width: 0, height: 0 });
+      if (typeof ref !== 'string' || !ref) throw new Error(`The asset store returned no reference for "${id}".`);
+      refs.set(id, ref);
+    }
+    assets[id] = ref;
+  }
+  return { chunks };
+}
+
+/** The stroke log, events and stroke layers' strokes of `out` put in `store` as chunked lists. */
+async function externalizeStrokeData(out: Record<string, unknown>, assets: Record<string, string>, store: PaintAssetStore): Promise<void> {
+  for (const key of STROKE_DATA_FIELDS) {
+    const list = out[key];
+    if (Array.isArray(list) && list.length) out[key] = await externalizeList(list, assets, store);
+  }
+  const live = out.liveStrokes;
+  if (live && typeof live === 'object' && !Array.isArray(live)) {
+    const next: Record<string, unknown> = {};
+    for (const [id, list] of Object.entries(live)) next[id] = Array.isArray(list) && list.length ? await externalizeList(list, assets, store) : list;
+    out.liveStrokes = next;
+  }
+}
+
+function isChunkedList(value: unknown): value is ChunkedList {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && Array.isArray((value as ChunkedList).chunks);
+}
+
+/** The text of an asset's data URL (whatever media type it was labelled with), or `null`. */
+function chunkText(url: unknown): string | null {
+  if (typeof url !== 'string' || !url.startsWith('data:')) return null;
+  const parsed = parseDataUrl(url);
+  if (!parsed) return null;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(parsed.bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The items of a chunked list, its runs read from `assets` in order. A run that is missing or not
+ * a JSON array is reported once in `problems`, and its items are left out.
+ */
+function inlineList(value: ChunkedList, assets: Record<string, string>, problems: string[], field: string, used: Set<string>): unknown[] {
+  const out: unknown[] = [];
+  for (const id of value.chunks) {
+    let items: unknown = null;
+    const text = typeof id === 'string' ? chunkText(assets[id]) : null;
+    if (text !== null) {
+      try {
+        items = JSON.parse(text);
+      } catch {
+        items = null;
+      }
+    }
+    if (Array.isArray(items)) {
+      used.add(id);
+      out.push(...items);
+      continue;
+    }
+    const msg = `"${field}" refers to stroke data asset "${String(id)}", which could not be read; what it holds is left out.`;
+    if (!problems.includes(msg)) problems.push(msg);
+  }
+  return out;
+}
+
+/** `r` with its chunked lists (the stroke log, events, stroke layers' strokes) read back from `assets`. */
+function inlineStrokeData(r: Record<string, unknown>, assets: Record<string, string>, problems: string[], used: Set<string>): Record<string, unknown> {
+  const out = { ...r };
+  for (const key of STROKE_DATA_FIELDS) {
+    const list = out[key];
+    if (isChunkedList(list)) out[key] = inlineList(list, assets, problems, key, used);
+  }
+  const live = out.liveStrokes;
+  if (live && typeof live === 'object' && !Array.isArray(live) && Object.values(live).some(isChunkedList)) {
+    const next: Record<string, unknown> = {};
+    for (const [id, list] of Object.entries(live)) next[id] = isChunkedList(list) ? inlineList(list, assets, problems, `liveStrokes.${id}`, used) : list;
+    out.liveStrokes = next;
+  }
+  return out;
+}
+
+/**
+ * Records the stroke data runs read from `store` as stored (run id → reference) when their text
+ * still has the id it was saved under, so the next save to the same store object uploads only
+ * runs that changed, not every run of a reopened document.
+ */
+function rememberStrokeChunks(refs: Record<string, string>, assets: Record<string, string>, store: PaintAssetStore): void {
+  let known = storedChunks.get(store);
+  for (const [id, ref] of Object.entries(refs)) {
+    if (!id.startsWith(STROKE_CHUNK_PREFIX) || typeof ref !== 'string' || ref.startsWith('data:')) continue;
+    const text = chunkText(assets[id]);
+    if (text === null || strokeChunkId(text) !== id) continue;
+    if (!known) storedChunks.set(store, (known = new Map()));
+    known.set(id, ref);
+  }
+}
+
+/**
+ * The document as JSON with each PNG (layers and extension fields alike) uploaded to `store` once
+ * (by content), and its stroke data (the stroke log, wet and paint events, stroke layers' strokes)
+ * stored as runs of JSON (`ChunkedList`, cut by `strokeChunkRuns`), so the document itself stays
+ * small and a save after one more stroke stores one new run.
+ */
 export async function serializePaintDocumentExternal(state: PaintDocumentState, store: PaintAssetStore, options: SerializeOptions = {}): Promise<SerializedPaintDocument> {
   const { layers, assets } = await serializeLayersExternal(state.layers as unknown as ImageLayer[], store);
   const out = { ...header(state, options), layers, assets } as SerializedPaintDocument;
   for (const key of Object.keys(out)) if (!NO_EXTENSION_PNGS.has(key)) out[key] = await externalizePngs(out[key], assets, store);
+  await externalizeStrokeData(out, assets, store);
   return out;
 }
 
@@ -261,10 +531,14 @@ export function deserializePaintDocument(raw: unknown): LoadedPaintDocument {
   }
   const problems: string[] = [];
   const rawAssets = r.assets && typeof r.assets === 'object' ? (r.assets as Record<string, string>) : {};
-  // Extension fields saved externally refer to their PNGs as `asset:<id>`: put the data URLs back.
   const used = new Set<string>();
-  const inlined: Record<string, unknown> = { ...r };
-  for (const key of Object.keys(r)) if (!NO_EXTENSION_PNGS.has(key)) inlined[key] = inlinePngs(r[key], rawAssets, problems, key, used);
+  // Stroke data saved with an asset store is in runs of JSON (`ChunkedList`): the lists come back first.
+  const unchunked = inlineStrokeData(r, rawAssets, problems, used);
+  // Extension fields saved externally refer to their PNGs as `asset:<id>`: put the data URLs back.
+  const inlined: Record<string, unknown> = { ...unchunked };
+  for (const key of Object.keys(unchunked)) if (!NO_EXTENSION_PNGS.has(key)) inlined[key] = inlinePngs(unchunked[key], rawAssets, problems, key, used);
+  // A log saved with `strokes: 'replay'` refers to strokes kept on stroke layers.
+  if (inlined.strokes !== undefined) inlined.strokes = resolveStrokeLog(inlined.strokes, inlined.liveStrokes, problems);
   return readDocument(inlined, Object.fromEntries(Object.entries(rawAssets).filter(([id]) => !used.has(id))), problems);
 }
 
@@ -296,7 +570,9 @@ export async function deserializePaintDocumentAsync(raw: unknown, store?: PaintA
   if (!raw || typeof raw !== 'object') throw new Error('Not a paint document: expected a JSON object.');
   const r = raw as Record<string, unknown>;
   const problems: string[] = [];
-  const assets = await resolveExternalAssets((r.assets as Record<string, string>) ?? {}, store, problems);
+  const refs = (r.assets as Record<string, string>) ?? {};
+  const assets = await resolveExternalAssets(refs, store, problems);
+  if (store) rememberStrokeChunks(refs, assets, store);
   const loaded = deserializePaintDocument({ ...r, assets });
   return { ...loaded, problems: [...problems, ...loaded.problems] };
 }
