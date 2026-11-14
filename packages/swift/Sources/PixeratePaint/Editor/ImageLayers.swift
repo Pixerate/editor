@@ -367,7 +367,8 @@ private func checkPoint(_ v: JSONValue?, _ path: String) throws -> JSONValue {
     return point(x, y)
 }
 
-/// `normalizeSubpaths`: `[{ anchors: [{ x, y, in?, out?, corner? }], closed }]` or SVG path data.
+/// `normalizeSubpaths`: `[{ anchors: [{ x, y, in?, out?, type?, corner? }], closed }]` or SVG path
+/// data, each anchor's keys in that order (the order `bezierToSubpaths` writes).
 private func normalizeSubpaths(_ v: JSONValue?, _ path: String) throws -> [JSONObject] {
     if case .string(let d)? = v {
         let subs: [JSONObject]
@@ -390,6 +391,8 @@ private func normalizeSubpaths(_ v: JSONValue?, _ path: String) throws -> [JSONO
             let ao = props(a)!
             if jsTruthy(ao["in"]) { anchor["in"] = try checkPoint(ao["in"], "\(at).in") }
             if jsTruthy(ao["out"]) { anchor["out"] = try checkPoint(ao["out"], "\(at).out") }
+            // Kept so a save of SVG path data (anchor types inferred) reopens unchanged (#850).
+            if case .string(let type)? = ao["type"], type == "corner" || type == "smooth" || type == "symmetric" { anchor["type"] = .string(type) }
             if let c = ao["corner"], c != .null {
                 let radius: JSONValue? = { if case .number = c { return c }; return props(c)?["radius"] }()
                 let r = try requireNum(radius, "\(at).corner.radius", 0, 1e5)
@@ -477,7 +480,12 @@ private func bezierToSubpaths(_ d: String) throws -> [JSONObject] {
                 let first = anchors[0]
                 let end = anchors[anchors.count - 1]
                 if abs(num(end, "x") - num(first, "x")) < 1e-7 && abs(num(end, "y") - num(first, "y")) < 1e-7 {
-                    if jsTruthy(end["in"]) { subs[c].anchors[0]["in"] = end["in"] }
+                    // `in` before `out`, as on every other anchor, so the save reopens unchanged (#850).
+                    if jsTruthy(end["in"]) {
+                        var merged: JSONObject = JSONObject([("x", first["x"] ?? .null), ("y", first["y"] ?? .null), ("in", end["in"] ?? .null)])
+                        if let out = first["out"] { merged["out"] = out }
+                        subs[c].anchors[0] = merged
+                    }
                     subs[c].anchors.removeLast()
                 }
             }

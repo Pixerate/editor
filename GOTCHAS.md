@@ -21,17 +21,17 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
-### [core] The TS "Reopens What It Saved Unchanged" Check Cannot Fail
+### [core] A Conformance Host's `load` Must Not Assert: `runConformanceScenario` Swallows What It Throws
 
-- **Issue / Symptom**: In `tests/paint-conformance.test.ts`, the `… reopens what it saved unchanged` tests pass even when the save after reopening differs, while Swift's `RoundTripHost` (in `PaintConformanceTests`) fails on the same scenario.
-- **Root Cause**: The test runs its `expect`s inside the wrapped `host.load`, and `runConformanceScenario` catches whatever `host.load` throws as a refused document (`{ error }`). The assertion error is swallowed, and that test never compares `loaded`. Not fixed yet.
-- **Solution / Workaround**: Trust Swift's round-trip check, or move the TS comparison out of `host.load` (record the mismatch, assert after `runConformanceScenario`). Until then, check new reload steps in Swift.
+- **Issue / Symptom**: In `tests/paint-conformance.test.ts`, the `… reopens what it saved unchanged` tests passed even when the save after reopening differed (#850), while Swift's `RoundTripHost` (in `PaintConformanceTests`) failed on the same scenario.
+- **Root Cause**: The test ran its `expect`s inside the wrapped `host.load`, and `runConformanceScenario` catches whatever `host.load` throws as a refused document (`{ error }`). The assertion error was swallowed and recorded as the step's `loaded`.
+- **Solution / Workaround**: Fixed: the wrapped `load` only collects mismatches (problems, the save after reopening, the pixels), and the test asserts on them after `runConformanceScenario` returns. Do the same in any host wrapper: never `expect` (or throw) inside `host.load` / `host.save`. The TS check compares values, not key order (several paint saves reorder keys on reopening, e.g. stickers, live strokes, authored effects), so a key-order regression needs its own test, as `image-editor-vector-masks.test.ts` has for vector masks.
 
-### [core|swift/paint] SVG Path Data in a Vector Mask Loses Its Anchor Types After Reopening
+### [core|swift/paint] SVG Path Data in a Vector Mask Must Reopen With Its Anchor Types (#850)
 
-- **Issue / Symptom**: A vector mask stored as SVG path data saves anchors with an inferred `type` (`symmetric`, `smooth`), and a merged closing anchor with `out` before `in`. Reopening that save and saving again drops the types, and writes `in` before `out`.
-- **Root Cause**: `normalizeSubpaths` builds anchors from `{ x, y, in?, out?, corner? }` only; `bezierToSubpaths` adds `type`, and the closing merge sets `first.in` after `first.out`. A TS core quirk that the Swift port matches.
-- **Solution / Workaround**: `document-load-vector-layers` opens the SVG-path masks in a step that is not reloaded. Keep any curved, path-based vector mask out of scenarios with a `reload` step, or Swift's round-trip check fails.
+- **Issue / Symptom**: A vector mask stored as SVG path data saved anchors with an inferred `type` (`symmetric`, `smooth`), and a merged closing anchor with `out` before `in`. Reopening that save and saving again dropped the types and wrote `in` before `out`, so `document-load-vector-layers` had to open its SVG-path masks in a step that was not reloaded.
+- **Root Cause**: `normalizeSubpaths` built anchors from `{ x, y, in?, out?, corner? }` only, while `bezierToSubpaths` adds `type`; and the closing merge set `first.in` after `first.out` was already there.
+- **Solution / Workaround**: Fixed in TS and both Swift ports (`ImageLayers.swift`'s `normalizeSubpaths` / `bezierToSubpaths`; and `PixerateVector`'s `Geometry.swift`, whose `VectorAnchor` keeps the key order it was built in). `normalizeSubpaths` keeps a `type` of `corner`, `smooth` or `symmetric` (unknown values are left out) and writes `x, y, in, out, type, corner`; the closing merge rebuilds the first anchor as `x, y, in, out`. A kept `smooth` / `symmetric` type also means a live `corner` on that anchor is not rounded (`cornerOf`), as in the vector editor. Keep anchor keys in that order in any new code that builds anchors for a saved document.
 
 ### [core|swift/paint] One Malformed Pen or Text Annotation Layer Refuses the Whole Paint Document
 
@@ -3691,7 +3691,7 @@ All contributors and AI assistants should check this file before starting work a
 ### [core/image-editor] Stored Path Anchors Have No Smooth/Corner Type
 
 - **Issue / Symptom**: Dragging one handle of a smooth anchor on a path, shape or vector mask bent it into a corner: the opposite handle stayed put.
-- **Root Cause**: `normalizeSubpaths` (behind every path, shape and vector mask setter) keeps only `x`, `y`, `in`, `out` and `corner`, so the vector editor's `type: 'smooth' | 'symmetric'` is gone by the next drag, and `moveAnchorHandle` treats an untyped anchor as a corner.
+- **Root Cause**: `normalizeSubpaths` (behind every path, shape and vector mask setter) kept only `x`, `y`, `in`, `out` and `corner`, so the vector editor's `type: 'smooth' | 'symmetric'` was gone by the next drag, and `moveAnchorHandle` treats an untyped anchor as a corner. Since #850 it keeps a `type` it is given, but most stored anchors (drawn ones, older documents) still have none.
 - **Solution / Workaround**: Before moving a handle, give the anchor `type: a.type ?? inferAnchorType(a)` (handles in line count as smooth), then drop `type` from the result. `PathEditGesture` does this; Alt-drag still breaks the handles on purpose.
 
 ### [core/raster] A Tile From the Compositor's Cache Must Be Copied Before It Is Changed

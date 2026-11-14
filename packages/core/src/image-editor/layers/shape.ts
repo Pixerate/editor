@@ -662,7 +662,10 @@ function point(v: unknown, path: string): Vec2 {
   return { x: requireNum(p.x, `${path}.x`), y: requireNum(p.y, `${path}.y`) };
 }
 
-/** Subpaths from loose input: `[{ anchors: [{ x, y, in?, out? }], closed }]` or SVG path data. */
+/**
+ * Subpaths from loose input: `[{ anchors: [{ x, y, in?, out?, type?, corner? }], closed }]` or SVG
+ * path data. Anchors keep their keys in that order, the order `bezierToSubpaths` writes them in.
+ */
 export function normalizeSubpaths(v: unknown, path = 'subpaths'): VectorSubpath[] {
   if (typeof v === 'string') {
     let subs: VectorSubpath[];
@@ -685,6 +688,9 @@ export function normalizeSubpaths(v: unknown, path = 'subpaths'): VectorSubpath[
       const out: VectorAnchor = { x: p.x, y: p.y };
       if (ao.in) out.in = point(ao.in, `${at}.in`);
       if (ao.out) out.out = point(ao.out, `${at}.out`);
+      // Kept so a save of SVG path data (whose anchor types `bezierToSubpaths` infers) reopens
+      // unchanged (#850); an unknown type is left out like any other unknown key.
+      if (ao.type === 'corner' || ao.type === 'smooth' || ao.type === 'symmetric') out.type = ao.type;
       if (ao.corner !== undefined && ao.corner !== null) {
         const c = ao.corner as { radius?: unknown };
         const r = requireNum(typeof c === 'number' ? c : c.radius, `${at}.corner.radius`, 0, 1e5);

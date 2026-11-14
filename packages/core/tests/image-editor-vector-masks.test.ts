@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ToolRegistry } from '../src/tools';
-import { ImageEditorController, createImageEditorToolProvider, imagePlaybackPanel } from '../src/image-editor';
+import { ImageEditorController, createImageEditorToolProvider, imagePlaybackPanel, normalizeSubpaths } from '../src/image-editor';
+import { bezierToSubpaths } from '../src/vector';
 
 const W = 40;
 const H = 20;
@@ -161,5 +162,46 @@ describe('vector mask parameters in PSD files', () => {
     expect(back.vectorMask!.density).toBeCloseTo(0.8, 2);
     expect(back.vectorMask!.feather).toBe(5);
     expect(e.getVectorMask(back.id)!.bounds!.x).toBeCloseTo(10, 0);
+  });
+});
+
+// #850: a vector mask stored as SVG path data saves anchors with the types `bezierToSubpaths`
+// infers; reopening that save and saving again must give the same document, keys in the same order.
+describe('vector masks stored as SVG path data', () => {
+  const D = 'M 2 2 Q 6 0 10 2 T 18 2 C 18 6 14 8 10 8 S 2 6 2 2 Z m 4 1 l 2 0 l 0 2 z';
+  /** The JSON text of each anchor, keys in the order they were written. */
+  const anchorKeys = (subpaths: unknown) => (subpaths as Array<{ anchors: object[] }>).flatMap((sp) => sp.anchors.map((a) => Object.keys(a).join(',')));
+
+  it('merge the closing anchor with `in` before `out`, like every other anchor', () => {
+    const [sp] = bezierToSubpaths('M 0 0 C 0 0 4 0 4 4 C 4 8 0 8 0 4 C 0 2 0 2 0 0 Z');
+    expect(Object.keys(sp!.anchors[0]!)).toEqual(['x', 'y', 'in']);
+    const [curved] = bezierToSubpaths('M 0 0 C 2 0 4 2 4 4 C 4 6 2 8 0 8 C -2 8 -2 0 0 0 Z');
+    expect(Object.keys(curved!.anchors[0]!)).toEqual(['x', 'y', 'in', 'out', 'type']);
+    expect(anchorKeys(bezierToSubpaths(D))).toEqual(['x,y,in,out', 'x,y,in,out,type', 'x,y,in,out', 'x,y,in,out,type', 'x,y', 'x,y', 'x,y']);
+  });
+
+  it('keep their inferred anchor types and key order when the saved anchors are read again', () => {
+    const first = normalizeSubpaths(D);
+    expect(first[0]!.anchors.map((a) => a.type)).toEqual([undefined, 'symmetric', undefined, 'symmetric']);
+    const again = normalizeSubpaths(JSON.parse(JSON.stringify(first)));
+    expect(JSON.stringify(again)).toBe(JSON.stringify(first));
+    // An anchor list keeps a known type, before its corner, and leaves out an unknown one.
+    const list = normalizeSubpaths([{ anchors: [{ corner: 2, type: 'smooth', out: { x: 2, y: 0 }, in: { x: 0, y: 2 }, y: 1, x: 1 }, { x: 8, y: 1, type: 'wobbly' }, { x: 8, y: 7, type: 'corner' }] }]);
+    expect(list[0]!.anchors).toEqual([{ x: 1, y: 1, in: { x: 0, y: 2 }, out: { x: 2, y: 0 }, type: 'smooth', corner: { radius: 2 } }, { x: 8, y: 1 }, { x: 8, y: 7, type: 'corner' }]);
+    expect(anchorKeys(list)).toEqual(['x,y,in,out,type,corner', 'x,y', 'x,y,type']);
+  });
+
+  it('save → reopen → save gives the same document, keys in the same order', () => {
+    const { c, red } = setup();
+    const doc = JSON.parse(JSON.stringify(c.toJSON())) as { layers: Array<Record<string, unknown>> };
+    const layer = doc.layers.find((l) => l.id === red)!;
+    layer.vectorMask = { components: [{ subpaths: D }, { op: 'subtract', subpaths: 'M 1 1 A 4 3 30 0 1 9 6 L 4 9 Z' }] };
+    const d = setup().c;
+    d.loadJSON(doc);
+    const saved = JSON.stringify(d.toJSON());
+    expect(saved).toContain('"type":"symmetric"');
+    const e = setup().c;
+    e.loadJSON(JSON.parse(saved));
+    expect(JSON.stringify(e.toJSON())).toBe(saved);
   });
 });
