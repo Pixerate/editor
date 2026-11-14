@@ -647,6 +647,7 @@
                 "thermo": "pixerate-asset:ha-1lv4z0zjcia"
               }
             },
+            "unloggedComplete": true,
             "uvLight": {
               "ambient": 0.15,
               "on": false,
@@ -1003,6 +1004,7 @@
                 "thermo": "pixerate-asset:ha-1lv4z0zjcia"
               }
             },
+            "unloggedComplete": true,
             "uvLight": {
               "ambient": 0.15,
               "on": false,

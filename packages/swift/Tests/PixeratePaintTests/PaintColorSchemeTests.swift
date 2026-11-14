@@ -479,6 +479,91 @@ final class PaintColorSchemeTests: XCTestCase {
         XCTAssertNil(c.doc.unlogged)
     }
 
+    // MARK: - Documents opened without unlogged marks (#720)
+
+    /// `json` as an editor from before the marks wrote it, without the stroke of `dropSeed` (pixels it imported).
+    private func older(_ json: JSONObject, dropSeed: Int? = nil) -> JSONValue {
+        var o = json
+        o["unlogged"] = nil
+        o["unloggedComplete"] = nil
+        if let seed = dropSeed, let list = o["strokes"]?.arrayValue {
+            o["strokes"] = .array(list.filter { (st: JSONValue) -> Bool in st["seed"] != .number(Double(seed)) })
+        }
+        return .object(o)
+    }
+
+    /// Ink (a dual stroke) and Photo (a plain stroke, then a dual one).
+    private func twoLayers() throws -> (json: JSONObject, ink: String, photo: String) {
+        let c = try editor()
+        let inkId = c.doc.activeLayerId!
+        try stroke(c, 30, dual: blue, seed: 1)
+        let photo = try c.addLayer(name: "Photo").id
+        try stroke(c, 80, color: "#ca8a04", seed: 2)
+        try stroke(c, 60, dual: red, seed: 3)
+        return (c.toJSON(), inkId, photo)
+    }
+
+    func testSavesTheUnloggedMarksWithoutDualStrokesAndSaysWhenTheyAreComplete() throws {
+        let c = try editor()
+        let under = c.doc.activeLayerId!
+        try stroke(c, 80, color: "#ca8a04", seed: 1)
+        let top = try c.addLayer(name: "Top").id
+        try stroke(c, 40, color: "#1d4ed8", seed: 2)
+        _ = try c.mergeDown(top)
+        let json = c.toJSON()
+        XCTAssertEqual(json["unlogged"], .object([under: .string("Merge down")]))
+        XCTAssertEqual(json["unloggedComplete"], .bool(true))
+        let bare = c.toJSON(strokeLog: .none)
+        XCTAssertEqual(bare["unlogged"], json["unlogged"])
+        XCTAssertNil(bare["unloggedComplete"])
+    }
+
+    func testMarksALayerTheLogNeverNamesWhenOpened() async throws {
+        let c = try editor()
+        let layer = c.doc.activeLayerId!
+        try stroke(c, 60, color: "#ca8a04", seed: 1)
+        let d = try editor()
+        try d.loadJSON(.object(c.toJSON(strokeLog: .none)))
+        XCTAssertEqual(d.doc.unlogged?.get(layer), "Opened without its stroke log")
+        try stroke(d, 30, dual: blue, seed: 2)
+        d.setColorScheme("dark")
+        let view = await d.colorSchemeViewReady()
+        XCTAssertEqual(view.layers.map(\.view), ["kept"])
+        XCTAssertTrue(view.layers.first?.reason?.contains("from \"Opened without its stroke log\"") == true)
+        XCTAssertEqual(d.toJSON()["unloggedComplete"], .bool(true))
+    }
+
+    func testChecksTheLayersOfAnOlderDocumentAgainstAReplayOfItsLog() async throws {
+        let p = try twoLayers()
+        let d = try editor("dark")
+        try d.loadJSON(older(p.json, dropSeed: 2))
+        XCTAssertNil(d.doc.unlogged)
+        let first = d.colorSchemeView()
+        XCTAssertEqual(first.layers.map(\.view), ["replay", "replay"])
+        XCTAssertEqual(first.layers.map(\.state), ["building", "building"])
+        XCTAssertEqual(first.layers.first?.reason, CHECKING_REASON)
+        let view = await d.colorSchemeViewReady()
+        XCTAssertEqual(view.layers.map(\.layerId), [p.photo, p.ink])
+        XCTAssertEqual(view.layers.map(\.view), ["kept", "replay"])
+        XCTAssertEqual(view.layers.first?.reason, CHECK_MISMATCH_REASON)
+        // Photo keeps its colours, imported pixels included.
+        let photo = findLayer(d.doc.layers, p.photo)!.layer.pixelSurface
+        XCTAssertTrue(pixelsMatch(d.viewLayerSurface(p.photo)!, photo, tolerance: 0))
+        // The check is view state: the same file in either scheme, and no flag while it is unknown.
+        let l = try editor()
+        try l.loadJSON(older(p.json, dropSeed: 2))
+        _ = await l.colorSchemeViewReady()
+        XCTAssertEqual(JSONValue.object(l.toJSON()), JSONValue.object(d.toJSON()))
+        XCTAssertNil(d.toJSON()["unloggedComplete"])
+        // A fully logged older document is not marked, and recolours.
+        let e = try editor("dark")
+        try e.loadJSON(older(p.json))
+        let all = await e.colorSchemeViewReady()
+        XCTAssertEqual(all.layers.map(\.view), ["replay", "replay"])
+        XCTAssertEqual(all.layers.map(\.state), ["ready", "ready"])
+        XCTAssertNil(e.doc.unlogged)
+    }
+
     func testNeverRecoloursPlainColours() async throws {
         let c = try wetEditor()
         try paint(c, [.stroke(y: 40, color: "#1d4ed8", dual: nil, seed: 3)])

@@ -16,11 +16,16 @@
  * - **Undo** rolls the replay back to a checkpoint (the replay editor's document and wet simulation
  *   after an item) and repaints from there, so undo / redo never shows the other scheme's pixels.
  * - **View only.** Nothing here changes the document, the history or what is saved.
+ * - **Also a check.** Frozen (`{ frozen: true }`) and fed the document as it was opened, with every
+ *   stroke as recorded, it repaints the log once so the editor can compare the result with the
+ *   pixels that were opened (`checkedLayer`): a layer they don't match holds pixels the log doesn't
+ *   have (documents saved before the editor kept those marks, #720).
  */
 
 import type { ColorScheme } from '../color/dual';
-import type { RasterRect, TiledSurface } from '../raster/surface';
-import type { PaintDocumentState } from './document';
+import { TILE, tileCoord, translateSurface, type RasterRect, type TiledSurface } from '../raster/surface';
+import { findLayer } from '../raster/layers';
+import type { PaintDocumentState, PaintPixelLayer } from './document';
 import type { PaintEditorController, ReplayCheckpoint } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeSession } from './stroke';
@@ -80,8 +85,11 @@ export class SchemeReplay {
   private again = false;
   private disposed = false;
   private readonly options: ReplayItemOptions;
+  /** A one-off replay of a document that doesn't change: no checkpoints, and nothing to roll back to. */
+  private readonly frozen: boolean;
 
-  constructor(readonly scheme: ColorScheme, private readonly host: SchemeReplayHost) {
+  constructor(readonly scheme: ColorScheme, private readonly host: SchemeReplayHost, options: { frozen?: boolean } = {}) {
+    this.frozen = Boolean(options.frozen);
     this.options = { wetChunk: STEP_CHUNK, onWetSteps: () => yieldToHost(), pointChunk: POINT_CHUNK, onPoints: () => yieldToHost() };
     this.target = this.fresh();
   }
@@ -102,6 +110,21 @@ export class SchemeReplay {
     if (this.state !== 'ready') return null;
     const baked = this.target.wet.busy || this.live ? null : this.target.wet.bakedSurface(layerId);
     return baked ?? this.target.viewLayerSurface(layerId);
+  }
+
+  /**
+   * A layer of a ready replay as document pixels (its offset applied, wet paint dried) and the
+   * rectangle of its paint still wet or drying (`null` when none), where letting it flow on could
+   * still change it; `null` before the replay is ready or when it has no such pixel layer.
+   */
+  checkedLayer(layerId: string): { surface: TiledSurface; flowing: RasterRect | null } | null {
+    const surface = this.bakedSurface(layerId);
+    const found = findLayer(this.target.document.layers, layerId)?.layer;
+    if (!surface || found?.type !== 'pixel') return null;
+    const l = found as PaintPixelLayer;
+    const flowing = this.target.wet.activeBounds(layerId);
+    const shift = (r: RasterRect): RasterRect => ({ ...r, x: r.x + l.offset.x, y: r.y + l.offset.y });
+    return { surface: translateSurface(surface, l.offset.x, l.offset.y), flowing: flowing ? shift(flowing) : null };
   }
 
   /** Looks at the editor again (call after every change): repaints what is new, in the background. */
@@ -240,6 +263,7 @@ export class SchemeReplay {
 
   private checkpoint(): void {
     this.target.forgetHistory();
+    if (this.frozen) return;
     this.checkpoints.push({ count: this.applied.length, cp: this.target.replayCheckpoint() });
     if (this.checkpoints.length > MAX_CHECKPOINTS) this.checkpoints.shift();
     // Within the memory budget, newest first: older checkpoints lose their wet snapshots.
@@ -259,6 +283,8 @@ export class SchemeReplay {
 
   /** Back to the newest checkpoint at or before item `count` and clock `clock`; a fresh replay when there is none. */
   private async rollback(count: number, clock: number): Promise<void> {
+    // Nothing changes under a frozen replay, so only a log whose clocks go back can get here.
+    if (this.frozen) throw new Error(`item ${count + 1} of the stroke log happens at an earlier wet clock than the item before it, so the log can't be replayed in order`);
     if (this.live) await this.cancelLive();
     await this.target.wetIdle();
     for (let i = this.checkpoints.length - 1; i >= 0; i--) {
@@ -359,4 +385,48 @@ export class SchemeReplay {
     if (live.session.open) live.session.cancel();
     else if (live.session.pendingEnd) await finishReplayStroke(this.target, live.session);
   }
+}
+
+/**
+ * The largest difference in a channel (premultiplied by alpha, out of 255) at which a check of
+ * opened pixels against a replay of the stroke log still counts a pixel as the same. Above the
+ * rounding a PNG round trip or another implementation of the engines gives (conformance allows 2),
+ * well below anything an import, merge or move leaves behind.
+ */
+export const CHECK_TOLERANCE = 8;
+
+const ZERO_TILE = new Uint8ClampedArray(TILE * TILE * 4);
+
+/**
+ * Whether two RGBA surfaces (document pixels, transparent by default) hold the same pixels within
+ * `tolerance` (premultiplied, so the colour of nearly transparent pixels doesn't count), leaving out
+ * the pixels in `skip`.
+ */
+export function pixelsMatch(a: TiledSurface, b: TiledSurface, skip: RasterRect | null = null, tolerance = CHECK_TOLERANCE): boolean {
+  const keys = new Set([...a.tiles.keys(), ...b.tiles.keys()]);
+  const far = tolerance * 255;
+  for (const key of keys) {
+    const ta = a.tiles.get(key);
+    const tb = b.tiles.get(key);
+    if (ta === tb) continue;
+    const da = ta?.data ?? ZERO_TILE;
+    const db = tb?.data ?? ZERO_TILE;
+    const { tx, ty } = tileCoord(key);
+    const x0 = tx * TILE;
+    const y0 = ty * TILE;
+    for (let y = 0; y < TILE; y++) {
+      const gy = y0 + y;
+      const sx0 = skip !== null && gy >= skip.y && gy < skip.y + skip.height ? skip.x - x0 : TILE;
+      const sx1 = skip !== null ? skip.x + skip.width - x0 : 0;
+      for (let x = 0; x < TILE; x++) {
+        if (x >= sx0 && x < sx1) continue;
+        const i = (y * TILE + x) * 4;
+        const aa = da[i + 3];
+        const ab = db[i + 3];
+        if (Math.abs(aa - ab) > tolerance) return false;
+        if (Math.abs(da[i] * aa - db[i] * ab) > far || Math.abs(da[i + 1] * aa - db[i + 1] * ab) > far || Math.abs(da[i + 2] * aa - db[i + 2] * ab) > far) return false;
+      }
+    }
+  }
+  return true;
 }

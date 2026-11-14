@@ -426,6 +426,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {
@@ -929,6 +930,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@3": "Bake age"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {
@@ -1370,6 +1375,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@3": "Bake age"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {
