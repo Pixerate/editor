@@ -37,3 +37,4 @@ export * from '../geom/iso.js';
 export * from '../geom/labels.js';
 export * from '../geom/connectors.js';
 export * from '../geom/helix.js';
+export * from '../interaction/linkFocus.js';

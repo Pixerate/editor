@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Boxes, Play } from "lucide-react";
 import { PAGE_KIT, PAGE_KIT_GUIDE, PAGE_KIT_HASH, PAGE_KIT_VERSION } from "@pixerate/editor/page-kit";
+import { drawPieces, type DrawPieces } from "@pixerate/editor/animation";
+import { useLinkFocus } from "@pixerate/editor-react";
 import { EditorPage, EditorPanel } from "./EditorPage";
 
 /**
@@ -167,6 +169,96 @@ function PageKitView() {
   );
 }
 
+
+/** Projects and the skills they use: a many-to-many weave for linked focus (#812). */
+const PROJECTS = ["Atlas", "Beacon", "Cinder", "Delta", "Ember"];
+const SKILLS = ["Design", "Data", "Platform", "Research"];
+const USES: Record<string, string[]> = {
+  Atlas: ["Design", "Research"],
+  Beacon: ["Data", "Platform"],
+  Cinder: ["Design", "Data"],
+  Delta: ["Platform"],
+  Ember: ["Research", "Data", "Design"],
+};
+
+function LinkFocusView() {
+  const width = 640;
+  const px = (i: number) => 70 + i * ((width - 140) / (PROJECTS.length - 1));
+  const sx = (i: number) => 110 + i * ((width - 220) / (SKILLS.length - 1));
+  const links = PROJECTS.flatMap((p, i) => USES[p].map((s) => ({ p, s, d: `M${px(i)} 70 C${px(i)} 150 ${sx(SKILLS.indexOf(s))} 150 ${sx(SKILLS.indexOf(s))} 230` })));
+  const marks = [...PROJECTS.map((p) => [p]), ...SKILLS.map((s) => [s]), ...links.map((l) => [l.p, l.s])];
+  const focus = useLinkFocus({ marks, links: USES, order: [...PROJECTS, ...SKILLS], dim: 0.18 });
+  const pathRefs = useRef<(SVGPathElement | null)[]>([]);
+  const [plans, setPlans] = useState<DrawPieces[]>([]);
+  const [progress, setProgress] = useState(1);
+  // Each link draws on as its own line, staggered; measured once the paths are in the page.
+  useEffect(() => {
+    setPlans(
+      links.map((_, i) => {
+        const length = pathRefs.current[i]?.getTotalLength?.() ?? 200;
+        return drawPieces([{ from: 0, to: length }], { at: (i / links.length) * 0.6, span: 0.4, ease: "ease-out" });
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const replay = useCallback(() => {
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / 1800);
+      setProgress(p);
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, []);
+  const offset = PROJECTS.length + SKILLS.length;
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3 text-sm text-slate-300">
+        <button type="button" className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1.5 hover:bg-slate-700" onClick={replay}>
+          <Play className="h-4 w-4" aria-hidden /> Draw on
+        </button>
+        <span className="text-xs text-slate-500">Hover a project or a skill, or focus the picture and use the arrow keys (Escape clears).</span>
+      </div>
+      <div {...focus.rootProps} className="rounded-lg border border-slate-800 bg-slate-950 p-2 outline-none focus-visible:ring-2 focus-visible:ring-rose-400" tabIndex={0} aria-label="Projects and the skills they use">
+        <svg viewBox={`0 0 ${width} 280`} className="w-full" role="img" aria-hidden>
+          {links.map((l, i) => {
+            const drawn = plans[i]?.drawAt(progress)[0];
+            return (
+              <path
+                key={`${l.p}-${l.s}`}
+                ref={(el) => {
+                  pathRefs.current[i] = el;
+                }}
+                d={l.d}
+                fill="none"
+                stroke="#fb7185"
+                strokeWidth={2}
+                strokeLinecap="round"
+                strokeDasharray={drawn?.dasharray}
+                visibility={drawn && !drawn.shown ? "hidden" : undefined}
+                style={{ opacity: focus.opacity(offset + i), transition: "opacity 120ms" }}
+              />
+            );
+          })}
+          {PROJECTS.map((p, i) => (
+            <g key={p} {...focus.markProps(p)} style={{ opacity: focus.opacity(i), cursor: "pointer", transition: "opacity 120ms" }}>
+              <circle cx={px(i)} cy={58} r={9} fill="#e2e8f0" />
+              <text x={px(i)} y={36} textAnchor="middle" fill="#e2e8f0" fontSize={13} fontWeight={600}>{p}</text>
+            </g>
+          ))}
+          {SKILLS.map((s, i) => (
+            <g key={s} {...focus.markProps(s)} style={{ opacity: focus.opacity(PROJECTS.length + i), cursor: "pointer", transition: "opacity 120ms" }}>
+              <rect x={sx(i) - 42} y={232} width={84} height={26} rx={13} fill="#1e293b" stroke="#60a5fa" />
+              <text x={sx(i)} y={249} textAnchor="middle" fill="#bfdbfe" fontSize={12}>{s}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+      <p aria-live="polite" className="text-sm text-slate-400">{focus.description}</p>
+    </div>
+  );
+}
+
 export function PageKitTab() {
   return (
     <EditorPage
@@ -174,7 +266,10 @@ export function PageKitTab() {
       title="Page kit"
       icon={Boxes}
       description="Core's geometry, paths, text fitting, colour and scales as one script for sandboxed, model-written pages."
-      views={[{ id: "demo", label: "Sandboxed page", render: () => <PageKitView /> }]}
+      views={[
+        { id: "demo", label: "Sandboxed page", render: () => <PageKitView /> },
+        { id: "focus", label: "Linked focus", render: () => <LinkFocusView /> },
+      ]}
     />
   );
 }

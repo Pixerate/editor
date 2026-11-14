@@ -12,3 +12,4 @@ export * from './evaluate.js';
 export * from './clock.js';
 export * from './player.js';
 export * from './presence.js';
+export * from './draw.js';
