@@ -46,6 +46,8 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
   const house = HOUSE_STYLES[styleId] ?? HOUSE_STYLES.none;
   // Particles (#806): the first series as layers of grains, one per unit, dropped in on demand.
   const [particles, setParticles] = useState(false);
+  // Relief (#807): sculpted area tops, decoration within a stated thickness error.
+  const [relief, setRelief] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const dropIn = () => {
     const view = viewRef.current;
@@ -81,8 +83,11 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const view = renderChart3d(canvas, spec, { width, height, style: house.three, ...(particles ? { particles: {} } : {}) });
-      setNotes(particles ? (view.layout.warnings ?? []) : []);
+      const view = renderChart3d(canvas, spec, { width, height, style: house.three, ...(particles ? { particles: {} } : {}), ...(relief ? { relief: { amount: 0.06, scale: 1.8 } } : {}) });
+      setNotes([
+        ...(particles ? (view.layout.warnings ?? []) : []),
+        ...(relief ? [view.relief ? `Area tops are sculpted: no thickness changes by more than ${Math.round(view.relief.amount * 100)}% (drawn: ${(view.relief.error * 100).toFixed(1)}%).` : "Relief sculpts area series; switch the chart to Area to see it."] : []),
+      ]);
       viewRef.current = view;
       view.render();
       setLabels(view.labels());
@@ -96,7 +101,7 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [spec, width, height, house, particles]);
+  }, [spec, width, height, house, particles, relief]);
 
   // Draw the focus (no clock: one render per change) and place the tooltip.
   const show = (next: ChartSelection | null) => {
@@ -175,6 +180,9 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
         </label>
         <label className="flex items-center gap-1">
           <input type="checkbox" checked={particles} onChange={(e) => setParticles(e.currentTarget.checked)} data-testid="chart-3d-particles" /> Particles
+        </label>
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={relief} onChange={(e) => setRelief(e.currentTarget.checked)} data-testid="chart-3d-relief" /> Relief
         </label>
         {particles && (
           <button type="button" className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100" onClick={dropIn} data-testid="chart-3d-drop">

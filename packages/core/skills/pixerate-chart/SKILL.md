@@ -152,6 +152,11 @@ the pitfalls, and uses the tools below.
   the 3-D picture; the SVG is always flat. In a host's 3-D view, people point at bars and line
   points or walk them with the arrow keys like the flat chart: the focused mark keeps its colour,
   the rest dim, and the tooltip and wording are the flat chart's.
+- **Decoration is not data.** Hosts can sculpt 3-D area tops with noise (relief) or draw a series
+  as settling grains (particles). Relief changes each thickness by at most its stated amount, as a
+  share of the value; say so in a caption ("no thickness is off by more than 4%"). Keep it small
+  when people will compare values. Particles round each value to whole grains; say what one grain
+  stands for.
 - **Highlight instead of recolouring.** To show one bar or series against the rest, use
   `highlight_chart` (it mutes the rest and keeps the palette) rather than greying series by
   hand. Name categories to pick bars or points, series to pick whole lines. Clear it with

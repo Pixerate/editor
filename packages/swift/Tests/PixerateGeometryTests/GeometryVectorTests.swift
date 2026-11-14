@@ -448,6 +448,26 @@ final class GeometryVectorTests: XCTestCase {
     }
     #endif
 
+    // MARK: Noise (#807)
+
+    func testNoise() {
+        run("noise") { fn, e in
+            let o = e["options"] ?? .null
+            let seed = o["seed"]?.numberValue ?? 0
+            let kind = o["kind"]?.stringValue.flatMap(NoiseKind.init(rawValue:)) ?? .gradient
+            let points = e.get("points").a.map { $0.a.map(\.n) }
+            switch fn {
+            case "noise2": return nums(points.map { noise2($0[0], $0[1], seed: seed, kind: kind) })
+            case "noise3": return nums(points.map { noise3($0[0], $0[1], $0[2], seed: seed, kind: kind) })
+            case "fbm2":
+                return nums(points.map { fbm2($0[0], $0[1], seed: seed, kind: kind, octaves: o["octaves"]?.numberValue, lacunarity: o["lacunarity"]?.numberValue ?? 2, gain: o["gain"]?.numberValue ?? 0.5) })
+            case "fbm3":
+                return nums(points.map { fbm3($0[0], $0[1], $0[2], seed: seed, kind: kind, octaves: o["octaves"]?.numberValue, lacunarity: o["lacunarity"]?.numberValue ?? 2, gain: o["gain"]?.numberValue ?? 0.5) })
+            default: return unknown(fn)
+            }
+        }
+    }
+
     // MARK: Planar map and Pathfinder
 
     func testPlanar() {

@@ -102,6 +102,7 @@ import { elbow, fanElbows, roundedPolyline, type Connector, type ElbowAxis } fro
 import { helix, splitByDepth, type HelixEnvelope } from '../src/geom/helix.js';
 import type { Vec2 } from '../src/geom/types.js';
 import { fitText, staggerRows, type MeasureText } from '../src/typography/fit.js';
+import { fbm2, fbm3, noise2, noise3 } from '../src/geom/noise.js';
 import { conformanceValuesMatch } from '../src/tools/conformance.js';
 
 /**
@@ -936,6 +937,26 @@ function fitTextVectors(): Entry[] {
 	return out;
 }
 
+// ---------------------------------------------------------------------------
+// Noise (#807): integer hashing and plain arithmetic, so Swift matches exactly
+// ---------------------------------------------------------------------------
+
+function noiseVectors(): Entry[] {
+	const out: Entry[] = [];
+	const coords: number[] = [0, 0.25, 0.5, 0.731, 1, 1.5, 2.999, -0.25, -1.75, -3.5, 7.125, 12.34, -1e6 - 0.5, 1e9 + 0.25, -123456.5];
+	const points2 = coords.flatMap((x, i) => [[x, coords[(i * 7 + 3) % coords.length]!], [x * 0.37, -x * 1.3]]);
+	const points3 = coords.map((x, i) => [x, coords[(i * 5 + 2) % coords.length]!, coords[(i * 11 + 1) % coords.length]! * 0.5]);
+	for (const options of [{}, { seed: 7 }, { seed: -3, kind: 'value' as const }, { seed: 123456789, kind: 'gradient' as const }]) {
+		out.push(vec('noise2', false, { points: points2, options }, () => points2.map(([x, y]) => noise2(x!, y!, options))));
+		out.push(vec('noise3', false, { points: points3, options }, () => points3.map(([x, y, z]) => noise3(x!, y!, z!, options))));
+	}
+	for (const options of [{}, { octaves: 1, seed: 4 }, { octaves: 6, lacunarity: 2.3, gain: 0.6, seed: 11 }, { octaves: 8, kind: 'value' as const, seed: 2 }, { octaves: 30 }, { octaves: 0 }]) {
+		out.push(vec('fbm2', false, { points: points2, options }, () => points2.map(([x, y]) => fbm2(x!, y!, options))));
+		out.push(vec('fbm3', false, { points: points3, options }, () => points3.map(([x, y, z]) => fbm3(x!, y!, z!, options))));
+	}
+	return out;
+}
+
 function vectors() {
 	return {
 		version: 1,
@@ -952,7 +973,8 @@ function vectors() {
 		shape: shapeVectors(),
 		connectors: connectorVectors(),
 		helix: helixVectors(),
-		fitText: fitTextVectors()
+		fitText: fitTextVectors(),
+		noise: noiseVectors()
 	};
 }
 
