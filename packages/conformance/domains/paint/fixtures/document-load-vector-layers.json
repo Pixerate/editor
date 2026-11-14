@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "document-load-vector-layers",
-  "description": "Opening documents with the image editor's vector parts, read as the TS core reads them: vector masks on pixel layers and groups (live rectangles with radii and transforms, ellipses, polygons, stars, lines with arrowheads, anchor lists with handles and corners, SVG path data with quadratics, arcs and closing anchors, hybrid edges kept only when well formed and on a segment the path has) are normalised, kept and saved back, and damaged ones are left out with the reason; shape and type layers are checked as the image editor checks them (components, live shapes, paints, gradients, patterns, strokes, text styles, paragraph styles, PSD blocks, stored pixels) and report its problem before the paint editor leaves them out; annotation layers are reported as the shape, type or annotation layers the image editor migrates them to; and a pen annotation without points or a text annotation whose text is not a string refuses the document with the TS core's TypeError. Anchor lists keep only their points, handles and corners, so the anchor types SVG path data infers are not saved again after reopening (as in TS); the other masks save and reopen unchanged.",
+  "description": "Opening documents with the image editor's vector parts, read as the TS core reads them: vector masks on pixel layers and groups (live rectangles with radii and transforms, ellipses, polygons, stars, lines with arrowheads, anchor lists with handles and corners, SVG path data with quadratics, arcs and closing anchors, hybrid edges kept only when well formed and on a segment the path has) are normalised, kept and saved back, and damaged ones are left out with the reason; shape and type layers are checked as the image editor checks them (components, live shapes, paints, gradients, patterns, strokes, text styles, paragraph styles, PSD blocks, stored pixels) and report its problem before the paint editor leaves them out; annotation layers are reported as the shape, type or annotation layers the image editor migrates them to; and a pen annotation without points or a text annotation whose text is not a string refuses the document with the TS core's TypeError. Anchor lists keep their points, handles, anchor types and corners, so SVG path data saves with the anchor types it infers (a merged closing anchor writes `in` before `out`) and every mask, SVG path data included, saves and reopens unchanged.",
   "setup": {
     "width": 24,
     "height": 20
@@ -4416,6 +4416,387 @@
                                 "x": 2,
                                 "y": 0
                               },
+                              "type": "smooth",
+                              "x": 1,
+                              "y": 1
+                            },
+                            {
+                              "x": 8,
+                              "y": 1
+                            },
+                            {
+                              "corner": {
+                                "radius": 3
+                              },
+                              "x": 8,
+                              "y": 7
+                            }
+                          ],
+                          "closed": false
+                        },
+                        {
+                          "anchors": [
+                            {
+                              "x": 3,
+                              "y": 3
+                            }
+                          ],
+                          "closed": true
+                        }
+                      ]
+                    },
+                    {
+                      "op": "combine",
+                      "subpaths": [
+                        {
+                          "anchors": [
+                            {
+                              "in": {
+                                "x": 2,
+                                "y": 6
+                              },
+                              "out": {
+                                "x": 4.666666666666666,
+                                "y": 0.6666666666666667
+                              },
+                              "x": 2,
+                              "y": 2
+                            },
+                            {
+                              "in": {
+                                "x": 7.333333333333334,
+                                "y": 0.6666666666666667
+                              },
+                              "out": {
+                                "x": 12.666666666666666,
+                                "y": 3.333333333333333
+                              },
+                              "type": "symmetric",
+                              "x": 10,
+                              "y": 2
+                            },
+                            {
+                              "in": {
+                                "x": 15.333333333333334,
+                                "y": 3.333333333333333
+                              },
+                              "out": {
+                                "x": 18,
+                                "y": 6
+                              },
+                              "x": 18,
+                              "y": 2
+                            },
+                            {
+                              "in": {
+                                "x": 14,
+                                "y": 8
+                              },
+                              "out": {
+                                "x": 6,
+                                "y": 8
+                              },
+                              "type": "symmetric",
+                              "x": 10,
+                              "y": 8
+                            }
+                          ],
+                          "closed": true
+                        },
+                        {
+                          "anchors": [
+                            {
+                              "x": 6,
+                              "y": 3
+                            },
+                            {
+                              "x": 8,
+                              "y": 3
+                            },
+                            {
+                              "x": 8,
+                              "y": 5
+                            }
+                          ],
+                          "closed": true
+                        }
+                      ]
+                    },
+                    {
+                      "op": "combine",
+                      "subpaths": [
+                        {
+                          "anchors": [
+                            {
+                              "out": {
+                                "x": 2.0815873109539718,
+                                "y": -0.6302652794468604
+                              },
+                              "x": 1,
+                              "y": 1
+                            },
+                            {
+                              "in": {
+                                "x": 4.749248023938474,
+                                "y": -0.8325682949148354
+                              },
+                              "out": {
+                                "x": 9.16752597799113,
+                                "y": 1.9288554263680737
+                              },
+                              "type": "symmetric",
+                              "x": 6.958387000964802,
+                              "y": 0.5481435657266189
+                            },
+                            {
+                              "in": {
+                                "x": 10.081587247888969,
+                                "y": 4.369734681137512
+                              },
+                              "x": 9,
+                              "y": 6
+                            },
+                            {
+                              "x": 4,
+                              "y": 9
+                            }
+                          ],
+                          "closed": true
+                        },
+                        {
+                          "anchors": [
+                            {
+                              "x": 12,
+                              "y": 12
+                            },
+                            {
+                              "x": 15,
+                              "y": 12
+                            },
+                            {
+                              "x": 15,
+                              "y": 15
+                            },
+                            {
+                              "x": 12,
+                              "y": 15
+                            }
+                          ],
+                          "closed": true
+                        },
+                        {
+                          "anchors": [
+                            {
+                              "x": 20,
+                              "y": 20
+                            }
+                          ],
+                          "closed": false
+                        }
+                      ]
+                    },
+                    {
+                      "op": "combine",
+                      "subpaths": [
+                        {
+                          "anchors": [
+                            {
+                              "x": 0,
+                              "y": 0
+                            },
+                            {
+                              "in": {
+                                "x": 4,
+                                "y": 0
+                              },
+                              "out": {
+                                "x": 4,
+                                "y": 8
+                              },
+                              "type": "symmetric",
+                              "x": 4,
+                              "y": 4
+                            },
+                            {
+                              "in": {
+                                "x": 0,
+                                "y": 8
+                              },
+                              "x": 0,
+                              "y": 4
+                            }
+                          ],
+                          "closed": true
+                        }
+                      ]
+                    },
+                    {
+                      "op": "combine",
+                      "subpaths": []
+                    }
+                  ]
+                },
+                "visible": true
+              }
+            ],
+            "paper": {
+              "absorption": 0.7,
+              "color": "#ffffff",
+              "depth": 0.5,
+              "dry": {
+                "contrast": 1,
+                "invert": false
+              },
+              "family": "watercolor",
+              "name": "Cold pressed watercolour",
+              "pattern": "cold-pressed",
+              "permeability": 0.5,
+              "preset": "cold-pressed",
+              "roughness": 0.6,
+              "scale": 1,
+              "seed": 1,
+              "shading": 0.5,
+              "tiling": "mirror",
+              "wet": {
+                "contrast": 1,
+                "invert": false
+              }
+            },
+            "swatches": [
+              {
+                "color": "#f7f5ee",
+                "name": "Warm white"
+              },
+              {
+                "color": "#f3d23a",
+                "name": "Lemon yellow"
+              },
+              {
+                "color": "#c8912f",
+                "name": "Yellow ochre"
+              },
+              {
+                "color": "#d23a2a",
+                "name": "Warm red"
+              },
+              {
+                "color": "#9e1f3d",
+                "name": "Crimson"
+              },
+              {
+                "color": "#8a4a2b",
+                "name": "Burnt earth"
+              },
+              {
+                "color": "#2f3f9e",
+                "name": "Deep blue"
+              },
+              {
+                "color": "#1d6f8f",
+                "name": "Cool blue"
+              },
+              {
+                "color": "#4f6e2c",
+                "name": "Leaf green"
+              },
+              {
+                "color": "#25221f",
+                "name": "Warm black"
+              }
+            ],
+            "version": 2,
+            "width": 24
+          },
+          "format": "pixerate.editor-document",
+          "formatVersion": 1,
+          "kind": "paint"
+        }
+      }
+    },
+    {
+      "tool": "list_layers",
+      "arguments": {},
+      "reload": true,
+      "document": true,
+      "expect": {
+        "result": {
+          "activeLayerId": "vm-paths",
+          "layers": [
+            {
+              "active": true,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "vm-paths",
+              "locks": {},
+              "name": "vm-paths",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            }
+          ]
+        },
+        "loaded": [],
+        "document": {
+          "document": {
+            "activeLayerId": "vm-paths",
+            "assets": {},
+            "dpi": 300,
+            "format": "pixerate-paint",
+            "guides": {
+              "perspective": {
+                "enabled": false,
+                "points": [],
+                "snap": true
+              },
+              "references": [],
+              "stencils": [],
+              "symmetry": {
+                "center": {
+                  "x": 12,
+                  "y": 10
+                },
+                "mirror": true,
+                "mode": "off",
+                "rotation": 0,
+                "segments": 6
+              },
+              "tracing": null
+            },
+            "height": 20,
+            "layers": [
+              {
+                "blend": "normal",
+                "id": "vm-paths",
+                "name": "vm-paths",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "vectorMask": {
+                  "components": [
+                    {
+                      "op": "combine",
+                      "subpaths": [
+                        {
+                          "anchors": [
+                            {
+                              "corner": {
+                                "radius": 2
+                              },
+                              "in": {
+                                "x": 0,
+                                "y": 2
+                              },
+                              "out": {
+                                "x": 2,
+                                "y": 0
+                              },
+                              "type": "smooth",
                               "x": 1,
                               "y": 1
                             },

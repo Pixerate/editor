@@ -206,7 +206,8 @@ export function bezierToSubpaths(input: BezierPathInput): VectorSubpath[] {
 					const first = anchors[0];
 					const end = anchors[anchors.length - 1];
 					if (Math.abs(end.x - first.x) < 1e-7 && Math.abs(end.y - first.y) < 1e-7) {
-						if (end.in) first.in = end.in;
+						// `in` before `out`, as on every other anchor, so the saved anchor reopens unchanged (#850).
+						if (end.in) anchors[0] = { x: first.x, y: first.y, in: end.in, ...(first.out ? { out: first.out } : {}) };
 						anchors.pop();
 					}
 				}

@@ -143,7 +143,8 @@ public func bezierToSubpaths(_ input: BezierPathInput) -> [VectorSubpath] {
                 let first = anchors[0]
                 let end = anchors[anchors.count - 1]
                 if abs(end.x - first.x) < 1e-7 && abs(end.y - first.y) < 1e-7 {
-                    if let hin = end.in { out[c].anchors[0].in = hin }
+                    // `in` before `out`, as on every other anchor, so the saved anchor reopens unchanged (#850).
+                    if let hin = end.in { out[c].anchors[0] = VectorAnchor(x: first.x, y: first.y, in: hin, out: first.out) }
                     out[c].anchors.removeLast()
                 }
             }

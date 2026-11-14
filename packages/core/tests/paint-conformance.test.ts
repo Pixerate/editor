@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createFakeEffectProvider } from '../src/effects';
@@ -74,20 +75,29 @@ describe('the paint conformance scenarios', () => {
       pending = { pixels: sha256(host.pixels({}).data) };
       return save();
     };
+    // `runConformanceScenario` records whatever `host.load` throws as a refused document, so an
+    // `expect` in there could never fail this test (#850): collect what differs, assert after the run.
+    const mismatches: Array<{ step: number; what: string; actual: unknown; expected: unknown }> = [];
+    let loads = 0;
     host.load = (document) => {
       const reload = pending;
       pending = null;
+      loads++;
       const problems = load(document);
       // `load` steps open another document on purpose; only reloads must change nothing.
       if (!reload) return problems;
       checked++;
-      expect(problems, `${scenario.id}: problems reopening its own save`).toEqual([]);
-      expect(comparable(save()), `${scenario.id}: the document saved again after reopening`).toEqual(comparable(document));
-      expect(sha256(host.pixels({}).data), `${scenario.id}: the pixels after reopening`).toBe(reload.pixels);
+      if (problems.length) mismatches.push({ step: loads, what: 'problems reopening its own save', actual: problems, expected: [] });
+      const again = comparable(save());
+      if (!isDeepStrictEqual(again, comparable(document))) mismatches.push({ step: loads, what: 'the document saved again after reopening', actual: again, expected: comparable(document) });
+      const pixels = sha256(host.pixels({}).data);
+      if (pixels !== reload.pixels) mismatches.push({ step: loads, what: 'the pixels after reopening', actual: pixels, expected: reload.pixels });
       return problems;
     };
     await runConformanceScenario(scenario, host);
     expect(checked).toBe(scenario.steps.filter((step) => step.reload).length);
+    for (const m of mismatches) expect(m.actual, `${scenario.id}: ${m.what} (load ${m.step})`).toEqual(m.expected);
+    expect(mismatches.map((m) => `load ${m.step}: ${m.what}`), `${scenario.id}: reopening its own saves`).toEqual([]);
   }, 60_000);
 });
 
