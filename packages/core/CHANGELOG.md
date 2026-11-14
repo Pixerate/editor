@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.318.7
+
+### Patch Changes
+
+- 9209cc8: The image editor's `parseCssColor` no longer reads `Object.prototype` names such as `constructor` and `__proto__` as colours; shape and type layers using them are refused with a colour problem (#849).
+
 ## 0.318.6
 
 ### Patch Changes

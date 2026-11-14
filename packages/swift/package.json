@@ -1,6 +1,6 @@
 {
   "name": "@pixerate/swift",
-  "version": "0.65.3",
+  "version": "0.65.4",
   "private": true,
   "description": "Native Swift editors for macOS and iOS (SwiftPM; the manifest is Package.swift at the repository root). Versioned with changesets; released as SwiftPM tags.",
   "license": "MIT",
