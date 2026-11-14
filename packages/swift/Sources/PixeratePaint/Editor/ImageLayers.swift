@@ -156,10 +156,6 @@ func imageCssColor(_ value: JSONValue?) -> (hex: String, alpha: Double)? {
     let text = raw.jsTrimmed.jsLowercased
     if text == "transparent" { return ("#000000", 0) }
     if let named = NAMED[text] { return ("#\(named)", 1) }
-    // `NAMED[text]` also finds what every object inherits: of the lowercase names, `constructor`
-    // (the function `Object`) and `__proto__` (`Object.prototype`), both truthy.
-    if text == "constructor" { return ("#function Object() { [native code] }", 1) }
-    if text == "__proto__" { return ("#[object Object]", 1) }
     if let m = groups(HEX_RE, text), var h = m[0] {
         if h.count <= 4 { h = h.map { "\($0)\($0)" }.joined() }
         let alpha: Double = h.count == 8 ? Double(Int(String(h.suffix(2)), radix: 16) ?? 0) / 255 : 1

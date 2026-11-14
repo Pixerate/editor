@@ -39,11 +39,11 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: `deserializeLayer` migrates annotation layers with `annotationLayerFor` outside any `try`; `shapeFromAnnotation` reads `a.points.length` / `a.points.map` and `typeFromAnnotation` calls `t.text.replace` without checking types. `readShape` calls `shapeFromAnnotation` inside its `try`. A TS core bug, not fixed yet.
 - **Solution / Workaround**: The Swift port matches it (`checkPenPoints`, `typeFromAnnotationReadable` in `ImageLayers.swift` throw V8's messages, which name the TS source's variables as the unminified build keeps them). If the TS core starts checking these, change both and re-record `document-load-vector-layers`.
 
-### [core|swift/paint] The Image Editor Reads `constructor` and `__proto__` as Colours
+### [core|swift/paint] The Image Editor Read `constructor` and `__proto__` as Colours (Fixed in #849)
 
-- **Issue / Symptom**: A shape layer filled with `"constructor"` or a type layer style with `color: "Constructor"` passes the image editor's checks (its hex becomes `#function Object() { [native code] }`); annotations with those colours stay annotations only because `parseEffectColor` then refuses the hex.
-- **Root Cause**: `parseCssColor` in `image-editor/layers/css-color.ts` looks the lowercased text up in a plain object (`NAMED[text]`), which also finds inherited `Object.prototype` members. Only the all-lowercase ones can match. A TS core bug (see the `Object.prototype` entry below), not fixed yet.
-- **Solution / Workaround**: Swift's `imageCssColor` matches it. Fix it in TS with `Object.hasOwn(NAMED, text)`, then drop the two special cases in Swift and re-record.
+- **Issue / Symptom**: A shape layer filled with `"constructor"` or a type layer style with `color: "Constructor"` passed the image editor's checks (its hex became `#function Object() { [native code] }`); annotations with those colours stayed annotations only because `parseEffectColor` then refused the hex.
+- **Root Cause**: `parseCssColor` in `image-editor/layers/css-color.ts` looked the lowercased text up in a plain object (`NAMED[text]`), which also finds inherited `Object.prototype` members (see the `Object.prototype` entry below).
+- **Solution / Workaround**: `parseCssColor` only reads own names (`Object.hasOwn(NAMED, text)`), so those names are refused like any other unknown colour; Swift's `imageCssColor` dropped its two special cases, and `document-load-vector-layers` records the refusals. Any lookup table keyed by text from a document needs `Object.hasOwn` or a `Map`.
 
 ### [swift] `Foundation.tan` Differs From V8's `Math.tan` in the Last Bit
 

@@ -60,7 +60,7 @@ final class PaintVectorLayersTests: XCTestCase {
             ("#AbC", "#aabbcc", 1), ("#11223344", "#112233", 0.26666666666666666), (" Red ", "#ff0000", 1), ("transparent", "#000000", 0),
             ("rgb(10%, 20, 300)", "#1a14ff", 1), ("rgba(1 2 3 / 50%)", "#010203", 0.5), ("hsl(120deg 50% 50%)", "#40bf40", 1),
             ("hsla(-30, 100%, 25%, 0.2)", "#800040", 0.2), ("rgb(1, 2)", nil, 0), ("hsl(1, 2)", nil, 0), ("oklch(0.5 0.1 20)", nil, 0),
-            ("Constructor", "#function Object() { [native code] }", 1), ("__proto__", "#[object Object]", 1), ("tostring", nil, 0),
+            ("Constructor", nil, 0), ("__proto__", nil, 0), ("tostring", nil, 0),
             ("#12345", nil, 0), ("rgb(1e2, 2, 3)", nil, 0), ("rgb(.5.5, 2, 3)", "#010203", 1),
         ]
         for (text, hex, alpha) in cases {
@@ -72,7 +72,7 @@ final class PaintVectorLayersTests: XCTestCase {
     }
 
     func testShapeAndTypeChecks() {
-        XCTAssertNil(shapeLayerProblem(["components": [["live": ["kind": "ellipse", "x": 0, "y": 0, "width": 2, "height": 2]]], "fill": "constructor"]))
+        XCTAssertEqual(shapeLayerProblem(["components": [["live": ["kind": "ellipse", "x": 0, "y": 0, "width": 2, "height": 2]]], "fill": "constructor"]), "fill: \"constructor\" is not a colour; use #rrggbb (or #rrggbbaa, rgb(), a CSS colour name).")
         XCTAssertEqual(shapeLayerProblem(["annotation": ["type": "pen", "strokeColor": "#00f"]]), "Cannot read properties of undefined (reading 'length')")
         XCTAssertEqual(shapeLayerProblem(["components": [["subpaths": []]], "fill": ["type": "gradient", "gradient": ["stops": [.null]]]]), "Cannot read properties of null (reading 'position')")
         XCTAssertEqual(shapeLayerProblem(["components": [["subpaths": []]], "stroke": ["width": 1, "paint": "#000", "join": .null]]), "stroke.join must be one of miter, round, bevel, got null.")
