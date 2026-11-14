@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.318.2
+
+### Patch Changes
+
+- f508669: Paint replay steps wet paint all at once when no `wetChunk` is given (much faster `renderHighRes`), and colour-scheme replay checkpoints over the wet undo memory now release their snapshots (#855).
+
 ## 0.318.1
 
 ### Patch Changes
