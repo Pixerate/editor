@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { ChartSelection, ChartSpec } from "@pixerate/editor/chart";
 import { chartTooltipFor, describeChartSelectionIn, nextChart3dFocus, renderChart3d, type Chart3dLabel, type Chart3dRenderer, type ChartTooltip } from "@pixerate/editor/three";
+import { compositeCapture } from "@pixerate/editor/tools";
 
 /**
  * A chart drawn in 3-D with `@pixerate/editor/three` (#795): a WebGL canvas, drawn once per change
@@ -15,6 +16,18 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
   const [error, setError] = useState("");
   const [focus, setFocus] = useState<ChartSelection | null>(null);
   const [tip, setTip] = useState<ChartTooltip | null>(null);
+  const pictureRef = useRef<HTMLDivElement>(null);
+  const [exported, setExported] = useState<{ url: string; width: number; height: number } | null>(null);
+  // One PNG of the WebGL canvas and its HTML labels (#809), drawn again at 2× for a sharp picture.
+  const exportPng = async () => {
+    if (!pictureRef.current) return;
+    try {
+      const shot = await compositeCapture(pictureRef.current, { scale: 2 });
+      setExported({ url: shot.image as string, width: shot.width, height: shot.height });
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -50,7 +63,10 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
 
   if (error) return <p className="text-xs text-rose-400">3-D view unavailable: {error}</p>;
   return (
+    <div className="space-y-2">
     <div
+      ref={pictureRef}
+      data-picture
       className="relative rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
       style={{ width, height }}
       data-testid="chart-3d"
@@ -95,6 +111,18 @@ export function Chart3dView({ spec, width = 640, height = 400 }: { spec: ChartSp
       <p aria-live="polite" className="sr-only">
         {focus ? describeChartSelectionIn(spec, focus) : ""}
       </p>
+    </div>
+      <div className="flex items-center gap-2 text-xs text-slate-600">
+        <button type="button" className="rounded border border-slate-300 px-2 py-1 hover:bg-slate-100" onClick={exportPng} data-testid="chart-3d-export">
+          Export PNG (2×)
+        </button>
+        {exported && (
+          <a href={exported.url} download="chart-3d.png" className="underline" data-testid="chart-3d-download">
+            chart-3d.png, {exported.width}×{exported.height}
+          </a>
+        )}
+      </div>
+      {exported && <img src={exported.url} alt="The exported 3-D chart with its labels" width={width} height={height} className="rounded-lg border border-slate-200" data-testid="chart-3d-exported" />}
     </div>
   );
 }

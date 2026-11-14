@@ -17,6 +17,76 @@ export interface RasterizeElementOptions {
 	exclude?: readonly string[];
 	/** Adjusts the styled clone before it is drawn (e.g. moves a viewport transform). */
 	prepare?: (clone: HTMLElement) => void;
+	/**
+	 * Output pixels per CSS pixel, for canvases with a capture source (`registerCaptureSource`),
+	 * which draw again at this scale instead of being stretched (default: pixelWidth / width).
+	 */
+	sourceScale?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Capture sources: canvases that draw themselves for a capture (#809)
+// ---------------------------------------------------------------------------
+
+/** What a capture source gives: the picture (a data URL or a canvas), or that it cannot draw. */
+export type CaptureSourceResult = string | HTMLCanvasElement | { lost: true; reason?: string };
+
+/** Draws a canvas's picture for a capture at `scale` output pixels per CSS pixel. */
+export type CaptureSource = (request: { scale: number }) => CaptureSourceResult;
+
+const captureSources = new WeakMap<HTMLCanvasElement, CaptureSource>();
+
+/**
+ * Lets a canvas draw itself for captures: a WebGL renderer draws again at the capture's scale
+ * (so a 2× capture is sharp, not stretched) and reports a lost context instead of a blank
+ * picture. Returns a function that removes it. `renderChart3d` registers its canvas.
+ */
+export function registerCaptureSource(canvas: HTMLCanvasElement, source: CaptureSource): () => void {
+	captureSources.set(canvas, source);
+	return () => {
+		if (captureSources.get(canvas) === source) captureSources.delete(canvas);
+	};
+}
+
+/** A canvas in the picture lost its WebGL context, so it can't be captured until it is restored. */
+export class CaptureContextLostError extends Error {
+	readonly element: HTMLCanvasElement;
+	constructor(element: HTMLCanvasElement, reason?: string) {
+		const name = element.getAttribute('aria-label') || element.id || element.getAttribute('data-testid') || 'a canvas';
+		super(`The picture can't be captured: ${name} lost its WebGL context${reason ? ` (${reason})` : ''}. Draw it again once the context is restored, then capture.`);
+		this.name = 'CaptureContextLostError';
+		this.element = element;
+	}
+}
+
+/** Whether a canvas holds a WebGL context that is lost (a 2-D canvas never is). */
+function webglContextLost(canvas: HTMLCanvasElement): boolean {
+	for (const type of ['webgl2', 'webgl'] as const) {
+		try {
+			const gl = canvas.getContext(type) as WebGLRenderingContext | null;
+			if (gl) return typeof gl.isContextLost === 'function' && gl.isContextLost();
+		} catch {
+			// Asking for another kind of context than the canvas has throws in some browsers.
+		}
+	}
+	return false;
+}
+
+/** A canvas's picture for a capture at `scale`: its capture source's, else its pixels as they are. */
+function canvasSnapshot(canvas: HTMLCanvasElement, scale: number): string | null {
+	const source = captureSources.get(canvas);
+	if (source) {
+		const result = source({ scale });
+		if (typeof result === 'string') return result;
+		if ('lost' in result) throw new CaptureContextLostError(canvas, result.reason);
+		return result.toDataURL('image/png');
+	}
+	if (webglContextLost(canvas)) throw new CaptureContextLostError(canvas);
+	try {
+		return canvas.toDataURL('image/png');
+	} catch {
+		return null;
+	}
 }
 
 const NO_DOM =
@@ -55,10 +125,11 @@ function imageSnapshot(source: HTMLCanvasElement | HTMLImageElement, doc: Docume
 /**
  * Deep-clones `element` with every computed style inlined, so the copy looks
  * the same outside the page's stylesheets (inside an SVG `<foreignObject>`).
- * Elements matching `exclude` are left out, canvases become images, and
- * same-origin images and form values are copied in.
+ * Elements matching `exclude` are left out, canvases become images (a canvas with a capture
+ * source draws again at `options.scale`; a lost WebGL context throws `CaptureContextLostError`),
+ * and same-origin images and form values are copied in.
  */
-export function cloneElementWithStyles(element: Element, exclude: readonly string[] = []): HTMLElement {
+export function cloneElementWithStyles(element: Element, exclude: readonly string[] = [], options: { scale?: number } = {}): HTMLElement {
 	const doc = element.ownerDocument;
 	const view = doc.defaultView;
 	if (!view) throw new Error(NO_DOM);
@@ -71,7 +142,7 @@ export function cloneElementWithStyles(element: Element, exclude: readonly strin
 		let clone: Element;
 		if (el.tagName === 'CANVAS') {
 			clone = doc.createElement('img');
-			const url = imageSnapshot(el as HTMLCanvasElement, doc);
+			const url = canvasSnapshot(el as HTMLCanvasElement, options.scale ?? 1);
 			if (url) clone.setAttribute('src', url);
 		} else {
 			clone = el.cloneNode(false) as Element;
@@ -142,7 +213,7 @@ export async function rasterizeElement(element: HTMLElement, options: RasterizeE
 	const pixelHeight = Math.max(1, Math.round(options.pixelHeight ?? height));
 	const format = options.format ?? 'png';
 
-	const clone = cloneElementWithStyles(element, options.exclude);
+	const clone = cloneElementWithStyles(element, options.exclude, { scale: options.sourceScale ?? pixelWidth / width });
 	const background = options.background ?? view.getComputedStyle(element).backgroundColor;
 	clone.style.width = `${width}px`;
 	clone.style.height = `${height}px`;
@@ -244,6 +315,7 @@ export function createElementCaptureSurface(options: ElementCaptureSurfaceOption
 				quality: request.quality,
 				background: options.background,
 				exclude,
+				sourceScale: request.width / Math.max(1, request.rect.width),
 				// Scrolling does not survive cloning: shift the content so the rect's corner is at the top left.
 				prepare: (clone) => {
 					const shift = `translate(${-request.rect.x}px, ${-request.rect.y}px)`;
@@ -255,4 +327,70 @@ export function createElementCaptureSurface(options: ElementCaptureSurfaceOption
 			});
 		}
 	};
+}
+
+// ---------------------------------------------------------------------------
+// One picture from layered canvases, SVG and HTML (#809)
+// ---------------------------------------------------------------------------
+
+export interface CompositeCaptureOptions {
+	/** Output pixels per CSS pixel (default 1). Canvases with a capture source draw again at it. */
+	scale?: number;
+	/** Largest output side in pixels; lowers the scale to fit (default none). */
+	maxSide?: number;
+	/** Fill behind the picture (default the element's computed background; JPEG gets white when it is clear). */
+	background?: string;
+	format?: CaptureFormat;
+	/** JPEG quality, 0–1 (default 0.85). */
+	quality?: number;
+	/** Selectors of elements to leave out, besides `[data-capture="exclude"]` and the overlays. */
+	exclude?: readonly string[];
+	/** Keep agent cursors and other overlays (default false). */
+	includeOverlays?: boolean;
+	/** Return a Blob instead of a data URL (default `dataUrl`). */
+	output?: 'dataUrl' | 'blob';
+}
+
+export interface CompositeCapture {
+	/** A `data:` URL, or a Blob with `output: 'blob'`. */
+	image: string | Blob;
+	mimeType: string;
+	/** Output size in pixels. */
+	width: number;
+	height: number;
+	/** The scale used, after `maxSide`. */
+	scale: number;
+}
+
+/** The picture container in a document: the first element marked `data-picture` (the page contract). */
+export function findPicture(root: ParentNode = globalThis.document): HTMLElement | null {
+	return (root?.querySelector?.('[data-picture]') as HTMLElement | null) ?? null;
+}
+
+/**
+ * One image of what a person sees in `root`: its canvases (WebGL included), SVG and HTML labels,
+ * in their order and with their opacity, as the page draws them. Canvases that registered a
+ * capture source (`registerCaptureSource`, e.g. `renderChart3d`) draw again at the output scale,
+ * so 2× is sharp; one that lost its WebGL context rejects with `CaptureContextLostError` rather
+ * than a blank picture. Browser only; Node tooling runs it in a headless browser.
+ */
+export async function compositeCapture(root: HTMLElement, options: CompositeCaptureOptions = {}): Promise<CompositeCapture> {
+	const width = Math.max(1, Math.round(root.clientWidth || root.getBoundingClientRect().width));
+	const height = Math.max(1, Math.round(root.clientHeight || root.getBoundingClientRect().height));
+	let scale = options.scale ?? 1;
+	if (!(scale > 0) || !Number.isFinite(scale)) throw new Error(`scale must be a positive number (got ${String(options.scale)}).`);
+	if (options.maxSide !== undefined) {
+		if (!(options.maxSide >= 1)) throw new Error(`maxSide must be at least 1 pixel (got ${String(options.maxSide)}).`);
+		scale = Math.min(scale, options.maxSide / Math.max(width, height));
+	}
+	const pixelWidth = Math.max(1, Math.round(width * scale));
+	const pixelHeight = Math.max(1, Math.round(height * scale));
+	const format = options.format ?? 'png';
+	const exclude = [CAPTURE_EXCLUDE_SELECTOR, ...(options.exclude ?? []), ...(options.includeOverlays ? [] : CAPTURE_OVERLAY_SELECTORS)];
+	const url = await rasterizeElement(root, { width, height, pixelWidth, pixelHeight, format, quality: options.quality, background: options.background, exclude, sourceScale: scale });
+	const mimeType = format === 'jpeg' ? 'image/jpeg' : 'image/png';
+	if (options.output !== 'blob') return { image: url, mimeType, width: pixelWidth, height: pixelHeight, scale };
+	const base64 = url.slice(url.indexOf(',') + 1);
+	const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+	return { image: new Blob([bytes], { type: mimeType }), mimeType, width: pixelWidth, height: pixelHeight, scale };
 }
