@@ -92,8 +92,8 @@ describe('schemas, examples and scaffolding', () => {
 		const schema = styleProfileSchema(chartStyleDomain) as any;
 		expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
 		expect(schema.title).toBe('Charts house-style profile (chart.json)');
-		expect(Object.keys(schema.properties)).toEqual(['$schema', 'palette', 'colorSchemes', 'layouts', 'theme', 'defaults', 'checks']);
-		expect(schema.properties.checks.items.anyOf[0].enum).toEqual(['palette-only', 'distinguishable', 'min-contrast', 'allowed-type', 'fonts-allowed']);
+		expect(Object.keys(schema.properties)).toEqual(['$schema', 'palette', 'colorSchemes', 'layouts', 'theme', 'defaults', 'three', 'checks']);
+		expect(schema.properties.checks.items.anyOf[0].enum).toEqual(['palette-only', 'distinguishable', 'min-contrast', 'allowed-type', 'three-contrast', 'fonts-allowed']);
 		expect(schema.properties.checks.items.anyOf.find((s: any) => s.properties?.id?.const === 'allowed-type').properties.types).toBeDefined();
 		expect((styleProfileSchema(brandStyleDomain) as any).properties.checks.items.anyOf[0].enum).toEqual(['palette-only', 'min-contrast', 'distinguishable', 'fonts-allowed']);
 	});

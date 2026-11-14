@@ -93,7 +93,7 @@ describe('brand.json in the resolver', () => {
 		expect(styles.domains.map((d) => d.id)).toEqual(['chart', 'tokens', 'demo', 'plain', 'brand']);
 		expect(styleChecksOf(styles.domains.find((d) => d.id === 'brand')!).map((c) => c.id)).toEqual(SHARED_STYLE_CHECKS.map((c) => c.id));
 		// A domain with a surface gets the shared checks after its own; chart keeps its own versions.
-		expect(styleChecksOf(chartStyleDomain).map((c) => c.id)).toEqual(['palette-only', 'distinguishable', 'min-contrast', 'allowed-type', 'fonts-allowed']);
+		expect(styleChecksOf(chartStyleDomain).map((c) => c.id)).toEqual(['palette-only', 'distinguishable', 'min-contrast', 'allowed-type', 'three-contrast', 'fonts-allowed']);
 		expect(styleChecksOf(plainDomain)).toEqual([]);
 	});
 

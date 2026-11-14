@@ -73,6 +73,15 @@ brand.json, chart.json: { checks: ["palette-only"] } } }` → `save_style` → `
 { SKILL.md (with `group: look` and `extends: paper`), chart.json: { palette: [...] } } }` (its
 `profiles` show the merged result) → `save_style` → `choose_style` `night`.
 
+**3-D charts in the house style.** chart.json takes a `three` section (`get_style_schema`
+`chart` shows it): `materials` for `mark` (bars), `ribbon` (lines and areas, `transmission` for
+glass), `floor` and `wall` (with a `color`) and a `highlight` glow on focused marks; `light`
+`preset` `studio`, `soft`, `rim` or `flat` with `intensity` and an optional `azimuth` /
+`elevation`; `shadow` and `ambientOcclusion`; and a `background`. Write `version: 1`; leave out
+what should stay as it is (an empty section changes nothing). Colours take `$token` references.
+Turn on the `three-contrast` check, which keeps label text readable on the 3-D background and
+floor and marks visible against the floor and wall.
+
 **Fix a broken profile.** `list_styles` → read the issue (`chart.json is left out: /palette:
 ...`) → `save_style` with only the corrected file → `list_styles` shows none.
 
