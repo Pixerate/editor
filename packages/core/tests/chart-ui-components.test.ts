@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { CHART_UI_RENDER_VERSIONS, uiComponents, type ChartUiComponent } from '../src/chart';
+import { CHART_UI_RENDER_VERSIONS, DEFAULT_CHART_PALETTE, chartPaletteWithAccent, uiComponents, type ChartUiComponent } from '../src/chart';
 import { createLinkFocus } from '../src/interaction/linkFocus';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 
@@ -140,15 +140,15 @@ describe('uiComponents', () => {
 		expect(Object.fromEntries(uiComponents().map((c) => [c.id, c.descriptor.contentHash]))).toMatchInlineSnapshot(`
 			{
 			  "bar-chart": "h1-bc3ada602d46f641",
-			  "braid": "h1-a1fef74af5e165b4",
-			  "donut-chart": "h1-de9b95e9a3a4d386",
+			  "braid": "h1-32ab36e8632bd353",
+			  "donut-chart": "h1-0e889e53ac068f38",
 			  "line-chart": "h1-996e92fc381f9c29",
 			  "lineage": "h1-80fbdcdee156c4aa",
 			  "sparkline": "h1-30ef47f4426f81fe",
 			  "weave": "h1-6a819cc804a71672",
 			}
 		`);
-		expect(CHART_UI_RENDER_VERSIONS).toEqual({ sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 1, lineage: 1, braid: 1, weave: 1 });
+		expect(CHART_UI_RENDER_VERSIONS).toEqual({ sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 2, lineage: 1, braid: 2, weave: 1 });
 		// A fresh module (a new run) computes the same hashes.
 		const { vi } = await import('vitest');
 		vi.resetModules();
@@ -239,5 +239,53 @@ describe('data visuals with motion and linked focus', () => {
 		expect(sizes.size).toBe(1);
 		expect([...sizes][0]).toBeLessThanOrEqual(14);
 		expect(svg.querySelectorAll('tspan').length).toBeGreaterThan(12);
+	});
+});
+
+describe('render fixes: fewer braid turns when short, labels apart, a bigger donut, palettes clear of the accent', () => {
+	it('keeps the default palette whole after the default accents, and drops colours near another accent', () => {
+		expect(chartPaletteWithAccent(DEFAULT_CHART_PALETTE[0]!)).toEqual([...DEFAULT_CHART_PALETTE]);
+		// The dark default accent is a palette colour: it is not repeated.
+		expect(chartPaletteWithAccent(DEFAULT_CHART_PALETTE[7]!)).toEqual([DEFAULT_CHART_PALETTE[7], ...DEFAULT_CHART_PALETTE.slice(1).filter((c) => c !== DEFAULT_CHART_PALETTE[7])]);
+		// A coral accent drops the palette's coral (#ff725c), which would sit beside it.
+		expect(chartPaletteWithAccent('#e8553f')).not.toContain('#ff725c');
+		expect(chartPaletteWithAccent('#e8553f')[0]).toBe('#e8553f');
+		// An accent it can't read keeps the palette.
+		expect(chartPaletteWithAccent('var(--accent)')).toEqual(['var(--accent)', ...DEFAULT_CHART_PALETTE.slice(1)]);
+	});
+
+	it('colours bar series and braid strands from the accent palette', () => {
+		const bar = byId('bar-chart').render({ categories: ['A'], series: [1, 2, 3].map((k) => ({ name: `S${k}`, values: [k] })) }, { width: 320, height: 200, colors: { accent: '#e8553f' } });
+		expect(bar.toLowerCase()).not.toContain('#ff725c');
+		const braid = byId('braid').render({ strands: [{ name: 'A' }, { name: 'B' }, { name: 'C' }] }, { width: 480, height: 180, colors: { accent: '#e8553f' } });
+		expect(braid.toLowerCase()).not.toContain('#ff725c');
+	});
+
+	it('gives a short braid fewer turns, so its twists keep their shape', () => {
+		const c = byId('braid');
+		const crossings = (width: number) => parseSvg(c.render({ strands: [{ name: 'A' }, { name: 'B' }], turns: 4 }, { width, height: 200 })).querySelectorAll('path[data-link-focus="strand-0"]').length;
+		expect(crossings(300)).toBeLessThan(crossings(1200));
+	});
+
+	it('keeps braid labels a line apart and inside the picture', () => {
+		const c = byId('braid');
+		const strands = ['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot'].map((name) => ({ name }));
+		for (const [width, height] of [[330, 160], [600, 240], [300, 120]] as const) {
+			const svg = parseSvg(c.render({ root: 'Root', strands }, { width, height }));
+			const ys = [...svg.querySelectorAll('text')].filter((t) => strands.some((s) => s.name === t.textContent)).map((t) => Number(t.getAttribute('y'))).sort((a, b) => a - b);
+			expect(ys).toHaveLength(6);
+			for (let k = 1; k < ys.length; k++) expect(ys[k]! - ys[k - 1]!).toBeGreaterThanOrEqual(12 * 1.45 - 1e-9);
+			expect(ys[0]!).toBeGreaterThan(0);
+		}
+	});
+
+	it('puts the donut legend beside the ring when wide, so the ring takes the height', () => {
+		const c = byId('donut-chart');
+		const wide = parseSvg(c.render(c.descriptor.example, { width: 330, height: 240 }));
+		const tall = parseSvg(c.render(c.descriptor.example, { width: 240, height: 300 }));
+		const legendX = (svg: SVGSVGElement) => Math.min(...[...svg.querySelectorAll('text')].filter((t) => t.textContent === 'Search').map((t) => Number(t.getAttribute('x'))));
+		const legendY = (svg: SVGSVGElement) => Math.min(...[...svg.querySelectorAll('text')].filter((t) => t.textContent === 'Search').map((t) => Number(t.getAttribute('y'))));
+		expect(legendX(wide)).toBeGreaterThan(330 / 2);
+		expect(legendY(tall)).toBeGreaterThan(300 / 2);
 	});
 });

@@ -13,7 +13,6 @@ import { drawPieces } from '../animation/draw.js';
 import { bezierPathLength } from '../canvas/pathops/bezier.js';
 import { fanElbows } from '../geom/connectors.js';
 import { helix, splitByDepth } from '../geom/helix.js';
-import { placeLabels } from '../geom/labels.js';
 import { linkFocusLit, type LinkFocusOptions } from '../interaction/linkFocus.js';
 import { estimatedMeasure, fitText } from '../typography/fit.js';
 import { DEFAULT_CHART_PALETTE, DEFAULT_CHART_THEME } from './spec.js';
@@ -197,8 +196,10 @@ export function renderBraid(data: BraidUiData, input: UiVisualRenderInput, palet
 	const count = data.strands.length;
 	const max = Math.max(0, ...data.strands.map((s) => (typeof s.value === 'number' && s.value > 0 ? s.value : 0)));
 	const widthOf = (s: BraidUiData['strands'][number]) => (max > 0 && typeof s.value === 'number' ? 2.5 + 5.5 * Math.max(0, s.value) / max : 5);
+	// A turn needs room: at least 3.5 amplitudes along the axis, or the twists close up into coils.
+	const turns = Math.min(data.turns ?? 2.5, Math.max(0.75, (end.x - start.x) / (amplitude * 3.5)));
 	const strands = data.strands.map((s, i) => {
-		const h = helix([start, end], { amplitude, turns: data.turns ?? 2.5, phase: (2 * Math.PI * i) / count, envelope: 'start', samples: Math.max(48, Math.round((end.x - start.x) / 3)) });
+		const h = helix([start, end], { amplitude, turns, phase: (2 * Math.PI * i) / count, envelope: 'start', samples: Math.max(48, Math.round((end.x - start.x) / 3)) });
 		const runs = splitByDepth(h.points, h.depth);
 		const plan = drawPieces(runs.map((r) => ({ from: r.from, to: r.to })), { total: h.length, at: 0.04 * i, span: 0.8, ease: 'ease-in-out' });
 		return { s, i, h, runs, drawn: plan.drawAt(p), color: palette[i % palette.length]!, width: widthOf(s) };
@@ -216,15 +217,31 @@ export function renderBraid(data: BraidUiData, input: UiVisualRenderInput, palet
 	}
 	body += el('circle', { cx: start.x, cy: start.y, r: 4, fill: c.ink });
 	if (data.root) body += el('text', { x: start.x - 10, y: start.y + size * 0.35, 'text-anchor': 'end', 'font-family': FONT, 'font-size': size, 'font-weight': 700, fill: c.ink }, data.root);
-	const ends = strands.map((st) => st.h.points[st.h.points.length - 1]);
-	const placed = placeLabels(
-		ends.map((pt) => ({ anchor: pt, width: labelWidth - 14, height: size * 1.3, prefer: ['right' as const] })),
-		{ bounds: { x: 0, y: 0, width: W, height: H }, gap: 2, distance: 8, reach: 40 }
-	);
+	// Labels at the open end, in the strands' order down the page, pushed apart to one line each and
+	// kept inside the picture; a label moved off its strand's end gets a short leader.
+	const ends = strands.map((st) => st.h.points[st.h.points.length - 1]!);
+	const lineH = size * 1.45;
+	const order = ends.map((_, i) => i).sort((a, b) => ends[a]!.y - ends[b]!.y || a - b);
+	const ys = order.map((i) => ends[i]!.y);
+	for (let k = 1; k < ys.length; k++) ys[k] = Math.max(ys[k]!, ys[k - 1]! + lineH);
+	const overflow = ys[ys.length - 1]! - (H - pad - size * 0.5);
+	if (overflow > 0) for (let k = 0; k < ys.length; k++) ys[k]! -= overflow;
+	for (let k = ys.length - 2; k >= 0; k--) ys[k] = Math.min(ys[k]!, ys[k + 1]! - lineH);
+	const top = pad + size * 0.5;
+	if (ys[0]! < top) {
+		const shift = top - ys[0]!;
+		for (let k = 0; k < ys.length; k++) ys[k]! += shift;
+	}
+	const labelY: number[] = new Array(count);
+	order.forEach((i, k) => (labelY[i] = ys[k]!));
 	const fade = phase(p, 0.82, 1);
 	strands.forEach((st, i) => {
-		const box = placed[i];
-		body += el('text', { x: box.x, y: box.y + box.height * 0.75, 'font-family': FONT, 'font-size': size, 'font-weight': 600, fill: c.ink, 'data-link-focus': `strand-${i}`, opacity: fade <= 0 ? '0' : opacityAttr(lit[i], dim, fade) }, st.s.name);
+		const end = ends[i]!;
+		const x = end.x + 14;
+		const y = labelY[i]!;
+		const o = fade <= 0 ? '0' : opacityAttr(lit[i]!, dim, fade);
+		if (Math.abs(y - end.y) > 3) body += el('line', { x1: end.x + 4, y1: end.y, x2: x - 3, y2: y, stroke: st.color, 'stroke-width': 1, 'data-link-focus': `strand-${i}`, opacity: o });
+		body += el('text', { x, y: y + size * 0.35, 'font-family': FONT, 'font-size': size, 'font-weight': 600, fill: c.ink, 'data-link-focus': `strand-${i}`, opacity: o }, st.s.name);
 	});
 	const label = data.title || `Braid of ${count} strands${data.root ? ` into ${data.root}` : ''}`;
 	return svgDoc(W, H, label, describeBraid(data), c.surface, body);
