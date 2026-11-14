@@ -221,7 +221,7 @@ public final class SurfaceViewportRenderer<C: AnyObject> {
     private func mipImage(_ surface: TiledSurface, _ level: Int, _ mx: Int, _ my: Int) -> C? {
         let n = 1 << level
         var sources: [Tile?] = []
-        for dy in 0..<n { for dx in 0..<n { sources.append(surface.tiles.get(tileKey(mx * n + dx, my * n + dy))) } }
+        for dy in 0..<n { for dx in 0..<n { sources.append(surface.tiles.get(tileKeyIn(mx * n + dx, my * n + dy))) } }
         if sources.allSatisfy({ $0 == nil }) { return nil }
         let key = "\(level):\(mx):\(my)"
         if let hit = mips[key], hit.sources.count == sources.count, zip(hit.sources, sources).allSatisfy({ $0 === $1 }) { return hit.canvas }
@@ -289,7 +289,7 @@ public final class SurfaceViewportRenderer<C: AnyObject> {
         for (tx, ty) in keys {
             var canvas: C? = nil
             if level == 0 {
-                if let tile = surface.tiles.get(tileKey(tx, ty)) {
+                if let tile = surface.tiles.get(tileKeyIn(tx, ty)) {
                     let had = base.has(tile)
                     canvas = tileImage(tile)
                     if !had && canvas != nil { built += 1 }

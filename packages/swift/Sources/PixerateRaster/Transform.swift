@@ -737,6 +737,8 @@ public func warpSurface(_ src: TiledSurface, _ f: (Vec2) -> Vec2?, _ options: Re
             if list.isEmpty { continue }
             let ttx = tx0 + cx
             let tty = ty0 + cy
+            // A tile past the surface range is dropped (as `tilesInRect` does), never keyed onto another.
+            if !tileInRange(ttx, tty) { continue }
             guard let t = intersect(RasterRect(x: ttx * TILE, y: tty * TILE, width: TILE, height: TILE), dst) else { continue }
             let tw = t.width
             let th = t.height

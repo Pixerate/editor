@@ -70,6 +70,19 @@ public func tileInRange(_ tx: Int, _ ty: Int) -> Bool {
     tx >= MIN_TILE && tx <= MAX_TILE && ty >= MIN_TILE && ty <= MAX_TILE
 }
 
+/// The key no tile in the range has: what `tileKeyIn` gives for a tile past it.
+public let NO_TILE_KEY: TileKey = -1
+
+/**
+ * `tileKey(tx, ty)` for a tile in the range, or `NO_TILE_KEY` for one past it. A lookup with it
+ * finds nothing, so a read sees the default; a writer checks `key < 0` and drops the pixel instead
+ * of writing it at another tile. Paint code that keys tiles straight from pixel coordinates (not
+ * through `tilesInRect`) uses it, as the TS core does (#852).
+ */
+public func tileKeyIn(_ tx: Int, _ ty: Int) -> TileKey {
+    tileInRange(tx, ty) ? (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET) : NO_TILE_KEY
+}
+
 /**
  * `checkSurfaceRange(rect)` in doubles, with `rect.x + rect.width` given as `xEnd` (as a saved rect
  * reads it): throws `SurfaceRangeError` when the tiles covering the rect reach past the surface

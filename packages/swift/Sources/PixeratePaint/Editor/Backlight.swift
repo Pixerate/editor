@@ -48,8 +48,10 @@ private func tilesUnder(_ surface: TiledSurface?, _ rect: RasterRect, _ offset: 
         out.append(nil)
         return
     }
-    let x0 = Int(JS.floor(Double(rect.x - offset.x) / Double(TILE))), y0 = Int(JS.floor(Double(rect.y - offset.y) / Double(TILE)))
-    let x1 = Int(JS.floor(Double(rect.x - offset.x + rect.width - 1) / Double(TILE))), y1 = Int(JS.floor(Double(rect.y - offset.y + rect.height - 1) / Double(TILE)))
+    // Only tiles in the surface range (as `tilesInRect`): a far-off offset finds none, never another tile.
+    let x0 = Swift.max(Int(JS.floor(Double(rect.x - offset.x) / Double(TILE))), MIN_TILE), y0 = Swift.max(Int(JS.floor(Double(rect.y - offset.y) / Double(TILE))), MIN_TILE)
+    let x1 = Swift.min(Int(JS.floor(Double(rect.x - offset.x + rect.width - 1) / Double(TILE))), MAX_TILE), y1 = Swift.min(Int(JS.floor(Double(rect.y - offset.y + rect.height - 1) / Double(TILE))), MAX_TILE)
+    if x0 > x1 || y0 > y1 { return }
     for ty in y0...y1 { for tx in x0...x1 { out.append(surface.tiles.get(tileKey(tx, ty)).map(ObjectIdentifier.init)) } }
 }
 

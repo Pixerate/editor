@@ -23,7 +23,7 @@
 
 import { blendPixel, type BlendMode } from '../raster/blend';
 import type { RasterRect } from '../raster/surface';
-import { TILE, tileKey } from '../raster/surface';
+import { TILE, tileKey, tileKeyIn } from '../raster/surface';
 import { srgbDecode, srgbEncode } from '../raster/deep';
 import { DabWalker, dabRect, rasterizeDab, type BrushSettings, type CoverageMap, type Dab, type StrokePoint } from './brush';
 import { SmudgeTip, type SmudgeSettings } from './blending';
@@ -345,11 +345,12 @@ export class TilePixelSource implements PixelSource {
     const ly = y - this.offset.y;
     const tx = Math.floor(lx / TILE);
     const ty = Math.floor(ly / TILE);
-    const key = tileKey(tx, ty);
+    // A tile past the surface range (NO_TILE_KEY) reads as empty: it is never handed to `readTile`.
+    const key = tileKeyIn(tx, ty);
     if (key !== this.lastKey) {
       let t = this.cache.get(key);
       if (t === undefined) {
-        t = this.readTile(tx, ty);
+        t = key < 0 ? null : this.readTile(tx, ty);
         this.cache.set(key, t);
       }
       this.last = t;
@@ -493,7 +494,7 @@ export function applyRetouchToTile<T extends PaintPixels>(
     for (let x = x0; x < x1; x++) {
       const dx = ox + x;
       const ctx = Math.floor(dx / TILE);
-      const key = tileKey(ctx, cty);
+      const key = tileKeyIn(ctx, cty);
       if (key !== covKey) {
         covKey = key;
         covTile = coverage.tiles.get(key);
@@ -608,7 +609,7 @@ export function applyToneToDeepTile(
     for (let x = x0; x < x1; x++) {
       const dx = ox + x;
       const ctx = Math.floor(dx / TILE);
-      const key = tileKey(ctx, cty);
+      const key = tileKeyIn(ctx, cty);
       if (key !== covKey) {
         covKey = key;
         covTile = coverage.tiles.get(key);

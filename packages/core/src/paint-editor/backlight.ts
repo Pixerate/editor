@@ -26,7 +26,7 @@
  */
 
 import { srgbToLinear, linearToSrgb } from '../color/convert';
-import { TILE, TiledSurface, finishTile, readRegion, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { MAX_TILE, MIN_TILE, TILE, TiledSurface, finishTile, readRegion, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { computeSpill, type LightSpill } from './light';
 import { hexToRgb8, type PaperGrain, type PaperSettings } from './paper';
 import type { ThickChannels } from './thick';
@@ -72,10 +72,11 @@ function tilesUnder(surface: TiledSurface | undefined, rect: RasterRect, offset:
     out.push(null);
     return;
   }
-  const x0 = Math.floor((rect.x - offset.x) / TILE);
-  const y0 = Math.floor((rect.y - offset.y) / TILE);
-  const x1 = Math.floor((rect.x - offset.x + rect.width - 1) / TILE);
-  const y1 = Math.floor((rect.y - offset.y + rect.height - 1) / TILE);
+  // Only tiles in the surface range (as `tilesInRect`): a far-off offset finds none, never another tile.
+  const x0 = Math.max(Math.floor((rect.x - offset.x) / TILE), MIN_TILE);
+  const y0 = Math.max(Math.floor((rect.y - offset.y) / TILE), MIN_TILE);
+  const x1 = Math.min(Math.floor((rect.x - offset.x + rect.width - 1) / TILE), MAX_TILE);
+  const y1 = Math.min(Math.floor((rect.y - offset.y + rect.height - 1) / TILE), MAX_TILE);
   for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) out.push(surface.tiles.get(tileKey(tx, ty)) ?? null);
 }
 

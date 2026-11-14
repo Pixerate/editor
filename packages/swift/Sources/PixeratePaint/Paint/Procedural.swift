@@ -603,7 +603,12 @@ final class ParticleStroke: MarkStroke {
                 if !(add > 0) { continue }
                 let gx = rect.x + xx
                 let tx = floorDiv(gx, TILE)
-                let key = tileKey(tx, ty)
+                // Past the surface range the fill is not tracked (each band lays its area afresh).
+                let key = tileKeyIn(tx, ty)
+                if key < 0 {
+                    any = true
+                    continue
+                }
                 if filled[key] == nil { filled[key] = [Float](repeating: 0, count: TILE * TILE) }
                 let ti = (gy - ty * TILE) * TILE + (gx - tx * TILE)
                 let before = Double(filled[key]![ti])

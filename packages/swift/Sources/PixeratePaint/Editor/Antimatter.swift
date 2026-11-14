@@ -315,7 +315,7 @@ public final class AntimatterStrokeDriver {
                     let ly = py - t.offset.y
                     let tx = Int(JS.floor(Double(lx) / Double(TILE)))
                     let ty = Int(JS.floor(Double(ly) / Double(TILE)))
-                    guard let tile = t.base.tiles.get(tileKey(tx, ty)) else { continue }
+                    guard let tile = t.base.tiles.get(tileKeyIn(tx, ty)) else { continue }
                     let ox = lx - tx * TILE
                     let oy = ly - ty * TILE
                     let a = Double(tile.data[(oy * TILE + ox) * 4 + 3]) / 255
@@ -412,7 +412,9 @@ public final class AntimatterStrokeDriver {
                 if h <= 0 { continue }
                 let tx = Int(JS.floor(Double(px) / Double(TILE)))
                 let ty = Int(JS.floor(Double(py) / Double(TILE)))
-                let key = tileKey(tx, ty)
+                // Heat is kept in document tiles: past the surface range it is dropped, never aliased.
+                let key = tileKeyIn(tx, ty)
+                if key < 0 { continue }
                 if heatMap[key] == nil {
                     heatMap[key] = [Float](repeating: 0, count: TILE * TILE)
                     order.append(key)
@@ -429,7 +431,7 @@ public final class AntimatterStrokeDriver {
                         let ly = py - tgt.offset.y
                         let ltx = Int(JS.floor(Double(lx) / Double(TILE)))
                         let lty = Int(JS.floor(Double(ly) / Double(TILE)))
-                        if let lt = tgt.base.tiles.get(tileKey(ltx, lty)), lt.data[((ly - lty * TILE) * TILE + (lx - ltx * TILE)) * 4 + 3] > 0 {
+                        if let lt = tgt.base.tiles.get(tileKeyIn(ltx, lty)), lt.data[((ly - lty * TILE) * TILE + (lx - ltx * TILE)) * 4 + 3] > 0 {
                             reachedSkipped.insert(tgt.id)
                         }
                     }
@@ -520,7 +522,9 @@ public final class AntimatterStrokeDriver {
                         let lx = px - offX
                         let ltx = Int(JS.floor(Double(lx) / Double(TILE)))
                         let lox = lx - ltx * TILE
-                        let lk = tileKey(ltx, lty)
+                        // A layer pixel past the surface range has no tile: nothing to burn, nothing written.
+                        let lk = tileKeyIn(ltx, lty)
+                        if lk < 0 { continue }
                         let lIdx = loy * TILE + lox
                         let pIdx = lIdx * 4
                         let srcTile = tgt.base.tiles.get(lk)
@@ -674,6 +678,8 @@ public final class AntimatterStrokeDriver {
             let ly = py - offY
             let ltx = Int(JS.floor(Double(lx) / Double(TILE)))
             let lty = Int(JS.floor(Double(ly) / Double(TILE)))
+            // Sparks past the surface range are dropped (the layer stores no tile there).
+            if !tileInRange(ltx, lty) { return }
             let lox = lx - ltx * TILE
             let loy = ly - lty * TILE
             let lIdx = loy * TILE + lox

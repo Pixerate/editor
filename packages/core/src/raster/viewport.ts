@@ -10,7 +10,7 @@
  * `screen = world × zoom + (x, y)`.
  */
 
-import { TILE, tileCoord, tileKey, type RasterRect, type Tile, type TiledSurface } from './surface';
+import { TILE, tileCoord, tileKeyIn, type RasterRect, type Tile, type TiledSurface } from './surface';
 
 /** Where a surface lies in the world. */
 export interface SurfaceMapping {
@@ -222,7 +222,7 @@ export class SurfaceViewportRenderer<C extends TileCanvasLike = TileCanvasLike> 
   private mipImage(surface: TiledSurface, level: number, mx: number, my: number): C | null {
     const n = 1 << level;
     const sources: (Tile | undefined)[] = [];
-    for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) sources.push(surface.tiles.get(tileKey(mx * n + dx, my * n + dy)));
+    for (let dy = 0; dy < n; dy++) for (let dx = 0; dx < n; dx++) sources.push(surface.tiles.get(tileKeyIn(mx * n + dx, my * n + dy)));
     if (sources.every((t) => !t)) return null;
     const key = `${level}:${mx}:${my}`;
     const hit = this.mips.get(key);
@@ -291,7 +291,7 @@ export class SurfaceViewportRenderer<C extends TileCanvasLike = TileCanvasLike> 
     for (const [tx, ty] of keys) {
       let canvas: C | null = null;
       if (level === 0) {
-        const tile = surface.tiles.get(tileKey(tx, ty));
+        const tile = surface.tiles.get(tileKeyIn(tx, ty));
         if (tile) {
           const had = this.base.has(tile);
           canvas = this.tileImage(tile);

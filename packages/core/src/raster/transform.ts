@@ -31,6 +31,7 @@ import {
   finishTile,
   readRegion,
   tileKey,
+  tileInRange,
   tilesInRect,
   translateSurface,
   writeRegion,
@@ -818,6 +819,8 @@ export function warpSurface(src: TiledSurface, f: (p: Vec2) => Vec2 | null, opti
       if (!list.length) continue;
       const ttx = tx0 + cx;
       const tty = ty0 + cy;
+      // A tile past the surface range is dropped (as `tilesInRect` does), never keyed onto another.
+      if (!tileInRange(ttx, tty)) continue;
       const t = intersect({ x: ttx * TILE, y: tty * TILE, width: TILE, height: TILE }, dst);
       if (!t) continue;
       const tw = t.width;

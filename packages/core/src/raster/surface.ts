@@ -62,6 +62,20 @@ export function tileInRange(tx: number, ty: number): boolean {
   return tx >= MIN_TILE && tx <= MAX_TILE && ty >= MIN_TILE && ty <= MAX_TILE;
 }
 
+/** The key no tile has (`tileKey` is never negative): what `tileKeyIn` gives for a tile past the range. */
+export const NO_TILE_KEY: TileKey = -1;
+
+/**
+ * `tileKey(tx, ty)` for a tile in the range, or `NO_TILE_KEY` for one past it (or NaN). A map
+ * lookup with it finds nothing, so a read sees the default; a writer checks `key < 0` and drops
+ * the pixel instead of writing it at another tile. Paint code that keys tiles straight from pixel
+ * coordinates (not through `tilesInRect`) uses it, so a layer offset far from the canvas cannot
+ * alias a stroke onto another tile (#852).
+ */
+export function tileKeyIn(tx: number, ty: number): TileKey {
+  return tx >= MIN_TILE && tx <= MAX_TILE && ty >= MIN_TILE && ty <= MAX_TILE ? (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET) : NO_TILE_KEY;
+}
+
 /**
  * Throws `SURFACE_RANGE_MESSAGE` when the tiles covering `rect` (as `tilesInRect` computes them,
  * before it clamps) reach past the surface range, so a loader can refuse a saved rect rather than

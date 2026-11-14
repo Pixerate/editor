@@ -24,7 +24,7 @@
 
 import { CoverageMap, dabRect, rasterizeDab, TIP_GRADIENT_STEPS, type Dab } from '../paint/brush';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
-import { TILE, tileKey, type RasterRect, type TileKey } from '../raster/surface';
+import { TILE, tileKeyIn, type RasterRect, type TileKey } from '../raster/surface';
 import type { PaintBrush } from './brushes';
 import { sampleEffectField, type EffectPaintPixels } from './effect-paint';
 import { IDENTITY_COPY, PenDabWalker, PenSmoother, type PenDab, type PenPoint, type StrokeCopy } from './engine';
@@ -675,7 +675,13 @@ export class ParticleStroke extends MarkStroke {
         const ntx = Math.floor(gx / TILE);
         if (ntx !== tx || !t) {
           tx = ntx;
-          const key = tileKey(tx, ty);
+          // Past the surface range the fill is not tracked (each band lays its area afresh).
+          const key = tileKeyIn(tx, ty);
+          if (key < 0) {
+            t = undefined;
+            any = true;
+            continue;
+          }
           t = this.filled.get(key);
           if (!t) {
             t = new Float32Array(TILE * TILE);

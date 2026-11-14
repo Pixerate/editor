@@ -188,6 +188,10 @@ public final class TileMedium {
     private var ty = Int.min
     private var tile: ByteTile?
     private var writable = false
+    // Whether the cached tile lies past the surface range (#852): reads see an empty tile and
+    // writes land in `scratch`, which nothing keeps, so a far-off pixel never aliases another tile.
+    private var outside = false
+    private var scratch: ByteTile?
     private let canvasPig = createPigment([0, 0, 0])
     private let paintPig = createPigment([0, 0, 0])
     private var paintKey = -1
@@ -211,11 +215,21 @@ public final class TileMedium {
         let ly = dy - t.offset.y
         let tx = floorTile(lx)
         let ty = floorTile(ly)
-        if tx != self.tx || ty != self.ty || (write && !writable) {
+        if tx != self.tx || ty != self.ty || (write && !writable) || (!write && outside) {
             self.tx = tx
             self.ty = ty
-            tile = write ? t.writeTile(tx, ty) : t.readTile(tx, ty)
             writable = write
+            outside = !tileInRange(tx, ty)
+            if outside {
+                if write {
+                    if scratch == nil { scratch = ByteTile([UInt8](repeating: 0, count: TILE * TILE * 4)) }
+                    tile = scratch
+                } else {
+                    tile = nil
+                }
+            } else {
+                tile = write ? t.writeTile(tx, ty) : t.readTile(tx, ty)
+            }
         }
         return tile != nil ? ((ly - ty * TILE) * TILE + (lx - tx * TILE)) * 4 : -1
     }

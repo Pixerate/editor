@@ -818,10 +818,11 @@ public func seedCultureFromStroke(
 
     let sporesPerStation = stations.count <= 2 ? 8 : 6
     let angleStep = CULTURE_ANGLE_STEPS / sporesPerStation
-    let minX = -offsetX * CULTURE_FP
-    let minY = -offsetY * CULTURE_FP
-    let maxX = (canvasWidth - offsetX) * CULTURE_FP
-    let maxY = (canvasHeight - offsetY) * CULTURE_FP
+    // The canvas in layer pixels, cut to the surface range so no spore lands on a tile past it (#852).
+    let minX = Swift.max(-offsetX, MIN_SURFACE_PIXEL) * CULTURE_FP
+    let minY = Swift.max(-offsetY, MIN_SURFACE_PIXEL) * CULTURE_FP
+    let maxX = Swift.min(canvasWidth - offsetX, MAX_SURFACE_PIXEL + 1) * CULTURE_FP
+    let maxY = Swift.min(canvasHeight - offsetY, MAX_SURFACE_PIXEL + 1) * CULTURE_FP
 
     var nextId = base.nextId
     var seedsAdded = 0
@@ -922,10 +923,12 @@ public func stepLayerCulture(
         )
     }
 
-    let minX = -offsetX
-    let minY = -offsetY
-    let maxX = canvasWidth - offsetX
-    let maxY = canvasHeight - offsetY
+    // The canvas in layer pixels, cut to the surface range: every read and write below stays inside
+    // these bounds, so a layer offset far from the canvas cannot key a tile past the range (#852).
+    let minX = Swift.max(-offsetX, MIN_SURFACE_PIXEL)
+    let minY = Swift.max(-offsetY, MIN_SURFACE_PIXEL)
+    let maxX = Swift.min(canvasWidth - offsetX, MAX_SURFACE_PIXEL + 1)
+    let maxY = Swift.min(canvasHeight - offsetY, MAX_SURFACE_PIXEL + 1)
 
     let layer = FastSurface(surface)
     let occ = FastSurface(culture.occupancy)
