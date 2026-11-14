@@ -311,6 +311,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@1": "Merge down"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },
@@ -724,6 +728,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },

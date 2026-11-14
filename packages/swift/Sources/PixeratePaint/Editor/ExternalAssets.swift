@@ -137,6 +137,19 @@ public enum StrokeLogOption: Sendable, Equatable {
     case all, none, replay
 }
 
+/**
+ * Whether a save with `option` keeps the stroke log (the whole log, even an empty one): `.all`
+ * does, `.none` doesn't, `.replay` only when a pixel layer holds a light / dark stroke
+ * (`savesStrokeLog`). Marks of pixels the log doesn't have are only complete next to it.
+ */
+func savesStrokeLog(_ d: PaintDocumentState, _ option: StrokeLogOption) -> Bool {
+    switch option {
+    case .all: return true
+    case .none: return false
+    case .replay: return savedStrokeLog(d, option) != nil
+    }
+}
+
 /// The stroke log as `option` saves it, or `nil` for none (`savedStrokeLog`).
 func savedStrokeLog(_ d: PaintDocumentState, _ option: StrokeLogOption) -> JSONValue? {
     if option == .none || d.strokes.isEmpty { return nil }

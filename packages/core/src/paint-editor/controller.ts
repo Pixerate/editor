@@ -93,6 +93,7 @@ import {
   deserializePaintDocumentAsync,
   serializePaintDocument,
   serializePaintDocumentExternal,
+  savesStrokeLog,
   type PaintAssetStore,
   type PaintDocumentExtensions,
   type SerializedPaintDocument,
@@ -146,7 +147,8 @@ import {
 } from '../paint/live-patterns';
 import { wetSupport } from '../paint/wet/wasm';
 import { buildTimeLapse, emptiedLayers, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
-import { SchemeReplay, type SchemeReplayHost, type SchemeReplayState } from './scheme-replay';
+import { pixelsMatch, SchemeReplay, type SchemeReplayHost, type SchemeReplayState } from './scheme-replay';
+import { WET_TILE } from '../paint/wet/model';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
 import type { EffectDescription, EffectPixels, EffectProvider, EffectValue } from '../effects/types.js';
 import {
@@ -3868,7 +3870,23 @@ export class PaintEditorController {
   private replayTarget = false;
   /** The paper a scheme replay's editor was made with (a different paper means a fresh replay). */
   private replayPaper: PaperSettings | null = null;
-  private schemeNeedsCache: { strokes: readonly RecordedStroke[]; unlogged: PaintDocumentState['unlogged']; live: PaintDocumentState['liveStrokes']; layers: PaintLayer[]; scheme: ColorScheme; value: SchemeNeeds } | null = null;
+  private schemeNeedsCache: {
+    strokes: readonly RecordedStroke[];
+    unlogged: PaintDocumentState['unlogged'];
+    live: PaintDocumentState['liveStrokes'];
+    layers: PaintLayer[];
+    events: PaintDocumentState['paintEvents'];
+    scheme: ColorScheme;
+    check: OpenedCheck | null;
+    checked: number;
+    value: SchemeNeeds;
+  } | null = null;
+  /**
+   * The check of a document opened without a complete `unlogged` ledger (#720): the pixel layers the
+   * stroke log names but whose pixels it may not have, compared with a replay of the log once the
+   * scheme needs one of them (`startOpenedCheck`). View state: never saved or undone.
+   */
+  private openedCheck: OpenedCheck | null = null;
 
   /**
    * Which pixel layers hold dual-colour strokes painted in the other scheme's side: `replay` (the
@@ -3879,22 +3897,31 @@ export class PaintEditorController {
     const d = this.doc;
     const scheme = this.colorScheme;
     const c = this.schemeNeedsCache;
-    if (c && c.strokes === d.strokes && c.unlogged === d.unlogged && c.live === d.liveStrokes && c.layers === d.layers && c.scheme === scheme) return c.value;
+    const check = this.openedCheck;
+    const checked = check?.revision ?? 0;
+    if (c && c.strokes === d.strokes && c.unlogged === d.unlogged && c.live === d.liveStrokes && c.layers === d.layers && c.events === d.paintEvents && c.scheme === scheme && c.check === check && c.checked === checked) return c.value;
     const other: ColorScheme = scheme === 'dark' ? 'light' : 'dark';
-    const value: SchemeNeeds = { replay: new Set(), kept: new Map(), dual: new Set() };
+    const value: SchemeNeeds = { replay: new Set(), kept: new Map(), dual: new Set(), checking: new Set() };
+    const open = this.openedGaps(d);
     for (const st of d.strokes) {
       const dual = st.dualColor;
       if (!dual) continue;
       value.dual.add(st.layerId);
       // Stroke layers redraw from their strokes; a stroke in neither side (edited) follows no scheme.
       if (d.liveStrokes?.[st.layerId] || st.color === dual[scheme] || st.color !== dual[other]) continue;
-      if (value.replay.has(st.layerId) || value.kept.has(st.layerId)) continue;
+      if (value.replay.has(st.layerId) || value.kept.has(st.layerId) || value.checking.has(st.layerId)) continue;
       if (!isPixelLayer(findLayer(d.layers, st.layerId)?.layer)) continue;
       const why = d.unlogged?.[st.layerId];
-      if (why !== undefined) value.kept.set(st.layerId, why);
-      else value.replay.add(st.layerId);
+      if (why !== undefined) value.kept.set(st.layerId, keptReason(why));
+      else if (open.has(st.layerId)) {
+        // Opened without marks: replayed only once a replay of the log is found to give its pixels.
+        const found = check!.results?.get(st.layerId);
+        if (found === undefined) value.checking.add(st.layerId);
+        else if (found !== null) value.kept.set(st.layerId, found);
+        else value.replay.add(st.layerId);
+      } else value.replay.add(st.layerId);
     }
-    this.schemeNeedsCache = { strokes: d.strokes, unlogged: d.unlogged, live: d.liveStrokes, layers: d.layers, scheme, value };
+    this.schemeNeedsCache = { strokes: d.strokes, unlogged: d.unlogged, live: d.liveStrokes, layers: d.layers, events: d.paintEvents, scheme, check, checked, value };
     return value;
   }
 
@@ -3912,8 +3939,10 @@ export class PaintEditorController {
       r.dispose();
       this.schemeReplay = r = null;
     }
+    const needs = this.schemeNeeds();
+    if (needs.checking.size) this.startOpenedCheck();
     // A replay that isn't needed now pauses (it catches up if dual-colour paint needs it again).
-    if (!this.schemeNeeds().replay.size) return;
+    if (!needs.replay.size) return;
     if (!r) this.schemeReplay = r = new SchemeReplay(this.colorScheme, this.schemeReplayHost(this.colorScheme));
     r.kick();
   }
@@ -3930,11 +3959,7 @@ export class PaintEditorController {
         t.replayPaper = this.doc.paper;
         return t;
       },
-      addMissingLayers: (t) => {
-        const have = new Set(flattenLayers(t.doc.layers).map((l) => l.id));
-        const missing = flattenLayers(this.doc.layers).filter((l): l is PaintPixelLayer => isPixelLayer(l) && !have.has(l.id));
-        if (missing.length) t.doc = { ...t.doc, layers: [...t.doc.layers, ...replayableLayers(missing.map((l) => ({ ...l, surface: emptySurface(4), offset: { x: 0, y: 0 } })))] };
-      },
+      addMissingLayers: (t) => addMissingReplayLayers(t, this.doc),
       stale: (t) => t.doc.canvas.width !== this.doc.canvas.width || t.doc.canvas.height !== this.doc.canvas.height || t.replayPaper !== this.doc.paper,
       changed: (rects) => this.emit(rects),
       memory: () => this.wet.undoMemory,
@@ -3971,13 +3996,9 @@ export class PaintEditorController {
       const base = { layerId: l.id, name: l.name };
       if (this.doc.liveStrokes?.[l.id]) layers.push({ ...base, view: 'strokes' });
       else if (needs.replay.has(l.id)) layers.push({ ...base, view: 'replay', state: r?.state ?? 'building', ...(r?.state === 'failed' ? { reason: `The replay failed: ${r.error}` } : {}) });
-      else if (needs.kept.has(l.id)) {
-        layers.push({
-          ...base,
-          view: 'kept',
-          reason: `It holds pixels the stroke log doesn't have (from "${needs.kept.get(l.id)}"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.`,
-        });
-      } else layers.push({ ...base, view: 'document' });
+      else if (needs.checking.has(l.id)) layers.push({ ...base, view: 'replay', state: 'building', reason: CHECKING_REASON });
+      else if (needs.kept.has(l.id)) layers.push({ ...base, view: 'kept', reason: needs.kept.get(l.id)! });
+      else layers.push({ ...base, view: 'document' });
     }
     const replay = r ? { state: r.state, ...r.progress, error: r.error } : { state: 'none' as const, items: 0, total: 0, error: null };
     return { scheme: this.colorScheme, replay, layers };
@@ -3986,6 +4007,15 @@ export class PaintEditorController {
   /** Resolves with `colorSchemeView()` once the scheme's replay has caught up (at once when there is none). */
   async colorSchemeViewReady(): Promise<PaintColorSchemeView> {
     for (;;) {
+      // A layer opened without marks is checked against the log before the replay shows it.
+      if (this.schemeNeeds().checking.size) {
+        this.startOpenedCheck();
+        const running = this.openedCheck?.running;
+        if (running) {
+          await running;
+          continue;
+        }
+      }
       const r = this.schemeNeeds().replay.size ? this.schemeReplay : null;
       if (!r) break;
       await r.whenIdle();
@@ -4014,6 +4044,11 @@ export class PaintEditorController {
     if (w && w.clock !== cp.clock && !w.laneIds().length) w.clock = cp.clock;
     this.emit();
     return (this.wet.world?.clock ?? 0) === cp.clock;
+  }
+
+  /** @internal A replay editor's layers replaced (layers it is missing added), outside history. */
+  replaceReplayLayers(layers: PaintLayer[]): void {
+    this.doc = { ...this.doc, layers };
   }
 
   /** @internal Drops the undo history (a replay editor keeps checkpoints of its own instead). */
@@ -6295,9 +6330,9 @@ export class PaintEditorController {
    * scaled; every pixel layer empty; the same brushes, lighting and wet options). Dispose of it
    * when done.
    */
-  createReplayTarget(scale = 1): PaintEditorController {
+  createReplayTarget(scale = 1, doc: PaintDocumentState = this.doc): PaintEditorController {
     if (!(scale >= 1 && scale <= 8)) throw new PaintEditorError(`scale ${scale} is out of range; use 1..8.`);
-    const { width, height, dpi } = this.doc.canvas;
+    const { width, height, dpi } = doc.canvas;
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
@@ -6305,8 +6340,8 @@ export class PaintEditorController {
     target.replayTarget = true;
     target.brushEntries = this.brushEntries;
     target.brushSources.set(this.brushSources.all());
-    const paper = { ...this.doc.paper, scale: Math.min(8, this.doc.paper.scale * scale) };
-    target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(this.doc.layers), activeLayerId: this.doc.activeLayerId, strokes: [], ...(this.doc.authoredEffects ? { authoredEffects: this.doc.authoredEffects } : {}) }, extensions: {}, problems: [] });
+    const paper = { ...doc.paper, scale: Math.min(8, doc.paper.scale * scale) };
+    target.adopt({ state: { canvas: target.doc.canvas, paper, layers: emptiedLayers(doc.layers), activeLayerId: doc.activeLayerId, strokes: [], ...(doc.authoredEffects ? { authoredEffects: doc.authoredEffects } : {}) }, extensions: {}, problems: [] });
     target.lighting = { ...this.lighting };
     target.uvLight = { ...this.uvLight };
     target.age = { ...this.age };
@@ -6372,6 +6407,8 @@ export class PaintEditorController {
   dispose(): void {
     this.schemeReplay?.dispose();
     this.schemeReplay = null;
+    this.openedCheck?.replay?.dispose();
+    this.openedCheck = null;
     this.unsubscribeLibrary();
     this.wet.destroy();
     this.effectsRenderer.dispose();
@@ -7177,9 +7214,10 @@ export class PaintEditorController {
     for (const [id, list] of Object.entries(this.doc.liveStrokes ?? {})) if (findLayer(this.doc.layers, id)) liveStrokes[id] = list.map(strokeToJSON) as unknown as RecordedStroke[];
     if (Object.keys(liveStrokes).length) ext.liveStrokes = liveStrokes;
     else delete ext.liveStrokes;
-    // Layers a replay can't rebuild, for documents whose dual-colour strokes follow the scheme.
+    // Layers a replay can't rebuild, whatever strokes the document holds now: dual-colour paint
+    // added after reopening must not replay them without their pixels (#720).
     const unlogged = Object.entries(this.doc.unlogged ?? {}).filter(([id]) => findLayer(state.layers, id));
-    if (unlogged.length && state.strokes.some((st) => st.dualColor)) ext.unlogged = Object.fromEntries(unlogged);
+    if (unlogged.length) ext.unlogged = Object.fromEntries(unlogged);
     else delete ext.unlogged;
     // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
     const strokes = [...this.doc.strokes, ...Object.values(this.doc.liveStrokes ?? {}).flat()];
@@ -7432,7 +7470,7 @@ export class PaintEditorController {
   toJSON(options: { strokes?: StrokeLogOption } = {}): SerializedPaintDocument {
     this.flushCulturePreview();
     const state = this.savedState();
-    return serializePaintDocument(state, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    return serializePaintDocument(state, { strokes: options.strokes, extensions: this.ledgerExtensions(state, options.strokes), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
   }
 
   /**
@@ -7444,7 +7482,140 @@ export class PaintEditorController {
   toJSONExternal(store: PaintAssetStore, options: { strokes?: StrokeLogOption } = {}): Promise<SerializedPaintDocument> {
     this.flushCulturePreview();
     const state = this.savedState();
-    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.thickExtensions(state), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+    return serializePaintDocumentExternal(state, store, { strokes: options.strokes, extensions: this.ledgerExtensions(state, options.strokes), guides: this.guides, swatches: this.swatches, mixingPad: this.mixingPadJSON(), wet: this.wetJSON() });
+  }
+
+  /**
+   * `thickExtensions` with `unloggedComplete: true` when `unlogged` names every pixel layer the
+   * saved stroke log can't rebuild: the log is saved, and no layer of an opened document is still
+   * unknown (`openedGaps`). Without it a loader checks the layers itself (#720). Never depends on
+   * the colour scheme or on whether a check has run.
+   */
+  private ledgerExtensions(state: PaintDocumentState, strokes: StrokeLogOption | undefined): PaintDocumentExtensions {
+    const ext = this.thickExtensions(state);
+    if (savesStrokeLog(state, { strokes, extensions: ext }) && !this.openedGaps(state).size) ext.unloggedComplete = true;
+    else delete ext.unloggedComplete;
+    return ext;
+  }
+
+  /**
+   * The pixel layers of an opened document that the stroke log names but whose pixels it may not
+   * have (`openedCheck`), as far as they still matter in `d`: still there, not marked since, and not
+   * cleared since (a clear empties a layer, so the log rebuilds it again).
+   */
+  private openedGaps(d: PaintDocumentState): Set<string> {
+    const check = this.openedCheck;
+    const out = new Set<string>();
+    if (!check) return out;
+    const cleared = new Set<string>();
+    for (const e of d.paintEvents ?? []) if (e.kind === 'clear' && !check.events.has(e)) cleared.add(e.layerId);
+    for (const id of check.pending) {
+      if (cleared.has(id) || d.unlogged?.[id] !== undefined || d.liveStrokes?.[id] || d.stickers?.[id]) continue;
+      if (isPixelLayer(findLayer(d.layers, id)?.layer)) out.add(id);
+    }
+    return out;
+  }
+
+  /**
+   * After opening a document whose `unlogged` marks are not known to be complete (saved before the
+   * editor kept them, or without its stroke log): a pixel layer with pixels that no logged stroke
+   * or event names can't come from the log, so it is marked now (saved with the document); one the
+   * log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
+   */
+  private openLedger(complete: boolean): void {
+    this.openedCheck?.replay?.dispose();
+    this.openedCheck = null;
+    if (complete || this.replayTarget) return;
+    const d = this.doc;
+    const named = new Set<string>();
+    let all = false;
+    for (const st of d.strokes) {
+      named.add(st.layerId);
+      for (const id of st.scrapeLayerIds ?? []) named.add(id);
+      for (const id of st.targets ?? []) named.add(id);
+    }
+    for (const e of d.paintEvents ?? []) named.add(e.layerId);
+    for (const e of d.wetEvents ?? []) {
+      // An event for no layer (or one a reader can't make out) may touch any of them.
+      if (typeof e.layerId !== 'string' || !e.layerId) all = true;
+      else for (const id of e.layerId.split(',')) named.add(id);
+    }
+    const unlogged: Record<string, string> = { ...(d.unlogged ?? {}) };
+    const pending = new Set<string>();
+    const label = d.strokes.length ? OPENED_OLDER : OPENED_WITHOUT_LOG;
+    for (const l of flattenLayers(d.layers)) {
+      if (!isPixelLayer(l) || !l.surface.tiles.size || d.liveStrokes?.[l.id] || d.stickers?.[l.id] || unlogged[l.id] !== undefined) continue;
+      if (all || named.has(l.id)) pending.add(l.id);
+      else unlogged[l.id] = label;
+    }
+    if (Object.keys(unlogged).length) this.doc = { ...d, unlogged };
+    if (pending.size) this.openedCheck = { doc: this.doc, pending, events: new Set(d.paintEvents ?? []), results: null, running: null, replay: null, revision: 0 };
+  }
+
+  /**
+   * Checks the opened layers (`openedCheck`) once: the log as it was opened is replayed with every
+   * stroke as recorded (the frozen `SchemeReplay`, in the background) and each layer compared with
+   * its opened pixels (`pixelsMatch`), leaving out paint the replay still has wet or drying, which
+   * flowed on after the last logged item for an unknown time before the save dried it.
+   */
+  private startOpenedCheck(): void {
+    const check = this.openedCheck;
+    if (!check || check.running || check.results) return;
+    const run = async (): Promise<Map<string, string | null>> => {
+      const results = new Map<string, string | null>();
+      let r: SchemeReplay | null = null;
+      try {
+        r = new SchemeReplay('light', this.openedCheckHost(check.doc), { frozen: true });
+        check.replay = r;
+        r.kick();
+        await r.whenIdle();
+        for (const id of check.pending) results.set(id, r.state === 'ready' ? this.checkOpenedLayer(r, check.doc, id) : checkFailedReason(r.error ?? 'it stopped'));
+      } catch (e) {
+        for (const id of check.pending) results.set(id, checkFailedReason(e instanceof Error ? e.message : String(e)));
+      } finally {
+        r?.dispose();
+        check.replay = null;
+      }
+      return results;
+    };
+    check.running = run().then((results) => {
+      check.running = null;
+      if (this.openedCheck !== check) return;
+      check.results = results;
+      check.revision++;
+      this.emit([]);
+    });
+  }
+
+  /** `null` when a replay of the opened log gives the layer's opened pixels, else why it is kept. */
+  private checkOpenedLayer(r: SchemeReplay, doc: PaintDocumentState, id: string): string | null {
+    const l = findLayer(doc.layers, id)?.layer;
+    if (!isPixelLayer(l)) return null;
+    const got = r.checkedLayer(id);
+    const opened = translateSurface(l.surface, l.offset.x, l.offset.y);
+    const f = got?.flowing ?? null;
+    // Flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
+    const skip = f ? { x: f.x - WET_TILE, y: f.y - WET_TILE, width: f.width + 2 * WET_TILE, height: f.height + 2 * WET_TILE } : null;
+    return pixelsMatch(opened, got?.surface ?? emptySurface(4), skip) ? null : CHECK_MISMATCH_REASON;
+  }
+
+  /** What the check of an opened document replays: the document as opened, every stroke as recorded, nothing live. */
+  private openedCheckHost(doc: PaintDocumentState): SchemeReplayHost {
+    return {
+      document: () => doc,
+      clock: () => 0,
+      liveStroke: () => null,
+      inScheme: (st) => st,
+      createTarget: () => {
+        const t = this.createReplayTarget(1, doc);
+        t.doc = { ...t.doc, layers: replayableLayers(t.doc.layers) };
+        return t;
+      },
+      addMissingLayers: (t) => addMissingReplayLayers(t, doc),
+      stale: () => false,
+      changed: () => {},
+      memory: () => 0,
+    };
   }
 
   private adopt(loaded: { state: PaintDocumentState; extensions: PaintDocumentExtensions; problems: string[]; guides?: unknown; swatches?: unknown; mixingPad?: unknown; wet?: unknown }): string[] {
@@ -7465,6 +7636,7 @@ export class PaintEditorController {
     this.doc = this.readThick(loaded.state, loaded.extensions, loaded.problems);
     const unlogged = readUnlogged(loaded.extensions.unlogged, this.doc.layers);
     if (unlogged) this.doc = { ...this.doc, unlogged };
+    this.openLedger(loaded.extensions.unloggedComplete === true);
     this.nextMagnetId = 1;
     for (const m of this.doc.magnets ?? []) {
       const n = Number(/^mag(\d+)$/.exec(m.id)?.[1] ?? 0);
@@ -7486,6 +7658,7 @@ export class PaintEditorController {
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
     delete this.extensions.unlogged;
+    delete this.extensions.unloggedComplete;
     delete this.extensions.brushSources;
     delete this.extensions.effectLayers;
     delete this.extensions.paperEffect;
@@ -10154,8 +10327,53 @@ function dualHex(value: unknown): DualColor | null {
 /** What `schemeNeeds` finds: layers the scheme's replay shows, layers kept with why, and every layer with dual-colour strokes. */
 interface SchemeNeeds {
   replay: Set<string>;
+  /** Layer id → the `reason` the view gives. */
   kept: Map<string, string>;
   dual: Set<string>;
+  /** Layers of an opened document still being checked against the stroke log (`openedCheck`). */
+  checking: Set<string>;
+}
+
+/** The check of an opened document's layers against its stroke log (`PaintEditorController.openedCheck`). */
+interface OpenedCheck {
+  /** The document as opened. */
+  doc: PaintDocumentState;
+  /** Pixel layers with pixels that the log names, not marked when opened. */
+  pending: Set<string>;
+  /** The paint events as opened (a clear after them ends a layer's check). */
+  events: Set<PaintEvent>;
+  /** After the check: layer → why it is kept (`null`: the log gives its pixels). */
+  results: Map<string, string | null> | null;
+  running: Promise<void> | null;
+  replay: SchemeReplay | null;
+  /** Bumped when the results come in. */
+  revision: number;
+}
+
+/** The change a layer marked on opening a document whose stroke log names it nowhere is said to come from. */
+const OPENED_OLDER = 'Opened from an older document';
+/** The same, for a document saved without its stroke log. */
+const OPENED_WITHOUT_LOG = 'Opened without its stroke log';
+
+/** Why a layer is kept, for a mark (`PaintDocumentState.unlogged`) from the change `label`. */
+function keptReason(label: string): string {
+  return `It holds pixels the stroke log doesn't have (from "${label}"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.`;
+}
+
+const CHECKING_REASON =
+  "It was opened from a document saved without marks for pixels the stroke log doesn't have, so its pixels are being checked against a replay of the log first; until then it shows the side it was painted in.";
+const CHECK_MISMATCH_REASON =
+  "Its pixels are not all in the stroke log (opened from an older document: a replay of the log doesn't give them), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme.";
+
+function checkFailedReason(error: string): string {
+  return `It could not be checked against the stroke log (opened from an older document; the check's replay failed: ${error}), so it keeps the side of each dual colour it was painted in.`;
+}
+
+/** Adds the pixel layers of `doc` that replay editor `t` is missing, empty. */
+function addMissingReplayLayers(t: PaintEditorController, doc: PaintDocumentState): void {
+  const have = new Set(flattenLayers(t.document.layers).map((l) => l.id));
+  const missing = flattenLayers(doc.layers).filter((l): l is PaintPixelLayer => isPixelLayer(l) && !have.has(l.id));
+  if (missing.length) t.replaceReplayLayers([...t.document.layers, ...replayableLayers(missing.map((l) => ({ ...l, surface: emptySurface(4), offset: { x: 0, y: 0 } })))]);
 }
 
 /** One layer with dual-colour strokes in `PaintEditorController.colorSchemeView()`. */
@@ -10170,7 +10388,10 @@ export interface PaintColorSchemeLayer {
   view: 'strokes' | 'document' | 'replay' | 'kept';
   /** `replay` only: building (the layer shows its own pixels until then), ready or failed. */
   state?: SchemeReplayState;
-  /** `kept` and a failed `replay`: why. */
+  /**
+   * `kept` and a failed `replay`: why. A `replay` still `building` with a reason is a layer of an
+   * opened document being checked against the stroke log first (it may turn out `kept`).
+   */
   reason?: string;
 }
 

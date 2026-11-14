@@ -26,8 +26,50 @@ struct SchemeView {
 /// What `schemeNeeds` finds: layers the scheme's replay shows (in stroke order), layers kept with why, and every layer with dual-colour strokes.
 struct SchemeNeeds {
     var replay: [String] = []
+    /// Layer id → the `reason` the view gives.
     var kept = OrderedMap<String, String>()
     var dual = Set<String>()
+    /// Layers of an opened document still being checked against the stroke log (`openedCheck`).
+    var checking = Set<String>()
+}
+
+/// The check of an opened document's layers against its stroke log (`PaintEditorController.openedCheck`).
+final class OpenedCheck {
+    /// The document as opened.
+    let doc: PaintDocumentState
+    /// Pixel layers with pixels that the log names, not marked when opened (in layer order).
+    let pending: [String]
+    /// The keys of the paint events as opened (a clear after them ends a layer's check).
+    let events: Set<Int>
+    /// After the check: layer → why it is kept (nil: the log gives its pixels).
+    var results: [String: String?]?
+    /// The frozen replay of the opened log, from when a scheme first needs it until the check is done.
+    var replay: SchemeReplay?
+    /// Bumped when the results come in.
+    var revision = 0
+
+    init(doc: PaintDocumentState, pending: [String], events: Set<Int>) {
+        self.doc = doc
+        self.pending = pending
+        self.events = events
+    }
+}
+
+/// The change a layer marked on opening a document whose stroke log names it nowhere is said to come from.
+let OPENED_OLDER = "Opened from an older document"
+/// The same, for a document saved without its stroke log.
+let OPENED_WITHOUT_LOG = "Opened without its stroke log"
+
+/// Why a layer is kept, for a mark (`PaintDocumentState.unlogged`) from the change `label`.
+func keptReason(_ label: String) -> String {
+    "It holds pixels the stroke log doesn't have (from \"\(label)\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme."
+}
+
+let CHECKING_REASON = "It was opened from a document saved without marks for pixels the stroke log doesn't have, so its pixels are being checked against a replay of the log first; until then it shows the side it was painted in."
+let CHECK_MISMATCH_REASON = "Its pixels are not all in the stroke log (opened from an older document: a replay of the log doesn't give them), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme."
+
+func checkFailedReason(_ error: String) -> String {
+    "It could not be checked against the stroke log (opened from an older document; the check's replay failed: \(error)), so it keeps the side of each dual colour it was painted in."
 }
 
 /// One layer with dual-colour strokes in `PaintEditorController.colorSchemeView()`.
@@ -42,7 +84,10 @@ public struct PaintColorSchemeLayer: Equatable, Sendable {
     public var view: String
     /// `replay` only: building (the layer shows its own pixels until then), ready or failed.
     public var state: String?
-    /// `kept` and a failed `replay`: why.
+    /**
+     * `kept` and a failed `replay`: why. A `replay` still `building` with a reason is a layer of an
+     * opened document being checked against the stroke log first (it may turn out `kept`).
+     */
     public var reason: String?
 
     public var json: JSONValue {
@@ -224,25 +269,40 @@ extension PaintEditorController {
     func schemeNeeds() -> SchemeNeeds {
         let d = doc
         let scheme = colorScheme
-        if let c = schemeNeedsCache, c.doc === d, c.scheme == scheme { return c.value }
+        let check = openedCheck
+        let checked = check?.revision ?? 0
+        if let c = schemeNeedsCache, c.doc === d, c.scheme == scheme, c.check === check, c.checked == checked { return c.value }
         let other = scheme == "dark" ? "light" : "dark"
         var value = SchemeNeeds()
         var inReplay = Set<String>()
+        let open = openedGaps(d)
         for st in d.strokes {
             guard let dual = st.dualColor else { continue }
             value.dual.insert(st.layerId)
             // Stroke layers redraw from their strokes; a stroke in neither side (edited) follows no scheme.
             if d.liveStrokes?.get(st.layerId) != nil || st.color == dual.side(scheme) || st.color != dual.side(other) { continue }
-            if inReplay.contains(st.layerId) || value.kept.has(st.layerId) { continue }
+            if inReplay.contains(st.layerId) || value.kept.has(st.layerId) || value.checking.contains(st.layerId) { continue }
             if findLayer(d.layers, st.layerId)?.layer.isPixel != true { continue }
             if let why = d.unlogged?.get(st.layerId) {
-                value.kept.set(st.layerId, why)
+                value.kept.set(st.layerId, keptReason(why))
+            } else if open.contains(st.layerId), let check {
+                // Opened without marks: replayed only once a replay of the log is found to give its pixels.
+                if let found = check.results?[st.layerId] {
+                    if let why = found {
+                        value.kept.set(st.layerId, why)
+                    } else {
+                        value.replay.append(st.layerId)
+                        inReplay.insert(st.layerId)
+                    }
+                } else {
+                    value.checking.insert(st.layerId)
+                }
             } else {
                 value.replay.append(st.layerId)
                 inReplay.insert(st.layerId)
             }
         }
-        schemeNeedsCache = (d, scheme, value)
+        schemeNeedsCache = (d, scheme, check, checked, value)
         return value
     }
 
@@ -261,8 +321,10 @@ extension PaintEditorController {
             schemeReplay = nil
             r = nil
         }
+        let needs = schemeNeeds()
+        if !needs.checking.isEmpty { startOpenedCheck() }
         // A replay that isn't needed now pauses (it catches up if dual-colour paint needs it again).
-        if schemeNeeds().replay.isEmpty { return }
+        if needs.replay.isEmpty { return }
         if r == nil {
             do {
                 r = try SchemeReplay(scheme: colorScheme, host: schemeReplayHost(colorScheme))
@@ -286,13 +348,7 @@ extension PaintEditorController {
                 t.replayPaper = doc.paper
                 return t
             },
-            addMissingLayers: { [unowned self] t in
-                let have = Set(flattenLayers(t.doc.layers).map(\.id))
-                let missing = flattenLayers(doc.layers).filter { $0.isPixel && !have.contains($0.id) }
-                if missing.isEmpty { return }
-                let added = replayableLayers(missing.map { $0.withSurface(emptySurface(4), offset: LayerOffset(x: 0, y: 0)) })
-                t.setDocSilently(t.doc.with { $0.layers = t.doc.layers + added })
-            },
+            addMissingLayers: { [unowned self] t in addMissingReplayLayers(t, doc) },
             stale: { [unowned self] t in
                 t.doc.canvas.width != doc.canvas.width || t.doc.canvas.height != doc.canvas.height || t.replayPaper != doc.paper
             },
@@ -333,8 +389,9 @@ extension PaintEditorController {
             } else if needs.replay.contains(l.id) {
                 let failed = r?.state == "failed"
                 layers.append(PaintColorSchemeLayer(layerId: l.id, name: l.name, view: "replay", state: r?.state ?? "building", reason: failed ? "The replay failed: \(r!.error ?? "")" : nil))
-            } else if let why = needs.kept.get(l.id) {
-                let reason = "It holds pixels the stroke log doesn't have (from \"\(why)\"), so a replay can't rebuild it: it keeps the side of each dual colour it was painted in. Paint dual-colour strokes on a new layer (or a stroke layer) to have them follow the scheme."
+            } else if needs.checking.contains(l.id) {
+                layers.append(PaintColorSchemeLayer(layerId: l.id, name: l.name, view: "replay", state: "building", reason: CHECKING_REASON))
+            } else if let reason = needs.kept.get(l.id) {
                 layers.append(PaintColorSchemeLayer(layerId: l.id, name: l.name, view: "kept", reason: reason))
             } else {
                 layers.append(PaintColorSchemeLayer(layerId: l.id, name: l.name, view: "document"))
@@ -352,6 +409,8 @@ extension PaintEditorController {
      * runs the replay here (yielding between pieces of work) when nothing else is running it.
      */
     public func colorSchemeViewReady() async -> PaintColorSchemeView {
+        // A layer opened without marks is checked against the log before the replay shows it.
+        await runOpenedCheck()
         while true {
             guard !schemeNeeds().replay.isEmpty, let r = schemeReplay else { break }
             await r.whenIdle()
@@ -362,13 +421,14 @@ extension PaintEditorController {
     }
 
     /// Whether the scheme's replay has work to do (a host's clock then calls `runSchemeReplay`).
-    public var schemeReplayPending: Bool { schemeReplay?.hasWork ?? false }
+    public var schemeReplayPending: Bool { (schemeReplay?.hasWork ?? false) || openedCheck?.replay != nil }
 
     /**
      * Runs the scheme's replay until it has caught up, letting the host in between pieces of work
      * (a canvas view runs it from a task on its clock; see `PaintEditorModel.runSchemeReplayClock`).
      */
     public func runSchemeReplay() async {
+        await runOpenedCheck()
         await schemeReplay?.whenIdle()
     }
 
@@ -429,6 +489,141 @@ extension PaintEditorController {
     }
 
     // MARK: - Pixels the stroke log doesn't have
+
+    /**
+     * The pixel layers of an opened document that the stroke log names but whose pixels it may not
+     * have (`openedCheck`), as far as they still matter in `d`: still there, not marked since, and
+     * not cleared since (a clear empties a layer, so the log rebuilds it again).
+     */
+    func openedGaps(_ d: PaintDocumentState) -> Set<String> {
+        var out = Set<String>()
+        guard let check = openedCheck else { return out }
+        var cleared = Set<String>()
+        for e in d.paintEvents ?? [] where e.kind == "clear" && !check.events.contains(e.key) { cleared.insert(e.layerId) }
+        for id in check.pending {
+            if cleared.contains(id) || d.unlogged?.get(id) != nil || d.liveStrokes?.get(id) != nil || d.stickers?.get(id) != nil { continue }
+            if findLayer(d.layers, id)?.layer.isPixel == true { out.insert(id) }
+        }
+        return out
+    }
+
+    /**
+     * After opening a document whose `unlogged` marks are not known to be complete (saved before the
+     * editor kept them, or without its stroke log): a pixel layer with pixels that no logged stroke
+     * or event names can't come from the log, so it is marked now in `d` (saved with the document);
+     * one the log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
+     */
+    func openLedger(_ d: PaintDocumentState, complete: Bool) {
+        openedCheck?.replay?.dispose()
+        openedCheck = nil
+        if complete || replayTarget { return }
+        var named = Set<String>()
+        var all = false
+        for st in d.strokes {
+            named.insert(st.layerId)
+            for id in st.scrapeLayerIds ?? [] { named.insert(id) }
+            for id in st.targets ?? [] { named.insert(id) }
+        }
+        for e in d.paintEvents ?? [] { named.insert(e.layerId) }
+        for e in d.wetEvents ?? [] {
+            guard let ids = e.layerId, !ids.isEmpty else {
+                all = true
+                continue
+            }
+            for id in ids.split(separator: ",", omittingEmptySubsequences: false) { named.insert(String(id)) }
+        }
+        var unlogged = d.unlogged ?? OrderedMap()
+        var pending: [String] = []
+        let label = d.strokes.isEmpty ? OPENED_WITHOUT_LOG : OPENED_OLDER
+        for l in flattenLayers(d.layers) where l.isPixel {
+            if l.pixelSurface.tiles.isEmpty || d.liveStrokes?.get(l.id) != nil || d.stickers?.get(l.id) != nil || unlogged.get(l.id) != nil { continue }
+            if all || named.contains(l.id) {
+                pending.append(l.id)
+            } else {
+                unlogged.set(l.id, label)
+            }
+        }
+        if !unlogged.isEmpty { d.unlogged = unlogged }
+        if !pending.isEmpty { openedCheck = OpenedCheck(doc: d, pending: pending, events: Set((d.paintEvents ?? []).map(\.key))) }
+    }
+
+    /**
+     * Starts the check of the opened layers (`openedCheck`): a frozen replay of the log as it was
+     * opened, every stroke as recorded. A host runs it (`runOpenedCheck`), as it runs the scheme's replay.
+     */
+    func startOpenedCheck() {
+        guard let check = openedCheck, check.results == nil, check.replay == nil else { return }
+        let doc = check.doc
+        let host = SchemeReplayHost(
+            document: { doc },
+            clock: { 0 },
+            liveStroke: { nil },
+            inScheme: { $0 },
+            createTarget: { [unowned self] in
+                let t = try createReplayTarget(scale: 1, doc: doc)
+                t.setDocSilently(t.doc.with { $0.layers = replayableLayers($0.layers) })
+                return t
+            },
+            addMissingLayers: { t in addMissingReplayLayers(t, doc) },
+            stale: { _ in false },
+            changed: { _ in },
+            memory: { 0 },
+            yieldToHost: { [unowned self] in await schemeReplayYield() }
+        )
+        do {
+            let r = try SchemeReplay(scheme: "light", host: host, frozen: true)
+            check.replay = r
+            r.kick()
+        } catch {
+            finishOpenedCheck(check, failed: errorMessage(error))
+        }
+    }
+
+    /**
+     * Runs the check of the opened layers to the end, if one has started: each layer compared with
+     * its opened pixels (`pixelsMatch`), leaving out paint the replay still has wet or drying, which
+     * flowed on after the last logged item for an unknown time before the save dried it.
+     */
+    func runOpenedCheck() async {
+        if !schemeNeeds().checking.isEmpty { startOpenedCheck() }
+        guard let check = openedCheck, let r = check.replay, check.results == nil else { return }
+        await r.whenIdle()
+        if openedCheck !== check || check.results != nil { return }
+        if r.state != "ready" {
+            finishOpenedCheck(check, failed: r.error ?? "it stopped")
+            return
+        }
+        var results: [String: String?] = [:]
+        for id in check.pending { results[id] = checkOpenedLayer(r, check.doc, id) }
+        r.dispose()
+        check.replay = nil
+        check.results = results
+        check.revision += 1
+        emit([])
+    }
+
+    private func finishOpenedCheck(_ check: OpenedCheck, failed error: String) {
+        check.replay?.dispose()
+        check.replay = nil
+        var results: [String: String?] = [:]
+        for id in check.pending { results[id] = .some(checkFailedReason(error)) }
+        check.results = results
+        check.revision += 1
+        emit([])
+    }
+
+    /// nil when a replay of the opened log gives the layer's opened pixels, else why it is kept.
+    private func checkOpenedLayer(_ r: SchemeReplay, _ doc: PaintDocumentState, _ id: String) -> String? {
+        guard let l = findLayer(doc.layers, id)?.layer, l.isPixel else { return nil }
+        let got = r.checkedLayer(id)
+        let o = l.pixelOffset
+        let opened = translateSurface(l.pixelSurface, Double(o.x), Double(o.y))
+        var skip: RasterRect?
+        // Flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
+        if let f = got?.flowing { skip = RasterRect(x: f.x - WET_TILE, y: f.y - WET_TILE, width: f.width + 2 * WET_TILE, height: f.height + 2 * WET_TILE) }
+        let replayed: TiledSurface = got?.surface ?? emptySurface(4)
+        return pixelsMatch(opened, replayed, skip: skip) ? nil : CHECK_MISMATCH_REASON
+    }
 
     /**
      * `next` with the pixel layers this change wrote without logging it (`PaintDocumentState.unlogged`):
@@ -493,4 +688,13 @@ extension PaintEditorController {
         let out = unlogged
         return next.with { $0.unlogged = out }
     }
+}
+
+/// Adds the pixel layers of `doc` that replay editor `t` is missing, empty.
+func addMissingReplayLayers(_ t: PaintEditorController, _ doc: PaintDocumentState) {
+    let have = Set(flattenLayers(t.doc.layers).map(\.id))
+    let missing = flattenLayers(doc.layers).filter { $0.isPixel && !have.contains($0.id) }
+    if missing.isEmpty { return }
+    let added = replayableLayers(missing.map { $0.withSurface(emptySurface(4), offset: LayerOffset(x: 0, y: 0)) })
+    t.setDocSilently(t.doc.with { $0.layers = t.doc.layers + added })
 }

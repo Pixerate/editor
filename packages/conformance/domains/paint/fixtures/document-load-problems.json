@@ -1456,6 +1456,11 @@
                 "name": "Sky"
               }
             ],
+            "unlogged": {
+              "flat": "Opened without its stroke log",
+              "plain": "Opened without its stroke log"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {},

@@ -131,6 +131,17 @@ export interface StrokeLogReference {
   layerId: string;
 }
 
+/**
+ * Whether a save with `options` keeps the stroke log (the whole log, even an empty one): `true`
+ * does, `false` doesn't, `'replay'` only when a pixel layer holds a light / dark stroke. Marks of
+ * pixels the log doesn't have (`unlogged`) are only complete next to the log they describe.
+ */
+export function savesStrokeLog(state: PaintDocumentState, options: SerializeOptions): boolean {
+  const mode = options.strokes ?? true;
+  if (mode !== 'replay') return mode;
+  return savedStrokeLog(state, options) !== null;
+}
+
 /** The stroke log as `options.strokes` saves it, or `null` for none. */
 function savedStrokeLog(state: PaintDocumentState, options: SerializeOptions): Array<SerializedStroke | StrokeLogReference> | null {
   const mode = options.strokes ?? true;

@@ -101,8 +101,10 @@ export interface PaintDocumentState {
    * Pixel layers holding pixels the stroke log doesn't have (imported, merged, moved or transformed
    * pixels…), each with the change that put them there. A replay can't rebuild these layers, so
    * they keep the side of a dual colour they were painted in whatever the colour scheme (#720).
-   * Kept by the editor on every commit; saved (extension `unlogged`) with documents that hold
-   * dual-colour strokes.
+   * Kept by the editor on every commit; saved (extension `unlogged`) whenever there are any, with
+   * `unloggedComplete: true` when the save keeps the stroke log and the marks are known to be
+   * complete. A document opened without that flag (saved before the marks were kept, or without
+   * its log) has its layers marked or checked against the log on opening (`colorSchemeView`).
    */
   unlogged?: Readonly<Record<string, string>>;
 }

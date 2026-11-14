@@ -2533,6 +2533,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "base": "Opened without its stroke log"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 24
           },
@@ -4241,6 +4245,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "base": "Opened without its stroke log"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 24
           },
@@ -4704,6 +4712,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 24
           },
@@ -5084,6 +5093,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 24
           },
@@ -6333,6 +6343,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 24
           },

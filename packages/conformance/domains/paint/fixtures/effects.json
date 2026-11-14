@@ -1094,6 +1094,11 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@1": "Light effect",
+              "@2": "Add effect layer"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },

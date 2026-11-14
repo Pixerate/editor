@@ -255,7 +255,13 @@ public final class PaintEditorController {
     var replayTarget = false
     /// The paper a scheme replay's editor was made with (another paper means a fresh replay).
     var replayPaper: PaperSettings?
-    var schemeNeedsCache: (doc: PaintDocumentState, scheme: String, value: SchemeNeeds)?
+    var schemeNeedsCache: (doc: PaintDocumentState, scheme: String, check: OpenedCheck?, checked: Int, value: SchemeNeeds)?
+    /**
+     * The check of a document opened without a complete `unlogged` ledger (#720): the pixel layers the
+     * stroke log names but whose pixels it may not have, compared with a replay of the log once the
+     * scheme needs one of them (`startOpenedCheck`). View state: never saved or undone.
+     */
+    var openedCheck: OpenedCheck?
     /// Wet events logged only to dry a layer before a change outside the log (`dryLayersFirst`), by key: they don't put that change in the log.
     var preludeDry = Set<Int>()
     /**
@@ -2430,6 +2436,9 @@ public final class PaintEditorController {
         let d = savedDocumentState()
         // Fields this editor does not read go first, as they were read; everything it writes replaces them.
         var out: JSONObject = extensions
+        // The marks are complete next to the saved log, unless a layer of an opened document is still
+        // unknown (an extension in TS, so it comes before the header).
+        out["unloggedComplete"] = savesStrokeLog(d, strokeLog) && openedGaps(d).isEmpty ? .bool(true) : nil
         let header: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),
             "width": .number(Double(d.canvas.width)), "height": .number(Double(d.canvas.height)), "dpi": .number(d.canvas.dpi),
@@ -2459,9 +2468,10 @@ public final class PaintEditorController {
             for (id, list) in live where findLayer(d.layers, id) != nil { ext[id] = .array(list.map(strokeToJSON)) }
             if !ext.isEmpty { out["liveStrokes"] = .object(ext) }
         }
-        // Layers a replay can't rebuild, for documents whose dual-colour strokes follow the scheme.
+        // Layers a replay can't rebuild, whatever strokes the document holds now: dual-colour paint
+        // added after reopening must not replay them without their pixels (#720).
         let unlogged = (doc.unlogged ?? OrderedMap()).filter { findLayer(d.layers, $0.key) != nil }
-        if !unlogged.isEmpty && d.strokes.contains(where: { $0.dualColor != nil }) {
+        if !unlogged.isEmpty {
             var ext = JSONObject()
             for (id, why) in unlogged { ext[id] = .string(why) }
             out["unlogged"] = .object(ext)

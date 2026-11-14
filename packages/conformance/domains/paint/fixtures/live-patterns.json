@@ -609,6 +609,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {
@@ -1044,6 +1045,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "wet": {
               "layers": {

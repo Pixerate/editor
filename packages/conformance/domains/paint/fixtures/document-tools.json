@@ -210,6 +210,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },
@@ -398,6 +399,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 20
           },
@@ -520,6 +522,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 20
           },
@@ -1016,6 +1019,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "ink": "Opened without its stroke log"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },

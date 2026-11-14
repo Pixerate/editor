@@ -1086,6 +1086,14 @@ public final class PaintWetLayers {
         return try? w.bakedLight(layerId)
     }
 
+    /// The rectangle of the layer's wet or drying tiles (where flowing on can still change it), or nil.
+    func activeBounds(_ layerId: String) -> RasterRect? {
+        guard let w = world, w.hasLane(layerId), let rects = try? w.activeRects(layerId) else { return nil }
+        var out: RasterRect?
+        for r in rects { out = unionRect(out, r) }
+        return out
+    }
+
     /// The layer's pixels with all its wet paint dried, without changing anything.
     func bakedSurface(_ layerId: String) -> TiledSurface? {
         guard let w = world, w.hasLane(layerId) else { return nil }

@@ -541,6 +541,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@1": "Extend canvas"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },
@@ -673,6 +677,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 32
           },
@@ -843,6 +848,7 @@
                 "name": "Warm black"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 32
           },

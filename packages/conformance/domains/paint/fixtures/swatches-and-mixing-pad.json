@@ -689,6 +689,7 @@
                 "color": "#0055aa"
               }
             ],
+            "unloggedComplete": true,
             "version": 2,
             "width": 48
           },
