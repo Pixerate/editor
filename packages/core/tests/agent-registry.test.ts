@@ -62,6 +62,15 @@ describe('validateJsonSchema', () => {
 		additionalProperties: false
 	} as const;
 
+	it('treats Object.prototype names as undeclared (#766)', () => {
+		const strict = { type: 'object', properties: { a: { type: 'number' } }, additionalProperties: false } as const;
+		for (const key of ['toString', 'valueOf', 'constructor', 'hasOwnProperty', 'isPrototypeOf', '__defineGetter__']) {
+			expect(validateJsonSchema({ a: 1, [key]: 1 }, strict), key).toEqual([{ path: `/${key}`, message: expect.stringMatching(new RegExp(`^Unknown property "${key}"\\.`)) }]);
+		}
+		expect(validateJsonSchema({}, { type: 'object', required: ['toString'] })).toEqual([{ path: '/toString', message: 'Missing required property "toString".' }]);
+		expect(validateJsonSchema({ toString: 'x' }, { type: 'object', required: ['toString'] })).toEqual([]);
+	});
+
 	it('accepts valid input', () => {
 		expect(
 			validateJsonSchema(

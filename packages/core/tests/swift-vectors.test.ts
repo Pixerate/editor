@@ -38,6 +38,14 @@ function vectors() {
       value: { b: 1, nmae: 'x', 2: true, 1: false },
       schema: { type: 'object', properties: { name: { type: 'string' }, b: { type: 'string' } }, required: ['name', 'id'], additionalProperties: false },
     },
+    // #766: names every object inherits are neither declared properties nor present required ones.
+    {
+      name: 'prototype names',
+      value: { a: 1, toString: 'x', valueOf: 2, constructor: true, hasOwnProperty: null, __defineGetter__: [] },
+      schema: { type: 'object', properties: { a: { type: 'number' } }, required: ['a', 'toString', 'valueOf'], additionalProperties: false },
+    },
+    { name: 'prototype name required', value: {}, schema: { type: 'object', required: ['toString', 'constructor'] } },
+    { name: 'prototype name additional schema', value: { toString: 'x' }, schema: { type: 'object', properties: {}, additionalProperties: { type: 'number' } } },
     { name: 'additional schema', value: { a: 1, b: 'x' }, schema: { type: 'object', additionalProperties: { type: 'number' } } },
     {
       name: 'anyOf closest',

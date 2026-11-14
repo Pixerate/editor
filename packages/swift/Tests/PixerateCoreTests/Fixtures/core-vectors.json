@@ -942,6 +942,93 @@
    ]
   },
   {
+   "name": "prototype names",
+   "value": {
+    "a": 1,
+    "toString": "x",
+    "valueOf": 2,
+    "constructor": true,
+    "hasOwnProperty": null,
+    "__defineGetter__": []
+   },
+   "schema": {
+    "type": "object",
+    "properties": {
+     "a": {
+      "type": "number"
+     }
+    },
+    "required": [
+     "a",
+     "toString",
+     "valueOf"
+    ],
+    "additionalProperties": false
+   },
+   "errors": [
+    {
+     "path": "/toString",
+     "message": "Unknown property \"toString\". Allowed: a."
+    },
+    {
+     "path": "/valueOf",
+     "message": "Unknown property \"valueOf\". Allowed: a."
+    },
+    {
+     "path": "/constructor",
+     "message": "Unknown property \"constructor\". Allowed: a."
+    },
+    {
+     "path": "/hasOwnProperty",
+     "message": "Unknown property \"hasOwnProperty\". Allowed: a."
+    },
+    {
+     "path": "/__defineGetter__",
+     "message": "Unknown property \"__defineGetter__\". Allowed: a."
+    }
+   ]
+  },
+  {
+   "name": "prototype name required",
+   "value": {},
+   "schema": {
+    "type": "object",
+    "required": [
+     "toString",
+     "constructor"
+    ]
+   },
+   "errors": [
+    {
+     "path": "/toString",
+     "message": "Missing required property \"toString\"."
+    },
+    {
+     "path": "/constructor",
+     "message": "Missing required property \"constructor\"."
+    }
+   ]
+  },
+  {
+   "name": "prototype name additional schema",
+   "value": {
+    "toString": "x"
+   },
+   "schema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": {
+     "type": "number"
+    }
+   },
+   "errors": [
+    {
+     "path": "/toString",
+     "message": "Expected number, got string."
+    }
+   ]
+  },
+  {
    "name": "additional schema",
    "value": {
     "a": 1,

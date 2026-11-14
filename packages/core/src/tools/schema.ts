@@ -220,14 +220,16 @@ export function validateJsonSchema(
 	if (typeOf(value) === 'object') {
 		const obj = value as Record<string, unknown>;
 		for (const key of schema.required ?? []) {
-			if (obj[key] === undefined) {
+			// Own keys only: `obj.toString` is always there, inherited from Object.prototype (#766).
+			if (!Object.hasOwn(obj, key) || obj[key] === undefined) {
 				errors.push({ path: `${path}/${key}`, message: `Missing required property "${key}".` });
 			}
 		}
 		const properties = schema.properties ?? {};
 		for (const [key, child] of Object.entries(obj)) {
 			if (child === undefined) continue;
-			if (key in properties) {
+			// Own names only: `key in properties` would count `toString`, `constructor`, … as declared (#766).
+			if (Object.hasOwn(properties, key)) {
 				errors.push(...recurse(child, properties[key], `${path}/${key}`));
 			} else if (schema.additionalProperties === false) {
 				const known = Object.keys(properties);
