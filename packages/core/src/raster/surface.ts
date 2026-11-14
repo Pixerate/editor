@@ -31,11 +31,49 @@ const TILE_PIXELS = TILE * TILE;
 const KEY_OFFSET = 1 << 15;
 const KEY_SPAN = 1 << 16;
 
-/** A tile coordinate packed into one number (tx, ty in −32768..32767). */
+/** The lowest tile coordinate a surface stores (on each axis); tiles below it are not stored. */
+export const MIN_TILE = -KEY_OFFSET;
+/** The highest tile coordinate a surface stores (on each axis); tiles above it are not stored. */
+export const MAX_TILE = KEY_OFFSET - 1;
+/** The lowest pixel coordinate a surface holds on each axis (−8388608). */
+export const MIN_SURFACE_PIXEL = MIN_TILE * TILE;
+/** The highest pixel coordinate a surface holds on each axis (8388607). */
+export const MAX_SURFACE_PIXEL = (MAX_TILE + 1) * TILE - 1;
+/** Why a saved rect past the surface range is refused (a load problem names it). */
+export const SURFACE_RANGE_MESSAGE = `it lies outside the surface range, ${MIN_SURFACE_PIXEL} to ${MAX_SURFACE_PIXEL} px on each axis`;
+
+/**
+ * A tile coordinate packed into one number (tx, ty in −32768..32767, `MIN_TILE`..`MAX_TILE`).
+ * Only those tiles round-trip through `tileCoord`; outside them two tiles can share a key. Surfaces
+ * never store a tile outside the range: `tilesInRect` stops at it, so `writeRegion`, `fillRect`,
+ * `writeDeepRegion` and `translateSurface` drop pixels past it (a blur or glow reaching over the
+ * edge loses what no canvas can show) instead of writing them at another tile. Loaders call
+ * `surfaceFromSavedPixels` / `checkSurfaceRange`, which refuse a saved rect past the range with
+ * `SURFACE_RANGE_MESSAGE`, reported as a load problem (#852).
+ */
 export type TileKey = number;
 
 export function tileKey(tx: number, ty: number): TileKey {
   return (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET);
+}
+
+/** Whether tile (`tx`, `ty`) lies in the range a surface stores (false for NaN). */
+export function tileInRange(tx: number, ty: number): boolean {
+  return tx >= MIN_TILE && tx <= MAX_TILE && ty >= MIN_TILE && ty <= MAX_TILE;
+}
+
+/**
+ * Throws `SURFACE_RANGE_MESSAGE` when the tiles covering `rect` (as `tilesInRect` computes them,
+ * before it clamps) reach past the surface range, so a loader can refuse a saved rect rather than
+ * drop part of it. A NaN bound covers no tiles and passes, as it writes nothing.
+ */
+export function checkSurfaceRange(rect: CropBox): void {
+  if (rect.width <= 0 || rect.height <= 0) return;
+  const tx0 = Math.floor(rect.x / TILE);
+  const ty0 = Math.floor(rect.y / TILE);
+  const tx1 = Math.floor((rect.x + rect.width - 1) / TILE);
+  const ty1 = Math.floor((rect.y + rect.height - 1) / TILE);
+  if (tx0 < MIN_TILE || ty0 < MIN_TILE || tx1 > MAX_TILE || ty1 > MAX_TILE) throw new RangeError(SURFACE_RANGE_MESSAGE);
 }
 
 export function tileCoord(key: TileKey): { tx: number; ty: number } {
@@ -205,6 +243,21 @@ export function solidSurface(channels: 1 | 4, rect: CropBox, value: number, defa
 }
 
 /**
+ * `surfaceFromPixels` for pixels read from a saved document: throws (`checkSurfaceRange`) when
+ * they reach past the surface range instead of dropping the part past it.
+ */
+export function surfaceFromSavedPixels(
+  pixels: { width: number; height: number; data: ArrayLike<number> },
+  channels: 1 | 4 = 4,
+  x = 0,
+  y = 0,
+  defaultValue = 0
+): TiledSurface {
+  checkSurfaceRange({ x, y, width: pixels.width, height: pixels.height });
+  return surfaceFromPixels(pixels, channels, x, y, defaultValue);
+}
+
+/**
  * A surface holding `width × height` interleaved pixels placed at (`x`, `y`) in document space.
  * Tiles equal to the default are left out; uniform tiles are shared.
  */
@@ -222,14 +275,17 @@ export function surfaceFromPixels(
 // Reading
 // ---------------------------------------------------------------------------
 
-/** Tile coordinates covering `rect`, row by row. */
+/**
+ * Tile coordinates covering `rect`, row by row, within the surface range (tiles past it hold no
+ * pixels, so they are left out; this also keeps the loops finite far off the canvas).
+ */
 export function tilesInRect(rect: CropBox): Array<{ tx: number; ty: number }> {
   const out: Array<{ tx: number; ty: number }> = [];
   if (rect.width <= 0 || rect.height <= 0) return out;
-  const tx0 = Math.floor(rect.x / TILE);
-  const ty0 = Math.floor(rect.y / TILE);
-  const tx1 = Math.floor((rect.x + rect.width - 1) / TILE);
-  const ty1 = Math.floor((rect.y + rect.height - 1) / TILE);
+  const tx0 = Math.max(Math.floor(rect.x / TILE), MIN_TILE);
+  const ty0 = Math.max(Math.floor(rect.y / TILE), MIN_TILE);
+  const tx1 = Math.min(Math.floor((rect.x + rect.width - 1) / TILE), MAX_TILE);
+  const ty1 = Math.min(Math.floor((rect.y + rect.height - 1) / TILE), MAX_TILE);
   for (let ty = ty0; ty <= ty1; ty++) for (let tx = tx0; tx <= tx1; tx++) out.push({ tx, ty });
   return out;
 }
@@ -456,7 +512,9 @@ export function translateSurface(surface: TiledSurface, dx: number, dy: number):
     const tiles = new Map<TileKey, Tile>();
     for (const [key, tile] of surface.tiles) {
       const { tx, ty } = tileCoord(key);
-      tiles.set(tileKey(tx + dx / TILE, ty + dy / TILE), tile);
+      const ntx = tx + dx / TILE;
+      const nty = ty + dy / TILE;
+      if (tileInRange(ntx, nty)) tiles.set(tileKey(ntx, nty), tile);
     }
     return new TiledSurface(surface.channels, tiles, surface.defaultValue);
   }

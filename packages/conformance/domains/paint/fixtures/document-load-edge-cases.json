@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "document-load-edge-cases",
-  "description": "Edge cases of opening a saved paint document, read as the TS core reads them: saved channels whose tiles lie so far off the canvas (past ±10¹⁰ tiles, and past 2^53 in tile keys, where neighbouring tiles share a rounded key) are placed with the same keys, and saved where tileCoord reads those keys back (a channel whose rounded key is negative is saved blank at another tile, so that layer is removed before the reload); deep 16- and 32-bit samples with a fractional, text, boolean or array width or height are written where JavaScript arithmetic puts them (a fractional row copies what typed-array subarray truncates to, a text size concatenates), and those whose sample count is not whole are reported; and wet events with a non-integer at (fractional, text, boolean) replay at that value among the strokes (X-ray and high-res export repaint the painting). The rest saves and reopens the same.",
+  "description": "Edge cases of opening a saved paint document, read as the TS core reads them: saved channels whose tiles lie outside the surface range (±8388608 px, where tile keys would alias, round past 2^53 or turn negative and save blank) are refused with a load problem instead of being placed at another tile, channels on the range's first and last tiles save and reopen where they were, and the layers they belong to save and reopen the same; deep 16- and 32-bit samples with a fractional, text, boolean or array width or height are written where JavaScript arithmetic puts them (a fractional row copies what typed-array subarray truncates to, a text size concatenates), and those whose sample count is not whole are reported; and wet events with a non-integer at (fractional, text, boolean) replay at that value among the strokes (X-ray and high-res export repaint the painting). The rest saves and reopens the same.",
   "setup": {
     "width": 48,
     "height": 32
@@ -344,6 +344,20 @@
               "y": 5000000000000
             },
             "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          },
+          "aside": {
+            "rect": {
+              "x": -8388608,
+              "y": -8388608
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
+          },
+          "text": {
+            "rect": {
+              "x": 0,
+              "y": -8388609
+            },
+            "light": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAAAAABX3VL4AAAAF0lEQVR4AQXAAQ0AAACCMJzF7F9K3ochBZcBRHXGze8AAAAASUVORK5CYII="
           }
         },
         "fluor": {
@@ -353,6 +367,22 @@
               "y": -70368744177920
             },
             "fluor": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          }
+        },
+        "thermo": {
+          "arr": {
+            "rect": {
+              "x": 8388606,
+              "y": 8388606
+            },
+            "thermo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
+          },
+          "bool": {
+            "rect": {
+              "x": 8388607,
+              "y": 0
+            },
+            "thermo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAG0lEQVR4AQ3AAQEAAAiDsMehfwpaoZsQ0sDeDkw0CUN7nzD1AAAAAElFTkSuQmCC"
           }
         }
       },
@@ -364,12 +394,7 @@
             {
               "active": false,
               "blend": "normal",
-              "bounds": {
-                "height": 2,
-                "width": 2,
-                "x": -16777216,
-                "y": -70367670436096
-              },
+              "bounds": null,
               "clipped": false,
               "depth": 0,
               "id": "aside",
@@ -512,7 +537,12 @@
         },
         "loaded": [
           "Layer \"Quarter mask\" mask: its 16-bit samples could not be read, so it was opened at 8 bits",
-          "Layer \"Array deep\": its undefined-bit samples could not be read, so it was opened at 8 bits"
+          "Layer \"Array deep\": its undefined-bit samples could not be read, so it was opened at 8 bits",
+          "The light paint of layer \"paint\" could not be read (it lies outside the surface range, -8388608 to 8388607 px on each axis); it loads without light.",
+          "The light paint of layer \"frac\" could not be read (it lies outside the surface range, -8388608 to 8388607 px on each axis); it loads without light.",
+          "The light paint of layer \"text\" could not be read (it lies outside the surface range, -8388608 to 8388607 px on each axis); it loads without light.",
+          "The fluorescent ink of layer \"aside\" could not be read (it lies outside the surface range, -8388608 to 8388607 px on each axis); it loads without fluorescence.",
+          "The thermochromic ink of layer \"bool\" could not be read (it lies outside the surface range, -8388608 to 8388607 px on each axis); it loads without thermochromic shift."
         ],
         "document": {
           "document": {
@@ -528,17 +558,6 @@
               "text": "<binary>"
             },
             "dpi": 300,
-            "fluor": {
-              "aside": {
-                "fluor": "<binary>",
-                "rect": {
-                  "height": 256,
-                  "width": 256,
-                  "x": -16777216,
-                  "y": -70367670436096
-                }
-              }
-            },
             "format": "pixerate-paint",
             "guides": {
               "perspective": {
@@ -738,22 +757,13 @@
               }
             ],
             "light": {
-              "frac": {
+              "aside": {
                 "light": "<binary>",
                 "rect": {
                   "height": 256,
                   "width": 256,
-                  "x": 1101824,
-                  "y": 4999954223616
-                }
-              },
-              "paint": {
-                "light": "<binary>",
-                "rect": {
-                  "height": 256,
-                  "width": 256,
-                  "x": 0,
-                  "y": 70368744177664
+                  "x": -8388608,
+                  "y": -8388608
                 }
               }
             },
@@ -942,6 +952,17 @@
                 "name": "Warm black"
               }
             ],
+            "thermo": {
+              "arr": {
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 8388352,
+                  "y": 8388352
+                },
+                "thermo": "<binary>"
+              }
+            },
             "version": 2,
             "wetEvents": [
               {
@@ -1039,18 +1060,6 @@
       }
     },
     {
-      "tool": "remove_layer",
-      "arguments": {
-        "layerId": "aside"
-      },
-      "expect": {
-        "result": {
-          "activeLayerId": "paint",
-          "removed": "aside"
-        }
-      }
-    },
-    {
       "tool": "list_layers",
       "arguments": {},
       "reload": true,
@@ -1060,6 +1069,20 @@
         "result": {
           "activeLayerId": "paint",
           "layers": [
+            {
+              "active": false,
+              "blend": "normal",
+              "bounds": null,
+              "clipped": false,
+              "depth": 0,
+              "id": "aside",
+              "locks": {},
+              "name": "Aside",
+              "opacity": 1,
+              "parentId": null,
+              "type": "pixel",
+              "visible": true
+            },
             {
               "active": false,
               "blend": "normal",
@@ -1389,25 +1412,28 @@
                 "visible": true,
                 "x": 38,
                 "y": 2
+              },
+              {
+                "blend": "normal",
+                "id": "aside",
+                "name": "Aside",
+                "offset": {
+                  "x": 0,
+                  "y": 0
+                },
+                "opacity": 1,
+                "type": "pixel",
+                "visible": true
               }
             ],
             "light": {
-              "frac": {
+              "aside": {
                 "light": "<binary>",
                 "rect": {
                   "height": 256,
                   "width": 256,
-                  "x": 1101824,
-                  "y": 4999954223616
-                }
-              },
-              "paint": {
-                "light": "<binary>",
-                "rect": {
-                  "height": 256,
-                  "width": 256,
-                  "x": 0,
-                  "y": 70368744177664
+                  "x": -8388608,
+                  "y": -8388608
                 }
               }
             },
@@ -1596,6 +1622,17 @@
                 "name": "Warm black"
               }
             ],
+            "thermo": {
+              "arr": {
+                "rect": {
+                  "height": 256,
+                  "width": 256,
+                  "x": 8388352,
+                  "y": 8388352
+                },
+                "thermo": "<binary>"
+              }
+            },
             "version": 2,
             "wetEvents": [
               {
@@ -1629,7 +1666,7 @@
           "kind": "paint"
         },
         "pixels": {
-          "file": "png/document-load-edge-cases.7.png",
+          "file": "png/document-load-edge-cases.6.png",
           "width": 48,
           "height": 32,
           "sha256": "6d3b9cd9101f92d074b9b1cbf450057ac30115d18fc735262a82ad36b04b6620",

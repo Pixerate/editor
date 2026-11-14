@@ -141,22 +141,36 @@ final class PaintStrokeCultureReadersTests: XCTestCase {
         }
     }
 
-    /// Far-off channel tiles take the keys TS rounds them to (values from the TS core): past 2^53,
-    /// tiles 0 and 1 share one, and a negative key reads back as another tile.
-    func testFarChannelTilesTakeRoundedKeys() throws {
-        let s = try surfaceAtSavedRect(["x": 255, "y": 70368744177664], width: 2, height: 2, data: [10, 20, 30, 40], channels: 1)
-        XCTAssertEqual(s.tiles.keys, [18014400656998400])
-        let t = try XCTUnwrap(s.tiles.get(18014400656998400))
-        let written: [String] = t.data.enumerated().filter { (e: (offset: Int, element: UInt8)) -> Bool in e.element != 0 }.map { (e: (offset: Int, element: UInt8)) -> String in "\(e.offset):\(e.element)" }
-        XCTAssertEqual(written, ["0:20", "255:10", "256:40", "511:30"])
-        XCTAssertEqual(tileCoord(18014400656998400).tx, 0)
-        XCTAssertEqual(tileCoord(18014400656998400).ty, 274877906944)
-        XCTAssertEqual(jsTileKey(274877906945, -274877906945), -18014121484124160)
-        XCTAssertEqual(tileKey(274877906945, -274877906945), -18014121484124160)
-        XCTAssertEqual(tileCoord(-18014121484124160).tx, -65536)
-        XCTAssertEqual(tileCoord(-18014121484124160).ty, -274873712641)
-        // Within ±2^30 tiles the key is the exact packing it always was.
-        XCTAssertEqual(tileKey(-3, 5), (5 + 32768) * 65536 + (-3 + 32768))
+    /// Saved channels past the surface range (±8388608 px) are refused, as the TS core refuses them
+    /// (#852), instead of being written at the tile their aliased key reads back as.
+    func testFarChannelsAreRefused() throws {
+        let px: [UInt8] = [10, 20, 30, 40]
+        func refused(_ rect: JSONValue) {
+            XCTAssertThrowsError(try surfaceAtSavedRect(rect, width: 2, height: 2, data: px, channels: 1)) {
+                XCTAssertEqual(errorMessage($0), "it lies outside the surface range, -8388608 to 8388607 px on each axis")
+            }
+        }
+        refused(["x": 255, "y": 70368744177664])
+        refused(["x": -3000000000000, "y": 5000000000000])
+        refused(["x": 70368744177920, "y": -70368744177920])
+        refused(["x": 8388607, "y": 0])
+        refused(["x": 0, "y": -8388609])
+        refused(["x": 1e300, "y": 0])
+        // The first and last tiles of the range hold their pixels, and their keys round-trip.
+        let low = try surfaceAtSavedRect(["x": -8388608, "y": -8388608], width: 2, height: 2, data: px, channels: 1)
+        XCTAssertEqual(contentBounds(low), RasterRect(x: -8388608, y: -8388608, width: 2, height: 2))
+        let high = try surfaceAtSavedRect(["x": 8388606, "y": 8388606], width: 2, height: 2, data: px, channels: 1)
+        XCTAssertEqual(contentBounds(high), RasterRect(x: 8388606, y: 8388606, width: 2, height: 2))
+        for t in [MIN_TILE, -1, 0, MAX_TILE] {
+            for u in [MIN_TILE, 0, MAX_TILE] {
+                let back = tileCoord(tileKey(t, u))
+                XCTAssertEqual(back.tx, t)
+                XCTAssertEqual(back.ty, u)
+            }
+        }
+        // Reads past the range see the default and stop there, however far out they reach.
+        XCTAssertEqual(tilesInRect(RasterRect(x: 8388352, y: 0, width: 512, height: 1)).count, 1)
+        XCTAssertTrue(tilesInRect(RasterRect(x: Int(1) << 60, y: 0, width: 2, height: 2)).isEmpty)
     }
 
     /// Deep samples with a fractional or text size are written where JavaScript arithmetic puts them

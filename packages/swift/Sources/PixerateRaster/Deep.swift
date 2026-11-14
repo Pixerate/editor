@@ -350,13 +350,15 @@ private func setSubarray<T>(_ t: inout [T], _ src: [T], _ s: Double, _ span: Dou
  * `writeDeepRegion` with a rect read unchecked from a saved document, in JavaScript arithmetic:
  * `width` / `height` are the numbers the multiplications see, `xEnd` / `yEnd` are what
  * `rect.x + rect.width` / `rect.y + rect.height` give (a text width concatenates), a fractional
- * size copies the rows typed-array `subarray` truncates to, and far-off tiles share the keys TS
- * rounds them to (`jsTileKey`). Throws where `writeDeepRegion` would.
+ * size copies the rows typed-array `subarray` truncates to. Throws where `writeDeepRegion` would,
+ * and `SurfaceRangeError` where the rect reaches past the surface range (`decodeDeepSurface`
+ * checks it, #852).
  */
 public func writeDeepRegionUnchecked(_ surface: TiledSurface, x: Double, y: Double, width w: Double, height h: Double, xEnd: Double, yEnd: Double, _ samples: DeepSamples) throws -> TiledSurface {
     let ch = surface.channels
     let c = Double(ch)
     if w <= 0 || h <= 0 { return surface }
+    try checkSurfaceRange(x: x, xEnd: xEnd, y: y, yEnd: yEnd)
     let need: Double = w * h * c
     if Double(samples.count) < need { throw DeepRegionError(description: "writeDeepRegion: expected \(need) samples, got \(samples.count)") }
     var tiles = surface.tiles
@@ -367,7 +369,7 @@ public func writeDeepRegionUnchecked(_ surface: TiledSurface, x: Double, y: Doub
     while ty <= ty1 {
         var tx = tx0
         while tx <= tx1 {
-            let key = jsTileKey(tx, ty)
+            let key = tileKey(Int(tx), Int(ty))
             let ox: Double = tx * T
             let oy: Double = ty * T
             let x0 = JS.max(x, ox), y0 = JS.max(y, oy)

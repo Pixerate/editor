@@ -40,11 +40,55 @@ private let KEY_SPAN = 1 << 16
 /// Tile coordinates whose packed key stays well under 2^53, where `Int` and JS doubles agree.
 private let EXACT_KEY_LIMIT = 1 << 30
 
-/// A tile coordinate packed into one number (tx, ty in −32768..32767).
+/// The lowest tile coordinate a surface stores (on each axis); tiles below it are not stored.
+public let MIN_TILE = -KEY_OFFSET
+/// The highest tile coordinate a surface stores (on each axis); tiles above it are not stored.
+public let MAX_TILE = KEY_OFFSET - 1
+/// The lowest pixel coordinate a surface holds on each axis (−8388608).
+public let MIN_SURFACE_PIXEL = MIN_TILE * TILE
+/// The highest pixel coordinate a surface holds on each axis (8388607).
+public let MAX_SURFACE_PIXEL = (MAX_TILE + 1) * TILE - 1
+/// Why a saved rect past the surface range is refused (a load problem names it).
+public let SURFACE_RANGE_MESSAGE = "it lies outside the surface range, \(MIN_SURFACE_PIXEL) to \(MAX_SURFACE_PIXEL) px on each axis"
+
+/// Thrown by `checkSurfaceRange`: a saved rect reaches past the surface range.
+public struct SurfaceRangeError: Error, CustomStringConvertible {
+    public init() {}
+    public var description: String { SURFACE_RANGE_MESSAGE }
+}
+
+/**
+ * A tile coordinate packed into one number (tx, ty in −32768..32767, `MIN_TILE`...`MAX_TILE`).
+ * Only those tiles round-trip through `tileCoord`. Surfaces never store a tile outside the range:
+ * `tilesInRect` stops at it, so writes drop pixels past it, and loaders refuse a saved rect past
+ * it with `checkSurfaceRange` (#852), as the TS core does.
+ */
 public typealias TileKey = Int
 
+/// Whether tile (`tx`, `ty`) lies in the range a surface stores.
+public func tileInRange(_ tx: Int, _ ty: Int) -> Bool {
+    tx >= MIN_TILE && tx <= MAX_TILE && ty >= MIN_TILE && ty <= MAX_TILE
+}
+
+/**
+ * `checkSurfaceRange(rect)` in doubles, with `rect.x + rect.width` given as `xEnd` (as a saved rect
+ * reads it): throws `SurfaceRangeError` when the tiles covering the rect reach past the surface
+ * range. A NaN bound covers no tiles and passes. Callers skip an empty rect first.
+ */
+public func checkSurfaceRange(x: Double, xEnd: Double, y: Double, yEnd: Double) throws {
+    let T = Double(TILE)
+    let tx0: Double = JS.floor(x / T)
+    let ty0: Double = JS.floor(y / T)
+    let tx1: Double = JS.floor((xEnd - 1) / T)
+    let ty1: Double = JS.floor((yEnd - 1) / T)
+    let lo = Double(MIN_TILE)
+    let hi = Double(MAX_TILE)
+    if tx0 < lo || ty0 < lo || tx1 > hi || ty1 > hi { throw SurfaceRangeError() }
+}
+
 public func tileKey(_ tx: Int, _ ty: Int) -> TileKey {
-    // Exact in doubles here, as in TS (|key| < 2^53); past it TS rounds (`jsTileKey`).
+    // Exact in doubles here, as in TS (|key| < 2^53). Surfaces store no tiles that far out; a lookup
+    // there still gets the key TS rounds to (`jsTileKey`) rather than overflowing `Int`.
     if tx > -EXACT_KEY_LIMIT && tx < EXACT_KEY_LIMIT && ty > -EXACT_KEY_LIMIT && ty < EXACT_KEY_LIMIT {
         return (ty + KEY_OFFSET) * KEY_SPAN + (tx + KEY_OFFSET)
     }
@@ -303,14 +347,15 @@ public func surfaceFromPixels(width: Int, height: Int, data: [UInt8], channels: 
 
 // MARK: - Reading
 
-/// Tile coordinates covering `rect`, row by row.
+/// Tile coordinates covering `rect`, row by row, within the surface range (tiles past it hold no pixels).
 public func tilesInRect(_ rect: RasterRect) -> [(tx: Int, ty: Int)] {
     var out: [(tx: Int, ty: Int)] = []
     if rect.width <= 0 || rect.height <= 0 { return out }
-    let tx0 = tileOf(rect.x)
-    let ty0 = tileOf(rect.y)
-    let tx1 = tileOf(rect.x + rect.width - 1)
-    let ty1 = tileOf(rect.y + rect.height - 1)
+    let tx0: Int = Swift.max(tileOf(rect.x), MIN_TILE)
+    let ty0: Int = Swift.max(tileOf(rect.y), MIN_TILE)
+    let tx1: Int = Swift.min(tileOf(rect.x &+ rect.width &- 1), MAX_TILE)
+    let ty1: Int = Swift.min(tileOf(rect.y &+ rect.height &- 1), MAX_TILE)
+    if tx0 > tx1 || ty0 > ty1 { return out }
     for ty in ty0...ty1 { for tx in tx0...tx1 { out.append((tx, ty)) } }
     return out
 }
@@ -569,7 +614,9 @@ public func translateSurface(_ surface: TiledSurface, _ dxIn: Double, _ dyIn: Do
         var tiles = OrderedMap<TileKey, Tile>()
         for (key, tile) in surface.tiles {
             let (tx, ty) = tileCoord(key)
-            tiles.set(tileKey(tx + dx / TILE, ty + dy / TILE), tile)
+            let ntx: Int = tx + dx / TILE
+            let nty: Int = ty + dy / TILE
+            if tileInRange(ntx, nty) { tiles.set(tileKey(ntx, nty), tile) }
         }
         return TiledSurface(channels: surface.channels, tiles: tiles, defaultValue: surface.defaultValue)
     }

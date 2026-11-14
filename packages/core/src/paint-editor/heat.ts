@@ -19,7 +19,7 @@
 
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
-import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, surfaceFromSavedPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { brushVortex, normalizePaintBrush, type PaintBrush } from './brushes';
 import { computeSpill } from './light';
 import { hexToRgb8, type PaperSettings } from './paper';
@@ -685,7 +685,7 @@ export function fluorFromJSON(raw: unknown): TiledSurface {
   const parsed = parseDataUrl(r.fluor);
   if (!parsed) throw new Error('the fluorescence channel is not a PNG data URL');
   const img = decodePng(parsed.bytes);
-  return surfaceFromPixels({ width: img.width, height: img.height, data: img.data }, 4, r.rect.x, r.rect.y);
+  return surfaceFromSavedPixels({ width: img.width, height: img.height, data: img.data }, 4, r.rect.x, r.rect.y);
 }
 
 export function thermoToJSON(thermo: TiledSurface | undefined): SavedLayerThermo | null {
@@ -700,7 +700,7 @@ export function thermoFromJSON(raw: unknown): TiledSurface {
   const parsed = parseDataUrl(r.thermo);
   if (!parsed) throw new Error('the thermochromic channel is not a PNG data URL');
   const img = decodePng(parsed.bytes);
-  return surfaceFromPixels({ width: img.width, height: img.height, data: img.data }, 4, r.rect.x, r.rect.y);
+  return surfaceFromSavedPixels({ width: img.width, height: img.height, data: img.data }, 4, r.rect.x, r.rect.y);
 }
 
 export function heatToJSON(field: HeatField | undefined): SavedHeatField | null {

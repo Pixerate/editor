@@ -859,10 +859,12 @@ func surfaceAtSavedRect(_ rect: JSONValue?, width w: Int, height h: Int, data: [
     return try surfaceAtCoordinates(x: x, xEnd: xEnd, y: y, yEnd: yEnd, width: w, height: h, data: data, channels: ch)
 }
 
-/// `writeRegion(emptySurface(ch), { x, y, width, height }, data)` in doubles, with `rect.x + width` given as `xEnd`.
+/// `surfaceFromSavedPixels(pixels, ch, x, y)` in doubles (`writeRegion`), with `rect.x + width` given as `xEnd`; throws `SurfaceRangeError` past the surface range.
 func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, width w: Int, height h: Int, data: [UInt8], channels ch: Int) throws -> TiledSurface {
     let surface = emptySurface(ch, 0)
     if w <= 0 || h <= 0 { return surface }
+    // `surfaceFromSavedPixels`: a rect past the surface range is refused, not written at another tile (#852).
+    try checkSurfaceRange(x: x, xEnd: xEnd, y: y, yEnd: yEnd)
     let T = Double(TILE)
     let tx0 = JS.floor(x / T), ty0 = JS.floor(y / T)
     let tx1 = JS.floor((xEnd - 1) / T), ty1 = JS.floor((yEnd - 1) / T)
@@ -876,8 +878,8 @@ func surfaceAtCoordinates(x: Double, xEnd: Double, y: Double, yEnd: Double, widt
             let x0 = JS.max(x, ox), y0 = JS.max(y, oy)
             let x1 = JS.min(xEnd, ox + T), y1 = JS.min(yEnd, oy + T)
             let full = x0 == ox && y0 == oy && x1 == ox + T && y1 == oy + T
-            // Far off the canvas the key rounds as TS's does (`jsTileKey`): tiles can share one.
-            let key = jsTileKey(tx, ty)
+            // In the surface range (checked above), so the key is exact.
+            let key = tileKey(Int(tx), Int(ty))
             let buf = full ? TileBuffer([UInt8](repeating: 0, count: tilePixels * ch)) : draft.tile(key: key)
             let span = (x1 - x0) * Double(ch)
             var yy = y0
