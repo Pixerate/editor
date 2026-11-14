@@ -462,6 +462,10 @@
                 "name": "Warm black"
               }
             ],
+            "unlogged": {
+              "@4": "Bake age"
+            },
+            "unloggedComplete": true,
             "version": 2,
             "width": 64
           },

@@ -1196,6 +1196,15 @@ export class PaintWetLayers {
     return w.bakedLight(layerId);
   }
 
+  /** The rectangle of the layer's wet or drying tiles (where flowing on can still change it), or `null`. */
+  activeBounds(layerId: string): RasterRect | null {
+    const w = this.world;
+    if (!w?.hasLane(layerId)) return null;
+    let out: RasterRect | null = null;
+    for (const r of w.activeRects(layerId)) out = union(out, r);
+    return out;
+  }
+
   /** The layer's pixels with all its wet paint dried (deterministic), without changing anything. */
   bakedSurface(layerId: string): TiledSurface | null {
     const w = this.world;

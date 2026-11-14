@@ -24,6 +24,10 @@ import PixerateGeometry
  * - **Undo** rolls the replay back to a checkpoint (the replay editor's document and wet simulation
  *   after an item) and repaints from there, so undo / redo never shows the other scheme's pixels.
  * - **View only.** Nothing here changes the document, the history or what is saved.
+ * - **Also a check.** Frozen (`frozen: true`) and fed the document as it was opened, with every
+ *   stroke as recorded, it repaints the log once so the editor can compare the result with the
+ *   pixels that were opened (`checkedLayer`): a layer they don't match holds pixels the log doesn't
+ *   have (documents saved before the editor kept those marks, #720).
  */
 
 /// What a scheme replay reads from the editor it shows (`SchemeReplayHost`).
@@ -109,10 +113,13 @@ final class SchemeReplay {
     private var again = false
     private var disposed = false
     private var options = ReplayItemOptions()
+    /// A one-off replay of a document that doesn't change: no checkpoints, and nothing to roll back to.
+    private let frozen: Bool
 
-    init(scheme: String, host: SchemeReplayHost) throws {
+    init(scheme: String, host: SchemeReplayHost, frozen: Bool = false) throws {
         self.scheme = scheme
         self.host = host
+        self.frozen = frozen
         target = try host.createTarget()
         options = ReplayItemOptions(wetChunk: STEP_CHUNK, onWetSteps: { await host.yieldToHost() }, pointChunk: POINT_CHUNK, onPoints: { await host.yieldToHost() })
         subscribe(target)
@@ -139,6 +146,19 @@ final class SchemeReplay {
         if state != "ready" { return nil }
         let baked = live != nil ? nil : target.wet.bakedSurface(layerId)
         return baked ?? target.viewLayerSurface(layerId)
+    }
+
+    /**
+     * A layer of a ready replay as document pixels (its offset applied, wet paint dried) and the
+     * rectangle of its paint still wet or drying (nil when none), where letting it flow on could
+     * still change it; nil before the replay is ready or when it has no such pixel layer.
+     */
+    func checkedLayer(_ layerId: String) -> (surface: TiledSurface, flowing: RasterRect?)? {
+        guard let surface = bakedSurface(layerId), let l = findLayer(target.doc.layers, layerId)?.layer, l.isPixel else { return nil }
+        let o = l.pixelOffset
+        var flowing = target.wet.activeBounds(layerId)
+        if let f = flowing { flowing = RasterRect(x: f.x + o.x, y: f.y + o.y, width: f.width, height: f.height) }
+        return (translateSurface(surface, Double(o.x), Double(o.y)), flowing)
     }
 
     /// Looks at the editor again (call after every change): there is work to do, run by `whenIdle`.
@@ -320,6 +340,7 @@ final class SchemeReplay {
 
     private func checkpoint() {
         target.forgetHistory()
+        if frozen { return }
         checkpoints.append((applied.count, target.replayCheckpoint()))
         if checkpoints.count > MAX_CHECKPOINTS { checkpoints.removeFirst() }
         // Within the memory budget, newest first: older checkpoints lose their wet snapshots.
@@ -335,6 +356,8 @@ final class SchemeReplay {
 
     /// Back to the newest checkpoint at or before item `count` and clock `clock`; a fresh replay when there is none.
     private func rollback(_ count: Int, _ clock: Int) throws {
+        // Nothing changes under a frozen replay, so only a log whose clocks go back can get here.
+        if frozen { throw PaintEditorError("item \(count + 1) of the stroke log happens at an earlier wet clock than the item before it, so the log can't be replayed in order") }
         if live != nil { cancelLive() }
         for i in stride(from: checkpoints.count - 1, through: 0, by: -1) {
             let c = checkpoints[i]
@@ -435,4 +458,62 @@ final class SchemeReplay {
         self.live = nil
         if live.session.open { live.session.cancel() }
     }
+}
+
+/**
+ * The largest difference in a channel (premultiplied by alpha, out of 255) at which a check of
+ * opened pixels against a replay of the stroke log still counts a pixel as the same
+ * (`CHECK_TOLERANCE`): above the rounding a PNG round trip or another implementation of the
+ * engines gives, well below anything an import, merge or move leaves behind.
+ */
+let CHECK_TOLERANCE = 8
+
+/**
+ * Whether two RGBA surfaces (document pixels, transparent by default) hold the same pixels within
+ * `tolerance` (premultiplied, so the colour of nearly transparent pixels doesn't count), leaving
+ * out the pixels in `skip` (`pixelsMatch`).
+ */
+func pixelsMatch(_ a: TiledSurface, _ b: TiledSurface, skip: RasterRect? = nil, tolerance: Int = CHECK_TOLERANCE) -> Bool {
+    var keys = Set<TileKey>(a.tiles.keys)
+    for k in b.tiles.keys { keys.insert(k) }
+    let far = tolerance * 255
+    let zero = [UInt8](repeating: 0, count: TILE * TILE * 4)
+    for key in keys {
+        let ta = a.tiles.get(key)
+        let tb = b.tiles.get(key)
+        if let ta, let tb, ta === tb { continue }
+        let da: [UInt8] = ta?.data ?? zero
+        let db: [UInt8] = tb?.data ?? zero
+        let (tx, ty) = tileCoord(key)
+        let x0 = tx * TILE
+        let y0 = ty * TILE
+        let matched: Bool = da.withUnsafeBufferPointer { (pa: UnsafeBufferPointer<UInt8>) -> Bool in
+            db.withUnsafeBufferPointer { (pb: UnsafeBufferPointer<UInt8>) -> Bool in
+                for y in 0..<TILE {
+                    let gy = y0 + y
+                    var sx0 = TILE
+                    var sx1 = 0
+                    if let r = skip, gy >= r.y, gy < r.y + r.height {
+                        sx0 = r.x - x0
+                        sx1 = r.x + r.width - x0
+                    }
+                    for x in 0..<TILE {
+                        if x >= sx0 && x < sx1 { continue }
+                        let i = (y * TILE + x) * 4
+                        let aa = Int(pa[i + 3])
+                        let ab = Int(pb[i + 3])
+                        if abs(aa - ab) > tolerance { return false }
+                        for c in 0..<3 {
+                            let va: Int = Int(pa[i + c]) * aa
+                            let vb: Int = Int(pb[i + c]) * ab
+                            if abs(va - vb) > far { return false }
+                        }
+                    }
+                }
+                return true
+            }
+        }
+        if !matched { return false }
+    }
+    return true
 }

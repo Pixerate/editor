@@ -130,8 +130,9 @@ func contactSheet(_ frames: [(width: Int, height: Int, data: [UInt8])], columns:
 
 extension PaintEditorController {
     /// A fresh editor `scale` times the size with this painting's layers emptied, paper and lighting (`createReplayTarget`).
-    func createReplayTarget(scale: Double = 1) throws -> PaintEditorController {
+    func createReplayTarget(scale: Double = 1, doc source: PaintDocumentState? = nil) throws -> PaintEditorController {
         if !(scale >= 1 && scale <= 8) { throw PaintEditorError("scale \(jsText(scale)) is out of range; use 1..8.") }
+        let doc: PaintDocumentState = source ?? self.doc
         let width = doc.canvas.width, height = doc.canvas.height
         let w = JS.round(Double(width) * scale), h = JS.round(Double(height) * scale)
         if w > 16384 || h > 16384 { throw PaintEditorError("At scale \(jsText(scale)) the canvas would be \(jsText(w))×\(jsText(h)); the limit is 16384 px per side. Use a smaller scale.") }
