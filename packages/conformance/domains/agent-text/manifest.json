@@ -1,0 +1,14 @@
+{
+  "domain": "agent-text",
+  "formatVersion": 1,
+  "description": "How an agent text edit is played out: select, type in frames, commit as one undo step.",
+  "defaults": {
+    "charsPerSecond": 60,
+    "maxDurationMs": 1500,
+    "selectMs": 250,
+    "frameMs": 33.333333333333336
+  },
+  "files": [
+    "typing-plans.json"
+  ]
+}

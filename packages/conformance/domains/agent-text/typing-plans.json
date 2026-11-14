@@ -1,0 +1,633 @@
+[
+  {
+    "name": "replace a word",
+    "edit": {
+      "from": 4,
+      "to": 8,
+      "text": "don't"
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "select",
+        "from": 4,
+        "to": 8,
+        "ms": 250
+      },
+      {
+        "type": "type",
+        "chars": 3,
+        "text": "don",
+        "ms": 41.666666666666664
+      },
+      {
+        "type": "type",
+        "chars": 5,
+        "text": "don't",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "insert a full stop",
+    "edit": {
+      "from": 12,
+      "to": 12,
+      "text": "."
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "type",
+        "chars": 1,
+        "text": ".",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "delete a range",
+    "edit": {
+      "from": 3,
+      "to": 9,
+      "text": ""
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "insert a sentence",
+    "edit": {
+      "from": 0,
+      "to": 0,
+      "text": "The quick brown fox jumps over the lazy dog."
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "type",
+        "chars": 2,
+        "text": "Th",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 4,
+        "text": "The ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 6,
+        "text": "The qu",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 8,
+        "text": "The quic",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 10,
+        "text": "The quick ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 12,
+        "text": "The quick br",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 14,
+        "text": "The quick brow",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 16,
+        "text": "The quick brown ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 18,
+        "text": "The quick brown fo",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 20,
+        "text": "The quick brown fox ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 22,
+        "text": "The quick brown fox ju",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 24,
+        "text": "The quick brown fox jump",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 26,
+        "text": "The quick brown fox jumps ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 28,
+        "text": "The quick brown fox jumps ov",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 30,
+        "text": "The quick brown fox jumps over",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 32,
+        "text": "The quick brown fox jumps over t",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 34,
+        "text": "The quick brown fox jumps over the",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 36,
+        "text": "The quick brown fox jumps over the l",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 38,
+        "text": "The quick brown fox jumps over the laz",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 40,
+        "text": "The quick brown fox jumps over the lazy ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 42,
+        "text": "The quick brown fox jumps over the lazy do",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 44,
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "long text types faster",
+    "edit": {
+      "from": 0,
+      "to": 0,
+      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "type",
+        "chars": 4,
+        "text": "xxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 9,
+        "text": "xxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 13,
+        "text": "xxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 18,
+        "text": "xxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 22,
+        "text": "xxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 27,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 31,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 36,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 40,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 44,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 49,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 53,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 58,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 62,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 67,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 71,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 76,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 80,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 84,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 89,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 93,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 98,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 102,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 107,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 111,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 116,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 120,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 124,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 129,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 133,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 138,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 142,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 147,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 151,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 156,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 160,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 164,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 169,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 173,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 178,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 182,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 187,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 191,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 196,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 33.333333333333336
+      },
+      {
+        "type": "type",
+        "chars": 200,
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "emoji are whole characters",
+    "edit": {
+      "from": 0,
+      "to": 2,
+      "text": "ok 👍🏽 done"
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "select",
+        "from": 0,
+        "to": 2,
+        "ms": 250
+      },
+      {
+        "type": "type",
+        "chars": 2,
+        "text": "ok",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 4,
+        "text": "ok 👍",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 6,
+        "text": "ok 👍🏽 ",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 8,
+        "text": "ok 👍🏽 do",
+        "ms": 33.33333333333333
+      },
+      {
+        "type": "type",
+        "chars": 10,
+        "text": "ok 👍🏽 done",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "slower typing",
+    "edit": {
+      "from": 1,
+      "to": 2,
+      "text": "Hello"
+    },
+    "options": {
+      "charsPerSecond": 10,
+      "selectMs": 100
+    },
+    "steps": [
+      {
+        "type": "select",
+        "from": 1,
+        "to": 2,
+        "ms": 100
+      },
+      {
+        "type": "type",
+        "chars": 1,
+        "text": "H",
+        "ms": 100
+      },
+      {
+        "type": "type",
+        "chars": 2,
+        "text": "He",
+        "ms": 100
+      },
+      {
+        "type": "type",
+        "chars": 3,
+        "text": "Hel",
+        "ms": 100
+      },
+      {
+        "type": "type",
+        "chars": 4,
+        "text": "Hell",
+        "ms": 100
+      },
+      {
+        "type": "type",
+        "chars": 5,
+        "text": "Hello",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "instant",
+    "edit": {
+      "from": 0,
+      "to": 4,
+      "text": "word"
+    },
+    "options": {
+      "charsPerSecond": null
+    },
+    "steps": [
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "not animated",
+    "edit": {
+      "from": 0,
+      "to": 4,
+      "text": "word"
+    },
+    "options": {
+      "animate": false
+    },
+    "steps": [
+      {
+        "type": "commit"
+      }
+    ]
+  }
+]
