@@ -19,15 +19,17 @@ private final class PaintDocumentHistory: EditorDocumentHistory {
  reference kept in `assets` (default: a registry of its own). Wet paint is saved dry. Opening a
  document clears the history (`recordsLoads` false), and the document is read-only while a stroke
  is in progress. Pass the same `assets` to reopen a document another `EditorDocument` (or
- `editorDocument(assets:)`) wrote.
+ `editorDocument(assets:)`) wrote. `strokeLog` (when given) replaces `strokes`: `.replay` keeps only
+ the stroke log the colour-scheme replay needs (`StrokeLogOption`).
  */
-public func createPaintEditorDocument(_ controller: PaintEditorController, assets: EditorAssetRegistry = EditorAssetRegistry(), strokes: Bool = true) throws -> EditorDocument {
-    try EditorDocument(EditorDocumentSpec(
+public func createPaintEditorDocument(_ controller: PaintEditorController, assets: EditorAssetRegistry = EditorAssetRegistry(), strokes: Bool = true, strokeLog: StrokeLogOption? = nil) throws -> EditorDocument {
+    let log: StrokeLogOption = strokeLog ?? (strokes ? .all : .none)
+    return try EditorDocument(EditorDocumentSpec(
         kind: "paint",
         recordsLoads: false,
         get: { [weak controller] in
             guard let controller else { return .null }
-            return .object(controller.toJSON(strokes: strokes))
+            return .object(controller.toJSON(strokeLog: log))
         },
         load: { [weak controller] document, _ in
             guard let controller else { return [] }

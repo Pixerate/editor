@@ -2421,6 +2421,11 @@ public final class PaintEditorController {
 
     /// The document as JSON with inline PNG data URLs (`toJSON`).
     public func toJSON(strokes withStrokes: Bool = true) -> JSONObject {
+        toJSON(strokeLog: withStrokes ? .all : .none)
+    }
+
+    /// The document as JSON with inline PNG data URLs, saving the stroke log as `strokeLog` says (`toJSON({ strokes })`).
+    public func toJSON(strokeLog: StrokeLogOption) -> JSONObject {
         flushCulturePreview()
         let d = savedDocumentState()
         // Fields this editor does not read go first, as they were read; everything it writes replaces them.
@@ -2432,7 +2437,7 @@ public final class PaintEditorController {
             "activeLayerId": d.activeLayerId.map { .string($0) } ?? .null,
         ]
         for (k, v) in header { out[k] = v }
-        if withStrokes && !d.strokes.isEmpty { out["strokes"] = .array(d.strokes.map(strokeToJSON)) }
+        if let log = savedStrokeLog(d, strokeLog) { out["strokes"] = log }
         out["guides"] = .object(guides.json)
         out["swatches"] = .array(swatches.map(\.json))
         if let pad = mixingPadJSON() { out["mixingPad"] = pad }

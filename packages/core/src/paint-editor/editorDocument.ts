@@ -1,13 +1,16 @@
 import { createEditorAssetRegistry, type EditorAssetRegistry } from '../persistence/assets';
 import { defineEditorDocument, type EditorDocument } from '../persistence/editorDocument';
 import type { PaintEditorController } from './controller';
-import type { SerializedPaintDocument } from './serialize';
+import type { SerializedPaintDocument, StrokeLogOption } from './serialize';
 
 export interface PaintEditorDocumentOptions {
   /** Where layer, thick-paint, mixing-pad and guide images are kept (default: a registry of its own). */
   assets?: EditorAssetRegistry;
-  /** Include the recorded strokes (default `true`), so the painting can be replayed and repainted at a higher resolution. */
-  strokes?: boolean;
+  /**
+   * Include the recorded strokes (default `true`), so the painting can be replayed and repainted at
+   * a higher resolution; `'replay'` keeps only what the colour-scheme replay needs (`StrokeLogOption`).
+   */
+  strokes?: StrokeLogOption;
 }
 
 /**

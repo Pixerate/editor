@@ -784,9 +784,16 @@ export function serializeLayers(layers: readonly ImageLayer[]): { layers: Serial
 /**
  * Where a host keeps layer pixels outside the JSON (`toJSON({ assets: 'external', store })`):
  * `put` stores a PNG and returns a reference (a URL, a key) that `get` resolves later.
+ *
+ * The paint editor (`PaintAssetStore`) also puts its stroke data here: JSON text in a blob of type
+ * `application/json`, with `width` and `height` 0 and an id starting `json-`. A store keeps the
+ * bytes as they are and `get` returns them; the blob's type need not survive (stroke data is read
+ * from the bytes whatever type `get` reports).
  */
 export interface ImageEditorAssetStore {
+  /** Stores `blob` (a PNG, or JSON from the paint editor) and returns its reference. `width` / `height`: pixels, 0 for JSON. */
   put(blob: Blob, info: { id: string; width: number; height: number }): Promise<string>;
+  /** The bytes `put` stored under `ref`. */
   get(ref: string): Promise<Blob>;
 }
 
@@ -849,7 +856,8 @@ export async function resolveExternalAssets(
     try {
       const blob = await store.get(ref);
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      out[id] = `data:image/png;base64,${bytesToBase64(bytes)}`;
+      // JSON (paint stroke data) keeps its type when the store kept it; everything else reads as PNG.
+      out[id] = `data:${blob.type === 'application/json' ? 'application/json' : 'image/png'};base64,${bytesToBase64(bytes)}`;
     } catch (err) {
       problems.push(`Asset "${id}" (${ref}) could not be fetched: ${(err as Error).message}`);
     }

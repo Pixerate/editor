@@ -21,6 +21,24 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core|swift/paint] External Paint Documents Grew With Every Stroke: Stroke Data Now Goes to the Asset Store in Runs
+
+- **Issue / Symptom**: `toJSONExternal(store)` put only PNGs in the store. Stroke layers' strokes (`liveStrokes`), the stroke log and the wet / paint events stayed inline at full precision (about 26 KB for a 160-point pen stroke), so a host saving the external document to Firestore (1 MiB per document) after every stroke hit the limit after about 40 long strokes (Pixerate/pixerate#676).
+- **Root Cause**: The external writer treated `strokes`, `wetEvents` and `paintEvents` as having no assets (`NO_EXTENSION_PNGS`), and only looked for PNG data URLs inside `liveStrokes`.
+- **Solution / Workaround**: Each of those lists (and each `liveStrokes` list) is written as `{ chunks: [id, …] }`. The list is cut by `strokeChunkRuns`: full runs of 16, then the rest in powers of two, largest first (37 → 16, 16, 4, 1). One more item changes only the last run, so a save after one stroke puts one new asset, the document holds at most about n/16 + 4 references per list, and each item is uploaded about 3 times in all. A run is JSON text with sorted keys (`canonicalJSON`, so a reopened document, whose keys may be reordered, gives the same text), id `json-<cyrb53, 14 hex>-<length in base 36>` (`strokeChunkId`; Swift has the same function and ids), put as a `Blob` of type `application/json` with `width` and `height` 0. Equal runs share one asset (a stroke layer's runs and the log's often match). Uploads are cached per store object, and `loadJSONAsync` / `deserializePaintDocumentAsync` record the runs they read (when the text still hashes to its id), so the first save after reopening uploads nothing that did not change. Readers decode the run's bytes whatever media type the data URL says (Swift's `resolveExternalAssets` labels everything `image/png`; TS keeps `application/json` when the store's blob has it). A run that can't be read is a load problem (`"liveStrokes.<id>" refers to stroke data asset "json-…", which could not be read; what it holds is left out.`) and the rest loads. The inline `toJSON` format is unchanged, and external documents with inline lists still load. Points are not quantised: replays and stroke layers redraw from them, so any rounding changes pixels.
+
+### [core|swift/paint] The Stroke Log Repeats Every Stroke Layer Stroke; `strokes: 'replay'` Refers to Them Instead
+
+- **Issue / Symptom**: To have wet light / dark paint follow the colour scheme after a reload, a host must save the stroke log (`toJSON({ strokes: true })`), which also repeats every stroke already saved in `liveStrokes`, doubling the stroke data of a document drawn with a pen on stroke layers.
+- **Root Cause**: A stroke painted on a stroke layer is appended to both `doc.strokes` (the log) and `doc.liveStrokes[layer]`. The log can't simply leave it out: replay items are ordered by log index (`at: i + 0.5` against the events' `at`), and a replay paints everything in order.
+- **Solution / Workaround**: `strokes: 'replay'` (`StrokeLogOption.replay` in Swift) writes the log only when a pixel layer (not a stroke layer) holds a light / dark stroke, else nothing (as `false`). In it, a stroke whose saved JSON equals its entry in `liveStrokes` (same layer and id) is written as `{ liveStroke: id, layerId }`; one edited on its layer since is written in full. Loaders put the stroke back from `liveStrokes` before reading the log, and report a reference to a stroke that isn't there. `true` and `false` behave as before. Note that `wetEvents` / `paintEvents` are saved whatever `strokes` says, and each edit of a stroke layer (erase, move, recolour) records a `live-strokes` paint event with a copy of the layer's whole list; with an asset store that is one new run per edit, but it is not deduplicated.
+
+### [core/paint] Wet Flow After the Last Logged Item Is Not Replayed After a Reload
+
+- **Issue / Symptom**: Painting a wet light / dark stroke, letting it flow (`advanceWet`) and then saving and reopening: the colour-scheme replay of the reopened document differs from painting the dark side fresh. Ending on a stroke (or any logged item) after the flow matches exactly.
+- **Root Cause**: The replay steps the simulation up to the editor's wet clock and the logged items' clocks; a reopened document starts with dry paint and its own clock, so steps run after the last logged item are not repeated.
+- **Solution / Workaround**: Tests of the scheme replay after a reload end on a logged stroke (as `paint-editor-scheme-replay.test.ts` does). Fixing it needs the saved document to record the wet clock it was dried at.
+
 ### [core] A Conformance Host's `load` Must Not Assert: `runConformanceScenario` Swallows What It Throws
 
 - **Issue / Symptom**: In `tests/paint-conformance.test.ts`, the `… reopens what it saved unchanged` tests passed even when the save after reopening differed (#850), while Swift's `RoundTripHost` (in `PaintConformanceTests`) failed on the same scenario.
@@ -307,7 +325,7 @@ All contributors and AI assistants should check this file before starting work a
 
 - **Issue / Symptom**: Opening the output of `editorDocument()` loads every layer empty.
 - **Root Cause**: `editorDocument()` replaces each inline PNG with a content-addressed reference (`pixerate-asset:…`) and doesn't carry the bytes; the TS envelope gets them from its asset registry. Swift has no registry or async asset store yet.
-- **Solution / Workaround**: Persist `toJSON()` (assets inline) and reopen it with `loadJSON`. External asset stores (`loadJSONAsync`) are not ported.
+- **Solution / Workaround**: Persist `toJSON()` (assets inline) and reopen it with `loadJSON`, or `toJSONExternal(store)` with `loadJSONAsync(_:store:)` (ported since; see the stroke data entry above).
 
 ### [swift/paint] Sticker Drag Previews Rely on Document Identity
 
