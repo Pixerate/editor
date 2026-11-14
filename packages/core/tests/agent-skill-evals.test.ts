@@ -338,6 +338,24 @@ describe('pixerate-image-product-photo grounding-shadow', () => {
 		expect(await failedAfter(maskedShadowLayer(0))).toEqual([ev.checks[1].why]);
 	});
 
+	const vectorMaskedShadowLayer = (feather: number) => [
+		...product,
+		{ tool: 'deselect', args: {} },
+		{ tool: 'add_pixel_layer', args: { belowId: active, name: 'Shadow', color: '#00000073' } },
+		{ tool: 'select_ellipse', args: { x: 38, y: 60, width: 44, height: 10 } },
+		{ tool: 'add_vector_mask', args: { layerId: active, from: 'selection' } },
+		{ tool: 'deselect', args: {} },
+		...(feather ? [{ tool: 'set_vector_mask_properties', args: { layerId: active, feather } }] : [])
+	];
+
+	it('accepts a shadow layer below the product softened by a feathered vector mask', async () => {
+		expect(await failedAfter(vectorMaskedShadowLayer(3))).toEqual([]);
+	});
+
+	it('rejects a shadow layer whose vector mask has no feather', async () => {
+		expect(await failedAfter(vectorMaskedShadowLayer(0))).toEqual([ev.checks[1].why]);
+	});
+
 	it('rejects a shadow layer above the product, or one without a live blur', async () => {
 		const shadowCheck = ev.checks[1].why;
 		expect(await failedAfter([...shadowLayer('aboveId'), blur])).toEqual([shadowCheck]);

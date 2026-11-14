@@ -54,7 +54,15 @@ export function describeLayer(
     locks: layer.locks ? { ...layer.locks } : {},
     mask: maskSummary(layer.mask),
     vectorMask: layer.vectorMask
-      ? { enabled: layer.vectorMask.enabled !== false, linked: layer.vectorMask.linked !== false, inverted: layer.vectorMask.inverted === true, components: layer.vectorMask.components.length, bounds: vectorMaskBounds(layer.vectorMask) }
+      ? {
+          enabled: layer.vectorMask.enabled !== false,
+          linked: layer.vectorMask.linked !== false,
+          inverted: layer.vectorMask.inverted === true,
+          density: layer.vectorMask.density ?? 1,
+          feather: layer.vectorMask.feather ?? 0,
+          components: layer.vectorMask.components.length,
+          bounds: vectorMaskBounds(layer.vectorMask)
+        }
       : null,
     effects: layer.effects
       ? { enabled: layer.effects.enabled, scale: layer.effects.scale ?? 1, items: layer.effects.items.map((e) => ({ id: e.id, kind: e.kind, enabled: e.enabled })) }
@@ -161,7 +169,7 @@ export function createImageLayerTools(controller: ImageEditorController): AgentT
     name: 'list_layers',
     title: 'List image layers',
     description:
-      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, shape, type, smart, annotation; smart objects also give their contents, smart filters and filter mask), name, document bounds (pixel, shape, type and smart layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), a shape summary (component operations and kinds, fill and stroke paint types; details from get_shape_layer), a text summary (the text, point or box frame, run count, live or stored pixels, missing fonts; details from get_text_layer), children (groups) and which layer is active. Also returns the active layer id and target (pixels, mask or filter-mask) and the canvas size.',
+      'Returns the layer stack bottom to top as a tree: id, type (pixel, adjustment, group, shape, type, smart, annotation; smart objects also give their contents, smart filters and filter mask), name, document bounds (pixel, shape, type and smart layers), visible, opacity, fillOpacity, blend, clipped, locks, a mask summary, a vector mask summary (enabled, linked, inverted, density, feather in px, component count and path bounds; the path from get_vector_mask), an effects summary (master switch, scale, effect ids and kinds; details from list_layer_effects), filters (pixel layers), kind and params (adjustment layers), a shape summary (component operations and kinds, fill and stroke paint types; details from get_shape_layer), a text summary (the text, point or box frame, run count, live or stored pixels, missing fonts; details from get_text_layer), children (groups) and which layer is active. Also returns the active layer id and target (pixels, mask or filter-mask) and the canvas size.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false },
     annotations: { title: 'List image layers', ...READ },
     handler: () => {

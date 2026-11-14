@@ -60,7 +60,9 @@ describe('vector masks', () => {
     expect(set.vectorMask.components[0].subpaths[0].anchors).toHaveLength(4);
     expect([at(2, 15), at(15, 15)]).toEqual([0, 200]);
     expect((await call('get_vector_mask', { layerId: red })).vectorMask.bounds).toEqual({ x: 0, y: 0, width: 5, height: 20 });
-    expect((await call('list_layers')).layers.find((l: any) => l.id === red).vectorMask).toMatchObject({ components: 1 });
+    expect((await call('list_layers')).layers.find((l: any) => l.id === red).vectorMask).toMatchObject({ components: 1, density: 1, feather: 0 });
+    await call('set_vector_mask_properties', { layerId: red, feather: 2, density: 0.5 });
+    expect((await call('list_layers')).layers.find((l: any) => l.id === red).vectorMask).toMatchObject({ density: 0.5, feather: 2 });
     await fails('add_vector_mask', { layerId: 'nope' }, /No layer "nope"/);
     await fails('set_vector_mask_properties', { layerId: red, density: 2 }, /density|maximum/);
     await fails('set_vector_mask_path', { layerId: 'background', shape: RECT }, /no vector mask; add one with add_vector_mask/);
