@@ -17,7 +17,7 @@
  * turns away, and clarity (material A) lets the middle of a bead show the layers below.
  */
 
-import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, surfaceFromSavedPixels, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { srgbToLinear, linearToSrgb } from '../color/convert';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import { normalizePaintBrush, type PaintBrush } from './brushes';
@@ -330,5 +330,5 @@ export function lightFromJSON(raw: unknown): TiledSurface {
   if (!parsed) throw new Error('the light is not a PNG data URL');
   const img = decodePng(parsed.bytes, { keepGray: true });
   const data = img.channels === 1 ? img.data : Uint8ClampedArray.from({ length: img.width * img.height }, (_, i) => img.data[i * 4]);
-  return surfaceFromPixels({ width: img.width, height: img.height, data }, 1, r.rect.x, r.rect.y);
+  return surfaceFromSavedPixels({ width: img.width, height: img.height, data }, 1, r.rect.x, r.rect.y);
 }

@@ -51,7 +51,7 @@ import {
 import { base64ToBytes, bytesToBase64, decodePng, parseDataUrl, pngDataUrl } from '../../raster/png';
 import { normalizeLayerEffects, type GlobalLight, type LayerEffect, type LayerEffects } from '../../raster/effects/model';
 import type { EffectPattern } from '../../raster/effects/patterns';
-import { contentBounds, emptySurface, readRegion, surfaceFromPixels, type TiledSurface } from '../../raster/surface';
+import { checkSurfaceRange, contentBounds, emptySurface, readRegion, surfaceFromSavedPixels, type TiledSurface } from '../../raster/surface';
 import { readDeepRegion, surfaceDepth, writeDeepRegion } from '../../raster/deep';
 import { deflate, inflate } from '../../raster/zlib';
 import { isInterpolation } from '../../raster/transform';
@@ -363,7 +363,9 @@ export function decodeDeepSurface(surface: TiledSurface, raw: unknown, problems:
     const samples = d.depth === 16 ? new Uint16Array(n) : new Float32Array(n);
     if (samples instanceof Uint16Array) for (let i = 0; i < n; i++) samples[i] = view.getUint16(2 * i, true);
     else for (let i = 0; i < n; i++) samples[i] = view.getFloat32(4 * i, true);
-    return writeDeepRegion(surface, { x: d.x, y: d.y, width: d.width, height: d.height }, samples);
+    const rect = { x: d.x, y: d.y, width: d.width, height: d.height };
+    checkSurfaceRange(rect);
+    return writeDeepRegion(surface, rect, samples);
   } catch {
     problems.push(`${label}: its ${d.depth}-bit samples could not be read, so it was opened at 8 bits`);
     return surface;
@@ -911,7 +913,7 @@ function readSurface(ref: unknown, x: unknown, y: unknown, channels: 1 | 4, defa
   }
   try {
     const px = (ctx.decodeAsset ?? decodePngDataUrl)(url, channels);
-    return surfaceFromPixels(px, channels, Math.round(num(x, -1e7, 1e7, 0)), Math.round(num(y, -1e7, 1e7, 0)), defaultValue);
+    return surfaceFromSavedPixels(px, channels, Math.round(num(x, -1e7, 1e7, 0)), Math.round(num(y, -1e7, 1e7, 0)), defaultValue);
   } catch (err) {
     ctx.problems.push(`${what}: asset "${ref}" could not be decoded (${(err as Error).message})`);
     return emptySurface(channels, defaultValue);

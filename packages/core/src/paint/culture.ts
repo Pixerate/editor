@@ -16,7 +16,7 @@ import {
   emptySurface,
   finishTile,
   readRegion,
-  surfaceFromPixels,
+  surfaceFromSavedPixels,
   tileKey,
   translateSurface,
   type RasterRect,
@@ -1372,7 +1372,7 @@ export function cultureFromJSON(raw: unknown): LayerCulture {
       decoded.channels === 1
         ? decoded.data
         : Uint8ClampedArray.from({ length: decoded.width * decoded.height }, (_, i) => decoded.data[i * 4]!);
-    occupancy = surfaceFromPixels(
+    occupancy = surfaceFromSavedPixels(
       { width: decoded.width, height: decoded.height, data: gray },
       1,
       Math.round(r.occupancyRect.x),

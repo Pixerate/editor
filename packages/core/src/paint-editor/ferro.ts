@@ -13,7 +13,7 @@
  * lighting. `cure_ferrofluid` bakes the current spikes into `doc.thick` and clears `doc.ferro`.
  */
 
-import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, surfaceFromSavedPixels, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import { DEFAULT_FERRO, normalizeFerro as normalizeFerroSettings, normalizePaintBrush, type FerroSettings, type PaintBrush } from './brushes';
 import { emptyThickChannels, type ThickChannels } from './thick';
@@ -569,7 +569,7 @@ export function ferroFromJSON(raw: unknown): { surface: TiledSurface; settings: 
     img.channels === 1
       ? img.data
       : Uint8ClampedArray.from({ length: img.width * img.height }, (_, i) => img.data[i * 4]);
-  const surface = surfaceFromPixels({ width: img.width, height: img.height, data }, 1, r.rect.x, r.rect.y);
+  const surface = surfaceFromSavedPixels({ width: img.width, height: img.height, data }, 1, r.rect.x, r.rect.y);
   const settings = normalizeFerroSettings({
     amount: 0,
     wavelength: r.wavelength,

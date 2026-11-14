@@ -20,7 +20,7 @@ import { exchangeRates, PaintExchange, TileMedium, type MixerLoad, type PaintTil
 import { SRGB_TO_LINEAR, linearToSrgb8 } from '../paint/wet/film';
 import { PaintGradientSampler, type PaintGradientSample, type PaintGradientSource } from '../paint/gradient-paint';
 import { effectDabField, sampleEffectAt, type EffectPaintPixels } from './effect-paint';
-import { TILE, TiledSurface, finishTile, readRegion, surfaceFromPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
+import { TILE, TiledSurface, finishTile, readRegion, surfaceFromSavedPixels, tileKey, type RasterRect, type Tile, type TileKey } from '../raster/surface';
 import { decodePng, parseDataUrl, pngDataUrl } from '../raster/png';
 import type { IridescenceSettings } from './brush-model';
 import type { PaintBrush } from './brushes';
@@ -943,12 +943,12 @@ export function thickFromJSON(raw: unknown): ThickChannels {
     typeof r.film === 'string'
       ? (() => {
           const f = decode(r.film, false);
-          return surfaceFromPixels({ width: f.width, height: f.height, data: f.data }, 4, r.rect.x, r.rect.y);
+          return surfaceFromSavedPixels({ width: f.width, height: f.height, data: f.data }, 4, r.rect.x, r.rect.y);
         })()
       : new TiledSurface(4, new Map(), 0);
   return {
-    height: surfaceFromPixels({ width: h.width, height: h.height, data: hd }, 1, r.rect.x, r.rect.y),
-    material: surfaceFromPixels({ width: m.width, height: m.height, data: m.data }, 4, r.rect.x, r.rect.y),
+    height: surfaceFromSavedPixels({ width: h.width, height: h.height, data: hd }, 1, r.rect.x, r.rect.y),
+    material: surfaceFromSavedPixels({ width: m.width, height: m.height, data: m.data }, 4, r.rect.x, r.rect.y),
     film,
   };
 }

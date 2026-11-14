@@ -105,7 +105,13 @@ private func readSurface(_ ref: JSONValue?, _ x: JSONValue?, _ y: JSONValue?, ch
     }
     do {
         let px = try decodePngDataUrl(url, channels: channels)
-        return surfaceFromPixels(width: px.width, height: px.height, data: px.data, channels: channels, x: Int(JS.round(num(x, -1e7, 1e7, 0))), y: Int(JS.round(num(y, -1e7, 1e7, 0))), defaultValue: defaultValue)
+        let left = Int(JS.round(num(x, -1e7, 1e7, 0)))
+        let top = Int(JS.round(num(y, -1e7, 1e7, 0)))
+        // `surfaceFromSavedPixels`: a layer past the surface range is refused (#852).
+        if px.width > 0 && px.height > 0 {
+            try checkSurfaceRange(x: Double(left), xEnd: Double(left + px.width), y: Double(top), yEnd: Double(top + px.height))
+        }
+        return surfaceFromPixels(width: px.width, height: px.height, data: px.data, channels: channels, x: left, y: top, defaultValue: defaultValue)
     } catch {
         ctx.problems.append("\(what): asset \"\(id)\" could not be decoded (\(errorMessage(error)))")
         return emptySurface(channels, defaultValue)
