@@ -57,10 +57,19 @@ This skill is the method. `pixerate-image-editor` has the full tool reference, a
 5. **Fix the edge colour** if the old backdrop tints it: `set_edge_decontamination`, or
    `modify_selection` `contract` 1 px before masking.
    **Check:** `inspect_mask_edge` with `target: "layer-mask"` shows no halo.
-6. **Ground it.** With the product on its own layer (`layer_via_copy`, or the masked photo),
-   `add_layer_effect` `drop-shadow` with `angle` 90 (light from above), a small `distance`
-   (3-10 px at web sizes), a `size` larger than the distance and `opacity` 0.25-0.45.
-   **Check:** `list_layers` shows the effect; the shadow reads as contact, not as a cutout.
+6. **Ground it.** With the product on its own layer (`layer_via_copy`, or the masked photo), add
+   a soft shadow that stays adjustable, in one of two ways:
+   - **Drop shadow (the default):** `add_layer_effect` `drop-shadow` on the product layer, with
+     `angle` 90 (light from above), a small `distance` (3-10 px at web sizes), a `size` larger
+     than the distance and `opacity` 0.25-0.45. It follows the product's outline.
+   - **Shadow layer:** use this when the shadow should lie on the ground rather than follow the
+     outline, for example a soft pool under a wide product. `add_pixel_layer` `belowId` the
+     product, `select_ellipse` a flat ellipse under its base, `fill_pixels` black at 0.3-0.5
+     `opacity`, `deselect`, then `add_layer_filter` `blur`. The blur stays live, so the
+     softness can still be changed.
+   **Check:** `list_layers` shows the effect on the product, or the shadow layer below the
+   product with its `blur` filter. `measure_region` just under the product's base is darker
+   than the ground beside it. The shadow reads as contact, not as a cutout.
 7. **Frame it.** `set_crop` at the ratio, centred on the product's bounds, with the margin asked.
    **Check:** `get_image_info` `crop`: ratio right, centre within a pixel or two of the
    product's centre, product share of the side as intended.
@@ -93,9 +102,15 @@ of the photo, `from: "selection"`) → `add_pixel_layer` (`color: "#ffffff"`, `b
 **Centred square crop.** Product bounds `x, y, w, h`; side `S = max(w, h) / share` (share 0.7-0.85,
 no larger than the image allows); `set_crop` with `x + w/2 - S/2`, `y + h/2 - S/2`, `S`, `S`.
 
-**Contact shadow.** `layer_via_copy` the selected product (or use the masked layer), then
+**Drop shadow.** `layer_via_copy` the selected product (or use the masked layer), then
 `add_layer_effect` `kind: "drop-shadow"` with `settings: { angle: 90, distance: 6, size: 10,
 opacity: 0.4 }`; adjust with `update_layer_effect`.
+
+**Shadow layer.** Product bounds `x, y, w, h`: `add_pixel_layer` with `belowId` the product
+layer and a `name` such as "Shadow". Then `select_ellipse` with `x - w * 0.05`,
+`y + h - h * 0.12`, `w * 1.1`, `h * 0.25`, `fill_pixels` `#000000` at `opacity` 0.4,
+`deselect`, and `add_layer_filter` `kind: "blur"` with `radius` about `h * 0.08`. To adjust
+it, change the layer's opacity or the filter's radius.
 
 ## Pitfalls
 
@@ -108,6 +123,9 @@ opacity: 0.4 }`; adjust with `update_layer_effect`.
   decontaminate or contract by a pixel.
 - **A shadow that floats.** A large distance or a sideways angle looks pasted on; keep it short
   and below.
+- **A shadow layer in the wrong place.** Above the product it greys the product, so keep it
+  below. Painted soft with a brush or a feather, it can't be changed later, so blur it with a
+  live filter instead.
 - **Inconsistent sets.** Each image cropped by eye drifts; compute the crop from the product's
   bounds with the same share for every image.
 
@@ -118,9 +136,10 @@ opacity: 0.4 }`; adjust with `update_layer_effect`.
 - `refine_selection`, `modify_selection`, `get_selection`, `inspect_mask_edge`: refine and check the edge
 - `add_layer_mask`, `add_vector_mask`, `set_layer_mask_properties`: hide the backdrop, editably
 - `set_edge_decontamination`: remove the backdrop's colour from the edge
-- `add_pixel_layer`: the background fill below the product
+- `add_pixel_layer`: the background fill below the product, or a shadow layer
+- `select_ellipse`, `fill_pixels`, `deselect`, `add_layer_filter`: a soft shadow layer
 - `layer_via_copy`: the product on its own layer
-- `add_layer_effect`, `update_layer_effect`: the shadow
+- `add_layer_effect`, `update_layer_effect`: the drop shadow
 - `set_crop`, `reset_crop`: the frame
 - `render_preview`: look at the result
 - `undo_image`: take back a step
