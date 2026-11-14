@@ -66,10 +66,13 @@ This skill is the method. `pixerate-image-editor` has the full tool reference, a
      outline, for example a soft pool under a wide product. `add_pixel_layer` `belowId` the
      product, `select_ellipse` a flat ellipse under its base, `fill_pixels` black at 0.3-0.5
      `opacity`, `deselect`, then `add_layer_filter` `blur`. The blur stays live, so the
-     softness can still be changed.
+     softness can still be changed. A feathered layer mask does the same job: fill the layer,
+     then `add_layer_mask` `from: "selection"` on the ellipse with a `feather`, and change it
+     later with `set_layer_mask_properties`.
    **Check:** `list_layers` shows the effect on the product, or the shadow layer below the
-   product with its `blur` filter. `measure_region` just under the product's base is darker
-   than the ground beside it. The shadow reads as contact, not as a cutout.
+   product with its `blur` filter or a mask `feather` above 0. `measure_region` just under the
+   product's base is darker than the ground beside it. The shadow reads as contact, not as a
+   cutout.
 7. **Frame it.** `set_crop` at the ratio, centred on the product's bounds, with the margin asked.
    **Check:** `get_image_info` `crop`: ratio right, centre within a pixel or two of the
    product's centre, product share of the side as intended.
@@ -124,8 +127,11 @@ it, change the layer's opacity or the filter's radius.
 - **A shadow that floats.** A large distance or a sideways angle looks pasted on; keep it short
   and below.
 - **A shadow layer in the wrong place.** Above the product it greys the product, so keep it
-  below. Painted soft with a brush or a feather, it can't be changed later, so blur it with a
-  live filter instead.
+  below. Painted soft with a brush, or filled through a feathered selection, the softness is
+  baked into the pixels and can't be changed later. Soften it live instead: a `blur` filter,
+  or a mask with a `feather`.
+- **A hard-edged mask.** A layer mask with `feather` 0 cuts the shadow off sharply. Give it a
+  `feather` (`set_layer_mask_properties`), or blur the layer.
 - **Inconsistent sets.** Each image cropped by eye drifts; compute the crop from the product's
   bounds with the same share for every image.
 
@@ -134,7 +140,7 @@ it, change the layer's opacity or the filter's radius.
 - `list_layers`, `get_image_info`, `measure_region`: read the stack, the frame and the colours
 - `magic_wand`, `select_color_range`, `select_subject`, `select_object`, `invert_selection`: select the product
 - `refine_selection`, `modify_selection`, `get_selection`, `inspect_mask_edge`: refine and check the edge
-- `add_layer_mask`, `add_vector_mask`, `set_layer_mask_properties`: hide the backdrop, editably
+- `add_layer_mask`, `add_vector_mask`, `set_layer_mask_properties`: hide the backdrop, editably, or soften a shadow layer with a feathered mask
 - `set_edge_decontamination`: remove the backdrop's colour from the edge
 - `add_pixel_layer`: the background fill below the product, or a shadow layer
 - `select_ellipse`, `fill_pixels`, `deselect`, `add_layer_filter`: a soft shadow layer
