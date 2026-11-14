@@ -23,6 +23,11 @@ const CHARACTER_WIDTH: Readonly<Record<FontCategory, number>> = {
 	handwriting: 0.5
 };
 
+/** Average advance of a character as a fraction of the font size, for estimates without a renderer. */
+export function averageCharacterWidth(category: FontCategory = 'sans-serif'): number {
+	return CHARACTER_WIDTH[category];
+}
+
 const round = (n: number, places = 1) => Math.round(n * 10 ** places) / 10 ** places;
 
 /** Estimated characters per line for a container width (px) at a font size, from average glyph widths. */

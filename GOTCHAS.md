@@ -4828,3 +4828,9 @@ All contributors and AI assistants should check this file before starting work a
 - **Issue / Symptom**: `find_unreferenced_<kind>_assets` returned the right counts but its `refs` in another order than the TS recording, and the store's stored keys came out in a different order than the TS `createMemoryStorage` map.
 - **Root Cause**: `collectEditorAssetGarbage` walks `storage.keys(prefix)` in the order the storage lists them; the TS memory storage is a `Map` (insertion order), and the first `MemoryEditorStorage` was a Swift `Dictionary` (no order).
 - **Solution / Workaround**: `MemoryEditorStorage` keeps insertion order (`orderedKeys`), so a conformance host gives the TS order. Storage that lists keys in another order (a folder: `DirectoryEditorStorage` sorts them) gives the same counts with `refs` in its own order, as the TS adapters do among themselves. The paint contract lists the store tools (its host has a store), so a Swift host or test that compares against the contract must pass `store:` to `createPaintDocumentToolProvider`.
+
+### [core/geom] Connector Lengths Are Exact; pathops Measures Their Arcs as Cubics
+
+- **Issue / Symptom**: `bezierPathLength(elbow(...).d)` differs from `elbow(...).length` by a few thousandths of a px per corner, and a dash or trim driven by one drifts slightly from one driven by the other.
+- **Root Cause**: Connectors (`geom/connectors.ts`) return quarter-circle corners with the exact length πr/2. pathops reads the `A` commands in `d` through `arcToCubics`, and a cubic quarter circle is about 0.03 % longer.
+- **Solution / Workaround**: Drive draw-on (`stroke-dasharray`, `pathLength`) from the connector's own `length` when you draw its `d`; use pathops lengths only together with pathops trimming (`trimSegments`) on the same converted path. Don't mix the two in one animation.

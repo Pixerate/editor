@@ -1,12 +1,14 @@
 /**
  * Agent tools for typography: font discovery and fallback stacks, modular scales and hierarchies,
- * fluid sizes, readability and accessibility audits, text segmentation, and a font picker.
+ * fluid sizes, readability and accessibility audits, fitting labels to a width, text segmentation,
+ * and a font picker.
  */
 
 import type { AgentTool, AgentToolProvider } from '../tools/registry.js';
 import type { JsonSchema } from '../tools/schema.js';
 import { checkTypographyAccessibility } from './accessibility.js';
 import { createSystemFontProvider, guessFontCategory } from './catalog.js';
+import { estimatedMeasure, fitText, staggerRows } from './fit.js';
 import { auditTextReadability } from './metrics.js';
 import type { FontPickerModel } from './picker.js';
 import { filterFonts, findFont, type FontProvider } from './registry.js';
@@ -213,6 +215,37 @@ export function createTypographyToolProvider(options: TypographyToolProviderOpti
 		}
 	};
 
+	const fitToWidth: AgentTool = {
+		name: 'fit_text_to_width',
+		title: 'Fit labels to a column width',
+		description:
+			'Finds the largest font size (whole and half px from minSize up to maxSize) at which every word of a set of labels fits a column width without breaking, for rows of tag, axis or category labels. If nothing fits at minSize it tightens tracking down to trackingFloor (em) when given; otherwise it reports fits: false. Widths are estimated from average glyph widths for the font category, so leave a little room; hosts with a renderer measure for real. With positions (each word\'s centre in px along the row) it also says whether one row fits at the result or two staggered rows are needed. Returns { size, letterSpacing (px), fits, word (the widest, which set the limit), estimated: true, rows?: { rows, count, fits } }.',
+		inputSchema: {
+			type: 'object',
+			properties: {
+				words: { type: 'array', items: { type: 'string', maxLength: 200 }, minItems: 1, maxItems: 500, description: 'The labels, each set on one line.' },
+				width: { type: 'number', exclusiveMinimum: 0, description: 'Column width in px each word must fit.' },
+				minSize: { type: 'number', exclusiveMinimum: 0, description: 'Smallest size in px (default 8).' },
+				maxSize: { type: 'number', exclusiveMinimum: 0, description: 'Largest size in px (default 32).' },
+				category: { ...CATEGORY_SCHEMA, description: `${CATEGORY_SCHEMA.description} Used to estimate widths (default sans-serif).` },
+				trackingFloor: { type: 'number', minimum: -0.2, maximum: 0, description: 'Tightest letter spacing in em allowed at minSize, e.g. -0.05 (default: no tightening).' },
+				positions: { type: 'array', items: { type: 'number' }, maxItems: 500, description: 'Optional: each word\'s centre in px along the row, in the words\' order, to check one row against two staggered rows.' },
+				gap: { type: 'number', minimum: 0, description: 'Space in px kept between neighbouring words in a row (default 4). Used with positions.' }
+			},
+			required: ['words', 'width'],
+			additionalProperties: false
+		},
+		annotations: { title: 'Fit labels to a column width', ...READ },
+		handler: (args: Record<string, any>) => {
+			if (args.minSize !== undefined && args.maxSize !== undefined && args.maxSize < args.minSize) throw new Error(`maxSize (${args.maxSize}) is below minSize (${args.minSize}); pass maxSize ≥ minSize.`);
+			if (args.positions !== undefined && args.positions.length !== args.words.length) throw new Error(`positions has ${args.positions.length} entries for ${args.words.length} words; pass one centre per word, in the same order.`);
+			const measure = estimatedMeasure(args.category);
+			const result = fitText(args.words, args.width, { measure, min: args.minSize, max: args.maxSize, tracking: args.trackingFloor !== undefined ? { floor: args.trackingFloor } : undefined });
+			const rows = args.positions ? staggerRows(args.words, args.positions, { measure, size: result.size, letterSpacing: result.letterSpacing, gap: args.gap }) : undefined;
+			return { ...result, estimated: true, ...(rows ? { rows } : {}) };
+		}
+	};
+
 	const checkAccessibility: AgentTool = {
 		name: 'check_typography_accessibility',
 		title: 'Check typography accessibility',
@@ -292,7 +325,7 @@ export function createTypographyToolProvider(options: TypographyToolProviderOpti
 		description:
 			'List and load fonts, build fallback stacks, generate type scales and hierarchies, compute fluid sizes, audit readability and type-aware contrast, and split text for animation.',
 		skill: 'pixerate-typography',
-		tools: [listFonts, resolveFontStack, suggestTypeScale, generateHierarchy, fluidSize, auditReadability, checkAccessibility, segment, ...(fonts.loadFont ? [loadFont] : [])]
+		tools: [listFonts, resolveFontStack, suggestTypeScale, generateHierarchy, fluidSize, auditReadability, fitToWidth, checkAccessibility, segment, ...(fonts.loadFont ? [loadFont] : [])]
 	};
 }
 

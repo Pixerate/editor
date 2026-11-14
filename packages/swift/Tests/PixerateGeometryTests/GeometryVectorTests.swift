@@ -1,5 +1,6 @@
 import Foundation
 import PixerateCore
+import PixerateRaster
 import XCTest
 @testable import PixerateGeometry
 
@@ -353,6 +354,99 @@ final class GeometryVectorTests: XCTestCase {
             }
         }
     }
+
+    // MARK: Connectors, helices and fitting text (#811, #813)
+
+    private func vec2(_ v: JSONValue) -> Vec2 { Vec2(x: v.a[0].n, y: v.a[1].n) }
+    private func encV(_ p: Vec2) -> JSONValue { [num(p.x), num(p.y)] }
+    private func encConnector(_ c: Connector, level: Double? = nil) -> JSONValue {
+        var o: JSONObject = [
+            "d": .string(c.d), "length": num(c.length),
+            "segments": .array(c.segments.map { s in
+                s.kind == .line
+                    ? ["kind": "line", "from": encV(s.from), "to": encV(s.to), "length": num(s.length)]
+                    : ["kind": "arc", "from": encV(s.from), "to": encV(s.to), "center": encV(s.center!), "radius": num(s.radius), "sweep": num(Double(s.sweep)), "length": num(s.length)]
+            })
+        ]
+        if let level { o["level"] = num(level) }
+        return .object(o)
+    }
+    private func encRuns(_ runs: [HelixRun]) -> JSONValue {
+        .array(runs.map { ["front": .bool($0.front), "points": .array($0.points.map(encV)), "d": .string($0.d), "from": num($0.from), "to": num($0.to), "length": num($0.length)] })
+    }
+    private func fixedMeasure(_ advance: Double) -> MeasureText {
+        { word, size, spacing in Double(word.count) * size * advance + max(0, Double(word.count) - 1) * spacing }
+    }
+
+    func testConnectors() {
+        run("connectors") { fn, e in
+            let o = e["options"] ?? .null
+            switch fn {
+            case "roundedPolyline":
+                return encConnector(roundedPolyline(e.get("points").a.map(vec2), e.get("radius").n))
+            case "elbow":
+                let el = elbow(vec2(e.get("from")), vec2(e.get("to")), level: o["level"]?.numberValue, radius: o["radius"]?.numberValue ?? 8,
+                               axis: o["axis"]?.stringValue.flatMap(ElbowAxis.init) ?? .vertical)
+                return encConnector(el.connector, level: el.level)
+            case "fanElbows":
+                let fan = fanElbows(vec2(e.get("root")), e.get("targets").a.map(vec2), gap: o["gap"]?.numberValue ?? 0, step: o["step"]?.numberValue ?? 12,
+                                    radius: o["radius"]?.numberValue ?? 8, lead: o["lead"]?.numberValue ?? 16, axis: o["axis"]?.stringValue.flatMap(ElbowAxis.init) ?? .vertical)
+                return ["elbows": .array(fan.elbows.map { encConnector($0.connector, level: $0.level) }), "levels": nums(fan.levels),
+                        "starts": .array(fan.starts.map(encV)), "step": num(fan.step), "radius": num(fan.radius)]
+            default: return unknown(fn)
+            }
+        }
+    }
+
+    func testHelix() {
+        run("helix") { fn, e in
+            switch fn {
+            case "helix":
+                let o = e.get("options")
+                let axis = e.get("axis").a
+                let h = helix((vec2(axis[0]), vec2(axis[1])), amplitude: o["amplitude"]?.numberValue ?? 12, turns: o["turns"]?.numberValue ?? 2,
+                              phase: o["phase"]?.numberValue ?? 0, envelope: o["envelope"]?.stringValue.flatMap { HelixEnvelope(name: $0) } ?? .none,
+                              samples: o["samples"]?.numberValue)
+                return ["points": .array(h.points.map(encV)), "depth": nums(h.depth), "d": .string(h.d), "length": num(h.length), "runs": encRuns(splitByDepth(h.points, h.depth))]
+            case "splitByDepth":
+                return encRuns(splitByDepth(e.get("points").a.map(vec2), e.get("depth").a.map(\.n)))
+            default: return unknown(fn)
+            }
+        }
+    }
+
+    func testFitText() {
+        run("fitText") { fn, e in
+            let o = e["options"] ?? .null
+            let measure = fixedMeasure(e.get("advance").n)
+            switch fn {
+            case "fitText":
+                let tracking = o["tracking"].map { (floor: $0.get("floor").n, step: $0["step"]?.numberValue ?? 0.01) }
+                let r = try fitText(e.get("words").a.map(\.s), e.get("width").n, measure: measure, min: o["min"]?.numberValue ?? 8,
+                                    max: o["max"]?.numberValue ?? 32, step: o["step"]?.numberValue ?? 0.5, tracking: tracking)
+                return ["size": num(r.size), "letterSpacing": num(r.letterSpacing), "fits": .bool(r.fits), "word": r.word.map { .string($0) } ?? .null]
+            case "staggerRows":
+                let r = staggerRows(e.get("words").a.map(\.s), e.get("positions").a.map(\.n), measure: measure, size: o.get("size").n,
+                                    letterSpacing: o["letterSpacing"]?.numberValue ?? 0, gap: o["gap"]?.numberValue ?? 4)
+                return ["rows": .array(r.rows.map { num(Double($0)) }), "count": num(Double(r.count)), "fits": .bool(r.fits)]
+            default: return unknown(fn)
+            }
+        }
+    }
+
+    #if canImport(CoreText)
+    func testCoreTextMeasureFits() throws {
+        let measure = coreTextMeasure(fontName: "Helvetica")
+        let wide = measure("Category", 20, 0)
+        XCTAssertGreaterThan(wide, measure("Category", 10, 0))
+        XCTAssertLessThan(measure("Category", 20, -1), wide)
+        let r = try fitText(["Tag", "Category"], 72, measure: measure)
+        XCTAssertTrue(r.fits)
+        XCTAssertEqual(r.word, "Category")
+        XCTAssertLessThanOrEqual(measure("Category", r.size, 0), 72)
+        XCTAssertGreaterThan(measure("Category", r.size + 0.5, 0), 72)
+    }
+    #endif
 
     // MARK: Planar map and Pathfinder
 

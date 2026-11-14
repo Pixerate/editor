@@ -9,6 +9,7 @@ export * from './weight.js';
 export * from './scale.js';
 export * from './segment.js';
 export * from './metrics.js';
+export * from './fit.js';
 export * from './registry.js';
 export * from './catalog.js';
 export * from './stylesheet.js';

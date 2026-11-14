@@ -35,6 +35,7 @@ describe('createTypographyToolProvider', () => {
 				'typography__audit_text_readability',
 				'typography__check_typography_accessibility',
 				'typography__compute_fluid_type_size',
+				'typography__fit_text_to_width',
 				'typography__generate_type_hierarchy',
 				'typography__list_fonts',
 				'typography__load_font',
@@ -119,6 +120,23 @@ describe('createTypographyToolProvider', () => {
 		expect(bad.res.isError).toBe(true);
 		expect(bad.text).toMatch(/maxViewport/);
 		expect((await call(r, 'compute_fluid_type_size', { minSize: 16 })).res.isError).toBe(true);
+	});
+
+	it('fit_text_to_width finds the size, tightens tracking and suggests staggered rows', async () => {
+		const r = registry();
+		// Sans-serif estimate: 0.5 em per character, so "category" (8) at 18 px is 72 px.
+		const { data } = await call(r, 'fit_text_to_width', { words: ['tag', 'category'], width: 72 });
+		expect(data).toEqual({ size: 18, letterSpacing: 0, fits: true, word: 'category', estimated: true });
+		const tight = await call(r, 'fit_text_to_width', { words: ['category'], width: 38, minSize: 10, trackingFloor: -0.05 });
+		expect(tight.data).toMatchObject({ size: 10, fits: true, word: 'category' });
+		expect(tight.data.letterSpacing).toBeCloseTo(-0.3, 12);
+		const rows = await call(r, 'fit_text_to_width', { words: ['alpha', 'gamma', 'beta'], width: 40, maxSize: 12, positions: [0, 50, 25] });
+		expect(rows.data.rows).toEqual({ rows: [0, 0, 1], count: 2, fits: true });
+		const bad = await call(r, 'fit_text_to_width', { words: ['a', 'b'], width: 40, positions: [0] });
+		expect(bad.res.isError).toBe(true);
+		expect(bad.text).toContain('positions has 1 entries for 2 words');
+		const sizes = await call(r, 'fit_text_to_width', { words: ['a'], width: 40, minSize: 20, maxSize: 10 });
+		expect(sizes.text).toContain('maxSize (10) is below minSize (20)');
 	});
 
 	it('audit_text_readability audits and requires fontSize with width', async () => {
