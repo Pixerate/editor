@@ -2436,6 +2436,9 @@ public final class PaintEditorController {
         let d = savedDocumentState()
         // Fields this editor does not read go first, as they were read; everything it writes replaces them.
         var out: JSONObject = extensions
+        // The marks are complete next to the saved log, unless a layer of an opened document is still
+        // unknown (an extension in TS, so it comes before the header).
+        out["unloggedComplete"] = savesStrokeLog(d, strokeLog) && openedGaps(d).isEmpty ? .bool(true) : nil
         let header: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),
             "width": .number(Double(d.canvas.width)), "height": .number(Double(d.canvas.height)), "dpi": .number(d.canvas.dpi),
@@ -2475,8 +2478,6 @@ public final class PaintEditorController {
         } else {
             out["unlogged"] = nil
         }
-        // The marks are complete next to the saved log, unless a layer of an opened document is still unknown.
-        out["unloggedComplete"] = savesStrokeLog(d, strokeLog) && openedGaps(d).isEmpty ? .bool(true) : nil
         // The image sources the strokes draw with, bytes included, so replays and repaints match anywhere.
         var sourceIds: [String] = []
         for st in d.strokes + (d.liveStrokes?.values.flatMap { $0 } ?? []) { for id in engineBrushSourceIds(st.brush) where !sourceIds.contains(id) { sourceIds.append(id) } }
