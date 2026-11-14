@@ -3,6 +3,7 @@ import { Boxes, Play } from "lucide-react";
 import { PAGE_KIT, PAGE_KIT_GUIDE, PAGE_KIT_HASH, PAGE_KIT_VERSION } from "@pixerate/editor/page-kit";
 import { drawPieces, type DrawPieces } from "@pixerate/editor/animation";
 import { useLinkFocus } from "@pixerate/editor-react";
+import { uiComponents, type ChartUiComponent } from "@pixerate/editor/chart";
 import { EditorPage, EditorPanel } from "./EditorPage";
 
 /**
@@ -259,6 +260,77 @@ function LinkFocusView() {
   );
 }
 
+/** Editor's chart types and data visuals as UI components (#819): what a component library syncs. */
+function UiComponentView({ component, dark }: { component: ChartUiComponent; dark: boolean }) {
+  const interactive = Boolean(component.interaction);
+  const options = useMemo(() => (component.interaction ? component.interaction(component.descriptor.example) : { marks: [], links: {} }), [component]);
+  const focus = useLinkFocus({ ...options, dim: 0.2 });
+  const [progress, setProgress] = useState(1);
+  const size = component.id === "sparkline" ? { width: 160, height: 32 } : component.id === "donut-chart" ? { width: 360, height: 260 } : { width: 560, height: component.id === "weave" ? 280 : 220 };
+  const svg = component.render(component.descriptor.example, { ...size, theme: dark ? "dark" : "light", progress: interactive ? progress : undefined, focus: interactive ? focus.state.focus : undefined, dim: 0.2 });
+  const play = () => {
+    const start = performance.now();
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / 1800);
+      setProgress(p);
+      if (p < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+  // Marks carry data-link-focus; pointer events on them focus their key.
+  const onPointerOver = (e: React.PointerEvent) => {
+    const key = (e.target as Element).closest("[data-link-focus]")?.getAttribute("data-link-focus");
+    if (key && !key.includes(" ")) focus.model.focus(key);
+  };
+  return (
+    <figure className="space-y-2 rounded-lg border border-slate-800 p-3">
+      <figcaption className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+        <span className="font-medium text-slate-100">{component.title}</span>
+        <code className="text-xs text-slate-500">{component.descriptor.implements} · {component.descriptor.contentHash}</code>
+        {interactive && (
+          <>
+            <button type="button" className="ml-auto inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1 text-xs hover:bg-slate-700" onClick={play}>
+              <Play className="h-3 w-3" aria-hidden /> Draw on
+            </button>
+            <input type="range" min={0} max={1} step={0.01} value={progress} aria-label={`${component.title} progress`} onChange={(e) => setProgress(Number(e.currentTarget.value))} />
+          </>
+        )}
+      </figcaption>
+      <div
+        {...(interactive ? focus.rootProps : {})}
+        tabIndex={interactive ? 0 : undefined}
+        aria-label={interactive ? `${component.title}: arrow keys move the focus` : undefined}
+        onPointerOver={interactive ? onPointerOver : undefined}
+        className="max-w-full overflow-hidden rounded outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
+        dangerouslySetInnerHTML={{ __html: svg }}
+      />
+      {interactive && <p aria-live="polite" className="text-xs text-slate-400">{focus.description}</p>}
+      <p className="text-xs text-slate-500">{component.description}</p>
+    </figure>
+  );
+}
+
+function UiComponentsView() {
+  const components = useMemo(() => uiComponents(), []);
+  const [dark, setDark] = useState(true);
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 text-sm text-slate-300">
+        <input type="checkbox" checked={dark} onChange={(e) => setDark(e.currentTarget.checked)} /> Dark
+      </label>
+      <p className="text-sm text-slate-400">
+        <code>uiComponents()</code> from <code>@pixerate/editor/chart</code>: each type with a <code>UiDescriptor</code> and a <code>render</code> a component library syncs. The data visuals draw on
+        frame by frame and light linked marks on hover or with the arrow keys.
+      </p>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {components.map((c) => (
+          <UiComponentView key={c.id} component={c} dark={dark} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function PageKitTab() {
   return (
     <EditorPage
@@ -269,6 +341,7 @@ export function PageKitTab() {
       views={[
         { id: "demo", label: "Sandboxed page", render: () => <PageKitView /> },
         { id: "focus", label: "Linked focus", render: () => <LinkFocusView /> },
+        { id: "components", label: "UI components", render: () => <UiComponentsView /> },
       ]}
     />
   );

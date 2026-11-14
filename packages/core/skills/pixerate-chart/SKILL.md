@@ -307,10 +307,14 @@ several charts may register them with another prefix.
 ## Charts as UI components
 
 Hosts that build pages from a component library can take a chart type as a component instead
-of an editable chart: `uiComponents()` (from `@pixerate/editor/chart`) lists `sparkline` and
-`bar-chart` with a `UiDescriptor` (data JSON Schema, colour roles, accessibility, sizing,
+of an editable chart: `uiComponents()` (from `@pixerate/editor/chart`) lists `sparkline`,
+`bar-chart`, `line-chart` and `donut-chart`, and the data visuals `lineage` (a root fanned out to
+a row), `braid` (strands twisted into a root, weighted by value) and `weave` (items and the tags
+they share), each with a `UiDescriptor` (data JSON Schema, colour roles, accessibility, sizing,
 example, `contentHash`) and a `render(data, { width, height, theme, colors })` that returns
-accessible SVG. There is no agent tool for it: when a page only needs a fixed picture of simple
+accessible SVG. The data visuals also take `progress` (0–1, drawn on frame by frame, 1 at rest)
+and `focus` (a key from `interaction(data)`, whose options drive `createLinkFocus`), so a host
+animates and answers hover and arrow keys by drawing again. There is no agent tool for it: when a page only needs a fixed picture of simple
 data in the page's own colours, the host's component does the job; reach for the chart tools when
 the user wants to edit, annotate or restyle the chart itself. Bar chart roles: `accent` is the first
 series, `surface` the background, `ink` the title and legend, `ink-muted` ticks and axes, `border`
