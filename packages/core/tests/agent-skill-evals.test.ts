@@ -289,3 +289,44 @@ describe.each(evals)('%s', (_, ev) => {
 		// Wet paint and compositing run real simulations, slower on CI runners.
 	}, 30_000);
 });
+
+describe('pixerate-image-product-photo grounding-shadow', () => {
+	// The skill allows the shadow as a drop-shadow effect (the eval's `solution`) or as its own
+	// layer below the product with a live blur. The check must accept both and nothing looser.
+	const ev = evals.find(([path]) => path === 'pixerate-image-product-photo/evals/grounding-shadow.json')![1];
+	const active = { $read: 'list_layers', path: 'activeLayerId' };
+	const product = ev.solution.slice(0, 2); // magic_wand, layer_via_copy
+	const shadowLayer = (placement: 'belowId' | 'aboveId') => [
+		...product,
+		{ tool: 'add_pixel_layer', args: { [placement]: active, name: 'Shadow' } },
+		{ tool: 'select_ellipse', args: { x: 38, y: 60, width: 44, height: 10 } },
+		{ tool: 'fill_pixels', args: { color: '#000000', opacity: 0.4 } },
+		{ tool: 'deselect', args: {} }
+	];
+	const blur = { tool: 'add_layer_filter', args: { layerId: active, kind: 'blur', radius: 3 } };
+	const failedAfter = async (steps: Array<{ tool: string; args?: Record<string, unknown> }>) => {
+		const registry = await build(ev.fixture);
+		for (const step of steps) await call(registry, step);
+		// Failures read `<why> (<what was found>)`; keep the why.
+		return (await failedChecks(registry, ev.checks)).map((f) => ev.checks.find((c) => f.startsWith(`${c.why} (`))?.why ?? f);
+	};
+
+	it('accepts a blurred shadow layer below the product', async () => {
+		expect(await failedAfter([...shadowLayer('belowId'), blur])).toEqual([]);
+	});
+
+	it('accepts a shadow layer made a smart object with a blur smart filter', async () => {
+		const steps = [...shadowLayer('belowId'), { tool: 'convert_to_smart_object', args: {} }, { tool: 'add_smart_filter', args: { layerId: active, kind: 'blur', radius: 3 } }];
+		expect(await failedAfter(steps)).toEqual([]);
+	});
+
+	it('rejects a shadow layer above the product, or one without a live blur', async () => {
+		const shadowCheck = ev.checks[1].why;
+		expect(await failedAfter([...shadowLayer('aboveId'), blur])).toEqual([shadowCheck]);
+		expect(await failedAfter(shadowLayer('belowId'))).toEqual([shadowCheck]);
+	});
+
+	it('rejects a product left without any shadow', async () => {
+		expect(await failedAfter(product)).toEqual([ev.checks[1].why, ev.checks[2].why]);
+	});
+});
