@@ -124,7 +124,13 @@ final class TextMechanicsTests: XCTestCase {
     }
 
     func testTheSystemTaggerReadsContractions() {
-        // NLTagger's own reading, as Swash uses it: "id" before "like" is "I'd"; "the id field" stays
+        // The system tagger tags every word with a class
+        let words = TextMechanics.naturalLanguageTagger("I tried but it failed")
+        XCTAssertEqual(words.map(\.range.length), [1, 5, 3, 2, 6])
+        XCTAssertTrue(words.contains { $0.tag == .verb })
+        #if os(macOS)
+        // macOS's model, as Swash uses it: "id" before "like" is "I'd"; "the id field" stays. (The
+        // iOS model reads "id like" differently, so the scenarios use a fixed lexicon instead.)
         let typed = "for now id like "
         let edits = TextMechanics.edits(at: (typed as NSString).length - 1, in: typed, document: MarkdownDocument.parse(typed),
                                         options: TextMechanicsOptions(tagger: TextMechanics.naturalLanguageTagger))
@@ -133,5 +139,6 @@ final class TextMechanicsTests: XCTestCase {
         let kept = TextMechanics.edits(at: (noun as NSString).length - 1, in: noun, document: MarkdownDocument.parse(noun),
                                        options: TextMechanicsOptions(tagger: TextMechanics.naturalLanguageTagger))
         XCTAssertFalse(kept.contains { $0.replacement == "I'd" })
+        #endif
     }
 }
