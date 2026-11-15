@@ -79,7 +79,7 @@ let package = Package(
         .target(name: "PixerateConformance", dependencies: ["PixerateCore", "PixerateContracts"], path: "packages/swift/Sources/PixerateConformance", swiftSettings: settings),
         .testTarget(
             name: "PixerateCoreTests",
-            dependencies: ["PixerateCore"],
+            dependencies: ["PixerateCore", "PixerateContracts"],
             path: "packages/swift/Tests/PixerateCoreTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings

@@ -6,6 +6,9 @@ import type { Slice } from "@tiptap/pm/model";
 import type { Step } from "@tiptap/pm/transform";
 import { plainTextToSlice } from "../serializers/plain-text";
 import { TRACK_CHANGES_SKIP_META } from "./track-changes";
+import { planAgentTyping, type AgentTypingOptions } from "../tools/agent-typing.js";
+
+export type { AgentTypingOptions } from "../tools/agent-typing.js";
 
 /**
  * Inline agent carets: a coloured caret with a name tag at a document position, the agent's
@@ -249,15 +252,6 @@ export function replaceWithTextTransaction(state: EditorState, from: number, to:
       : state.tr.delete(from, to);
 }
 
-export interface AgentTypingOptions {
-  /** Typing speed in characters per second (default 60). */
-  charsPerSecond?: number;
-  /** Longest a single edit takes to type, in ms; longer text types faster (default 1500). */
-  maxDurationMs?: number;
-  /** How long a replaced range stays highlighted before typing starts, in ms (default 250). */
-  selectMs?: number;
-}
-
 export interface TypeAgentTextOptions extends AgentTypingOptions {
   from: number;
   to: number;
@@ -286,8 +280,6 @@ const cannotAnimate = () => typeof document === "undefined" || document.hidden =
  */
 export async function typeAgentText(editor: Editor, options: TypeAgentTextOptions): Promise<{ from: number; to: number }> {
   const { from, to, text, caret, signal } = options;
-  const cps = options.charsPerSecond ?? 60;
-  const chars = Array.from(text);
   ensureAgentCaret(editor);
   const show = (tr: Transaction, anchor: number, head = anchor) =>
     tr.setMeta(agentCaretPluginKey, { set: { ...caret, from: anchor, to: head } } satisfies AgentCaretMeta);
@@ -302,13 +294,11 @@ export async function typeAgentText(editor: Editor, options: TypeAgentTextOption
     return { from: insertedFrom, to: insertedTo };
   };
 
-  const animate = Number.isFinite(cps) && cps > 0 && chars.length > 0 && (options.wait || !cannotAnimate());
-  if (!animate) return commit(from, to);
+  // The timing comes from the shared planner, so the Swift port plays an edit the same way (#878).
+  const plan = planAgentTyping({ from, to, text }, { ...options, animate: Boolean(options.wait) || !cannotAnimate() });
+  if (plan.length === 1) return commit(from, to);
 
   const wait = options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-  const duration = Math.min(options.maxDurationMs ?? 1500, (chars.length / cps) * 1000);
-  const frameMs = 1000 / 30;
-  const frames = Math.max(1, Math.min(chars.length, Math.round(duration / frameMs)));
   const original: Slice = editor.state.doc.slice(from, to);
   // Inverses of the frames' steps, newest last, to roll them back exactly.
   const inverses: Step[] = [];
@@ -329,19 +319,22 @@ export async function typeAgentText(editor: Editor, options: TypeAgentTextOption
   };
 
   try {
-    if (from < to) await wait(options.selectMs ?? 250);
-    for (let i = 1; i <= frames; i++) {
+    for (const step of plan) {
+      if (step.type === "select") {
+        await wait(step.ms);
+        continue;
+      }
+      if (step.type !== "type") continue;
       if (signal?.aborted) throw new Error("Typing was cancelled; the document is unchanged.");
       if (editor.isDestroyed) throw new Error("The editor was closed while the agent was typing.");
       const s = span();
-      const prefix = chars.slice(0, Math.round((chars.length * i) / frames)).join("");
-      const tr = replaceWithTextTransaction(editor.state, s.from, s.to, prefix);
+      const tr = replaceWithTextTransaction(editor.state, s.from, s.to, step.text);
       tr.steps.forEach((step, k) => inverses.push(step.invert(tr.docs[k])));
       const end = tr.mapping.map(s.to, 1);
       tr.setMeta(agentCaretPluginKey, { span: { id: caret.id, from: Math.min(tr.mapping.map(s.from, -1), end), to: end } } satisfies AgentCaretMeta);
       editor.view.dispatch(NO_HISTORY(tr));
       editor.view.dispatch(NO_HISTORY(show(editor.state.tr, end)));
-      if (i < frames) await wait(duration / frames);
+      if (step.ms > 0) await wait(step.ms);
     }
   } catch (error) {
     if (!editor.isDestroyed) rollback();

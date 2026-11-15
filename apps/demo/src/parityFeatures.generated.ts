@@ -2607,10 +2607,10 @@ export const PARITY_AREAS: ParityArea[] = [
       },
       {
         "feature": "Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled; `presence` option, on by default)",
-        "core": "`AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })`",
+        "core": "`AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })`; the timing from `planAgentTyping` (`/tools`)",
         "react": "Via core & `useAgentToolProvider`",
         "svelte": "Via core & `useAgentToolProvider`",
-        "swift": "Planned (#533)"
+        "swift": "Headless (#878): `planAgentTyping`, `AgentTextDirector` over an `AgentTextTarget` (frames as previews, one undo step, stops if the person edits the range) & `AgentCaretStore`; the host draws the carets"
       },
       {
         "feature": "Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot)",
