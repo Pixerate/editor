@@ -1,0 +1,38 @@
+[
+  {
+    "text": "so i dont ",
+    "boundary": 9,
+    "expect": {
+      "from": 5,
+      "to": 9
+    }
+  },
+  {
+    "text": "hello there\n",
+    "boundary": 11,
+    "expect": {
+      "from": 0,
+      "to": 11
+    }
+  },
+  {
+    "text": "see `code` ",
+    "boundary": 10,
+    "expect": null
+  },
+  {
+    "text": "https://x.y/dont ",
+    "boundary": 16,
+    "expect": null
+  },
+  {
+    "text": "\n",
+    "boundary": 0,
+    "expect": null
+  },
+  {
+    "text": "a\n\n",
+    "boundary": 2,
+    "expect": null
+  }
+]

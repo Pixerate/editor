@@ -105,7 +105,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixerateMarkdownTests",
-            dependencies: ["PixerateMarkdown"],
+            dependencies: ["PixerateMarkdown", "PixerateContracts"],
             path: "packages/swift/Tests/PixerateMarkdownTests",
             resources: [.copy("Fixtures")],
             swiftSettings: settings

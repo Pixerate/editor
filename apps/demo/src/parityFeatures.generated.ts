@@ -2620,6 +2620,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Headless (#878): `planAgentTyping`, `AgentTextDirector` over an `AgentTextTarget` (frames as previews, one undo step, stops if the person edits the range) & `AgentCaretStore` with each caret's stage; `AgentTextTreatments.plans` from a `TextTreatmentProvider` or `BuiltInTextTreatment`, drawn by the host's `TextTreatmentRenderer` (#887)"
       },
       {
+        "feature": "Text Mechanics Checks (#892: capital I, missing apostrophes with `its` / `id` / `ill` decided by a word-class tagger, sentence capitals, a full stop or question mark at the end of a finished line, `OK`, a comma before a \"but\" that starts a clause, and spelling from the host's checker; per word boundary as you type or over a whole text; never in code, math, HTML, tables, links' addresses or URLs; a `chat` profile for Slack; `check_text_mechanics` / `fix_text_mechanics` agent tools)",
+        "core": "`textMechanicsEditsAt`, `textMechanicsFindings`, `textMechanicsCheckedRange` over `markdownProseMap` & `createTextMechanicsToolProvider` (`/tools`)",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "Ported (#892) in PixerateMarkdown: `TextMechanics.edits(at:in:document:options:)`, `findings`, `checkedRange` over `MarkdownDocument`, with `naturalLanguageTagger` (Apple's NaturalLanguage tagger); reproduces every scenario in `domains/text-mechanics`. Agent tools planned (#609)"
+      },
+      {
         "feature": "Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot)",
         "core": "`createEditorMcpToolProvider` & `validateAgentCommand`",
         "react": "Via core & `useAgentToolProvider`",

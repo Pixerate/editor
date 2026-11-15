@@ -1,0 +1,96 @@
+{
+  "domain": "text-mechanics",
+  "formatVersion": 1,
+  "description": "Text mechanics checks (punctuation, casing, apostrophes, spelling) as typing scenarios over Markdown source, with a fixed lexicon in place of a tagger.",
+  "checks": [
+    {
+      "id": "pronoun-i",
+      "title": "Capital I"
+    },
+    {
+      "id": "contractions",
+      "title": "Apostrophes"
+    },
+    {
+      "id": "sentence-case",
+      "title": "Capitals at the start of sentences"
+    },
+    {
+      "id": "terminal-punctuation",
+      "title": "Full stops and question marks"
+    },
+    {
+      "id": "capitals",
+      "title": "Capitals in OK"
+    },
+    {
+      "id": "clause-comma",
+      "title": "Commas before “but”"
+    },
+    {
+      "id": "spelling",
+      "title": "Spelling"
+    }
+  ],
+  "lexicon": {
+    "a": "determiner",
+    "the": "determiner",
+    "this": "determiner",
+    "that": "determiner",
+    "i": "pronoun",
+    "it": "pronoun",
+    "me": "pronoun",
+    "we": "pronoun",
+    "you": "pronoun",
+    "nothing": "pronoun",
+    "is": "verb",
+    "was": "verb",
+    "be": "verb",
+    "have": "verb",
+    "tried": "verb",
+    "failed": "verb",
+    "works": "verb",
+    "going": "verb",
+    "feel": "verb",
+    "know": "verb",
+    "think": "verb",
+    "see": "verb",
+    "really": "adverb",
+    "not": "adverb",
+    "now": "adverb",
+    "there": "adverb",
+    "soon": "adverb",
+    "well": "adverb",
+    "for": "preposition",
+    "about": "preposition",
+    "in": "preposition",
+    "to": "preposition",
+    "but": "conjunction",
+    "and": "conjunction",
+    "ok": "adjective",
+    "good": "adjective",
+    "fine": "adjective",
+    "cheap": "adjective",
+    "red": "adjective",
+    "blue": "adjective",
+    "best": "adjective",
+    "slow": "adjective",
+    "own": "adjective",
+    "empty": "adjective",
+    "tail": "noun",
+    "colour": "noun",
+    "day": "noun",
+    "today": "noun",
+    "field": "noun",
+    "time": "noun",
+    "dog": "noun",
+    "like": "verb",
+    "id": "verb",
+    "ill": "pronoun"
+  },
+  "files": [
+    "typing.json",
+    "checked-ranges.json",
+    "findings.json"
+  ]
+}
