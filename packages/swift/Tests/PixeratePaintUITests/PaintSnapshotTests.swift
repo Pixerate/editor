@@ -71,5 +71,17 @@ final class PaintSnapshotTests: XCTestCase {
         let reddish = stride(from: 0, to: px.count, by: 4).contains { px[$0] > 150 && px[$0 + 2] < 80 && px[$0 + 1] < 80 }
         XCTAssertTrue(blueish && reddish, "both strokes are drawn")
     }
+
+    /// In a window, AppKit sets the root layer's `isGeometryFlipped` from the view's `isFlipped`;
+    /// the tiles are laid out y-down, so it must stay flipped or tile rows stack in reverse (#896).
+    func testTilesViewStaysFlippedInAWindow() {
+        let tilesView = PaintTilesLayerView()
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView?.addSubview(tilesView)
+        tilesView.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        window.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertTrue(tilesView.isFlipped)
+        XCTAssertEqual(tilesView.layer?.isGeometryFlipped, true)
+    }
 }
 #endif

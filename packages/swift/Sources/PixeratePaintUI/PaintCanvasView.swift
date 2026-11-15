@@ -254,6 +254,9 @@ final class PaintTilesLayerView: PaintPlatformView {
 
     #if canImport(AppKit) && !targetEnvironment(macCatalyst)
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    /// Flipped, so the layer's geometry stays y-down on screen: AppKit sets a view's root layer
+    /// `isGeometryFlipped` to match `isFlipped`, overriding the `true` set in `init` (#896).
+    override var isFlipped: Bool { true }
     #endif
 
     /// The tile layers in drawing order, for tests.

@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint-ui] AppKit Resets a View's Root Layer `isGeometryFlipped` to Match `isFlipped` (#896)
+
+- **Issue / Symptom**: On macOS, `PaintCanvasView` drew content that spans several tile rows (a placed picture, long strokes) as horizontal 256 px bands, each showing another part of the painting. iOS was unaffected, and exports, `compositeTiles` and `PaintCanvasPresenter` were all correct.
+- **Root Cause**: `PaintTilesLayerView` set `root.isGeometryFlipped = true` in `init`, but once the view is in a window AppKit sets a view's layer `isGeometryFlipped` to match the view's `isFlipped` (false by default). The tiles were then laid out y-up under a y-down view transform, so the tile rows stacked in reverse order while each tile's image stayed upright. Rendering the layer with `render(in:)` outside a window doesn't show it.
+- **Solution / Workaround**: Override `isFlipped` to return `true` on the AppKit `PaintTilesLayerView`. Don't flip each tile layer instead: that turns the whole painting upside down on screen. Test it with the view hosted in an `NSWindow` (`testTilesViewStaysFlippedInAWindow`).
+
 ### [core/rich-text] Text Treatments Draw Behind the Text Only Where the Editor's Background Is Clear (#887)
 
 - **Issue / Symptom**: With `setAgentTextTreatments`, a treatment's `behind` layers (the selection tint, the checking sweep, the landed tint) don't show, while its caret and name tag (`above`) do.
