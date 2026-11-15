@@ -25,6 +25,15 @@ public enum TextMechanicsCheck: String, CaseIterable, Codable, Sendable {
     case clauseComma = "clause-comma"
     /// Misspellings, as the host's spell checker corrects them.
     case spelling
+    /// Straight quotes and apostrophes become curly in prose. Off unless turned on.
+    case curlyQuotes = "curly-quotes"
+    /// `--` becomes an en dash and `---` an em dash between words in prose. Off unless turned on.
+    case dashes
+    /// `...` becomes an ellipsis in prose. Off unless turned on.
+    case ellipses
+
+    /// Typography changes what a Markdown source holds, so it runs only when the host turns it on.
+    public var isOffByDefault: Bool { self == .curlyQuotes || self == .dashes || self == .ellipses }
 
     public var title: String {
         switch self {
@@ -35,6 +44,9 @@ public enum TextMechanicsCheck: String, CaseIterable, Codable, Sendable {
         case .capitals: return "Capitals in OK"
         case .clauseComma: return "Commas before “but”"
         case .spelling: return "Spelling"
+        case .curlyQuotes: return "Curly quotes"
+        case .dashes: return "Dashes"
+        case .ellipses: return "Ellipses"
         }
     }
 }
@@ -58,14 +70,14 @@ public struct TextMechanicsOptions {
     }
 
     public var profile: Profile
-    /// Which checks run (default: all; `spelling` only with `spelling`).
+    /// Which checks run (default: all but the typography checks; `spelling` only with `spelling`).
     public var enabled: (TextMechanicsCheck) -> Bool
     /// For a newline boundary: whether Enter was pressed at the end of its line. Nil: what follows the newline decides.
     public var enterEndedLine: Bool?
     public var spelling: TextMechanicsSpelling?
     public var tagger: TextMechanicsTagger?
 
-    public init(profile: Profile = .prose, enabled: @escaping (TextMechanicsCheck) -> Bool = { _ in true }, enterEndedLine: Bool? = nil,
+    public init(profile: Profile = .prose, enabled: @escaping (TextMechanicsCheck) -> Bool = { !$0.isOffByDefault }, enterEndedLine: Bool? = nil,
                 spelling: TextMechanicsSpelling? = nil, tagger: TextMechanicsTagger? = nil) {
         self.profile = profile
         self.enabled = enabled
@@ -103,13 +115,17 @@ public enum TextMechanics {
         guard isBoundary(typed) || typed == newline else { return [] }
         let chat = options.profile == .chat
         let on = { (check: TextMechanicsCheck) -> Bool in
-            check == .spelling && options.spelling == nil ? false : options.enabled(check)
+            if check == .spelling, options.spelling == nil { return false }
+            if chat, check.isOffByDefault { return false }
+            return options.enabled(check)
         }
 
         var start = boundary
         while start > 0, isWordCharacter(ns.character(at: start - 1)) { start -= 1 }
         let wordRange = NSRange(location: start, length: boundary - start)
-        guard wordRange.length > 0, isProse(wordRange, ns: ns, document: document), !insideUnclosedSpan(before: start, ns: ns) else { return [] }
+        guard wordRange.length > 0, isProse(wordRange, ns: ns, document: document, chat: chat), !insideUnclosedSpan(before: start, ns: ns) else {
+            return typography(at: boundary, ns: ns, document: document, skip: nil, on: on)
+        }
         let word = ns.substring(with: wordRange)
         var edits: [TextMechanicsEdit] = []
 
@@ -119,8 +135,11 @@ public enum TextMechanics {
             replacement = fixed.word
             checks.append(fixed.check)
         } else if on(.spelling), let spelling = options.spelling, (word as NSString).length > 2,
+                  !(chat && chatWords.contains(word.lowercased())),
                   !word.contains(where: { $0.isUppercase }) || word.first?.isUppercase == true && !word.dropFirst().contains(where: { $0.isUppercase }),
-                  let corrected = spelling(word, wordRange, text), corrected != word, !corrected.contains(" ") {
+                  let corrected = spelling(word, wordRange, text), corrected != word, !corrected.contains(" "),
+                  // In chat, a correction that only changes case ("lol" → "LOL") isn't one
+                  !(chat && corrected.lowercased() == word.lowercased()) {
             replacement = corrected
             checks.append(.spelling)
         }
@@ -147,7 +166,89 @@ public enum TextMechanics {
            let edit = terminalPunctuation(ns: ns, lineEnd: boundary, document: document, enterEndedLine: options.enterEndedLine) {
             edits.append(edit)
         }
-        return edits
+        // Curly apostrophes in what the fixes write, then quotes, dashes and ellipses around the word
+        if on(.curlyQuotes) {
+            for index in edits.indices {
+                let curled = edits[index].replacement.replacingOccurrences(of: "'", with: "’")
+                if curled != edits[index].replacement {
+                    edits[index].replacement = curled
+                    if !edits[index].checks.contains(.curlyQuotes) { edits[index].checks.append(.curlyQuotes) }
+                }
+            }
+        }
+        let rewritesWord = edits.contains { $0.range == wordRange }
+        return edits + typography(at: boundary, ns: ns, document: document, skip: rewritesWord ? wordRange : nil, on: on)
+    }
+
+    /// Chat shorthand the spell checker leaves alone in the `chat` profile.
+    public static let chatWords: Set<String> = [
+        "ok", "okay", "kk", "lol", "lmao", "rofl", "haha", "hehe", "omg", "wtf", "brb", "btw", "idk", "ikr",
+        "imo", "imho", "tbh", "ngl", "smh", "nvm", "pls", "plz", "thx", "ty", "tysm", "yw", "np", "jk", "fyi",
+        "afaik", "iirc", "fwiw", "tldr", "icymi", "irl", "lgtm", "sgtm", "ack", "nack", "wip", "eta", "eod",
+        "eow", "ooo", "pto", "wfh", "afk", "asap", "atm", "rn", "cya", "ttyl", "gtg", "dm", "dms", "pr", "prs",
+        "yeah", "yea", "yep", "yup", "nope", "nah", "meh", "hmm", "oof", "yay", "tho", "thru", "cuz", "cos",
+        "gonna", "wanna", "gotta", "kinda", "sorta", "dunno", "lemme", "gimme", "prolly", "probs", "obv", "def",
+        "tmrw", "ppl", "msg", "msgs", "sec", "mins", "hrs", "grats", "congrats",
+    ]
+
+    // MARK: Typography
+
+    private static func isAlphanumeric(_ c: unichar?) -> Bool {
+        guard let c, let scalar = Unicode.Scalar(c) else { return false }
+        return CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar)
+    }
+
+    /// Typography for the token a boundary ends (from the last space, tab or newline to the
+    /// boundary character itself): curly quotes, en and em dashes between words, ellipses. Prose
+    /// only; `skip` is a range another fix already rewrites.
+    private static func typography(at boundary: Int, ns: NSString, document: MarkdownDocument, skip: NSRange?, on: (TextMechanicsCheck) -> Bool) -> [TextMechanicsEdit] {
+        guard on(.curlyQuotes) || on(.dashes) || on(.ellipses) else { return [] }
+        let isSpace = { (c: unichar) in c == 0x20 || c == 0x09 || c == newline }
+        var tokenStart = boundary
+        while tokenStart > 0, !isSpace(ns.character(at: tokenStart - 1)) { tokenStart -= 1 }
+        let end = isSpace(ns.character(at: boundary)) ? boundary : boundary + 1
+        guard end > tokenStart else { return [] }
+        let token = ns.substring(with: NSRange(location: tokenStart, length: end - tokenStart))
+        if token.rangeOfCharacter(from: CharacterSet(charactersIn: "/@#\\:_<>")) != nil || insideUnclosedSpan(before: tokenStart, ns: ns) { return [] }
+        let char = { (i: Int) -> unichar? in i >= 0 && i < ns.length ? ns.character(at: i) : nil }
+        let prose = { (i: Int) -> Bool in
+            if let skip, NSLocationInRange(i, skip) { return false }
+            return isProseNode(at: i, document: document)
+        }
+        var out: [TextMechanicsEdit] = []
+        var i = tokenStart
+        while i < end {
+            let c = ns.character(at: i)
+            if on(.ellipses), c == 0x2E, i + 3 <= end, char(i + 1) == 0x2E, char(i + 2) == 0x2E, char(i + 3) != 0x2E, char(i - 1) != 0x2E, prose(i) {
+                out.append(TextMechanicsEdit(range: NSRange(location: i, length: 3), replacement: "…", checks: [.ellipses]))
+                i += 3
+                continue
+            }
+            if on(.dashes), c == 0x2D, char(i + 1) == 0x2D, char(i - 1) != 0x2D, prose(i) {
+                let run = char(i + 2) == 0x2D ? 3 : 2
+                if char(i + run) == 0x2D {
+                    i += run + 1
+                    continue
+                }
+                let before = char(i - 1)
+                let after = char(i + run)
+                let between = isAlphanumeric(before) && isAlphanumeric(after)
+                let alone = (i == tokenStart || before == 0x20) && (i + run == end || after == 0x20 || after == newline || after == nil)
+                if between || alone {
+                    out.append(TextMechanicsEdit(range: NSRange(location: i, length: run), replacement: run == 3 ? "—" : "–", checks: [.dashes]))
+                }
+                i += run
+                continue
+            }
+            if on(.curlyQuotes), c == 0x22 || c == 0x27, prose(i) {
+                let before = char(i - 1)
+                let opening = i == tokenStart || before.map { [0x28, 0x5B, 0x7B, 0x2014, 0x2013, 0x2D].contains($0) } ?? false
+                let replacement = c == 0x22 ? (opening ? "“" : "”") : (opening && !isAlphanumeric(before) ? "‘" : "’")
+                out.append(TextMechanicsEdit(range: NSRange(location: i, length: 1), replacement: replacement, checks: [.curlyQuotes]))
+            }
+            i += 1
+        }
+        return out
     }
 
     /// What the checks look at for the boundary at `boundary`: the word before it, or the line it
@@ -381,8 +482,27 @@ public enum TextMechanics {
 
     /// The word is ordinary text in a paragraph, heading or list item: not in code, math, HTML,
     /// an address, front matter or a table, and not part of a URL, path, email, mention or tag.
-    public static func isProse(_ range: NSRange, ns: NSString, document: MarkdownDocument) -> Bool {
-        var current: MarkdownNode? = node(at: range.location, in: document)
+    public static func isProse(_ range: NSRange, ns: NSString, document: MarkdownDocument, chat: Bool = false) -> Bool {
+        guard isProseNode(at: range.location, document: document) else { return false }
+        var tokenStart = range.location
+        while tokenStart > 0 {
+            let c = ns.character(at: tokenStart - 1)
+            if c == 0x20 || c == 0x09 || c == newline { break }
+            tokenStart -= 1
+        }
+        let token = ns.substring(with: NSRange(location: tokenStart, length: NSMaxRange(range) - tokenStart))
+        if token.contains("/") || token.contains("@") || token.contains("#") || token.contains("\\") || token.contains(":") || token.contains("_") {
+            return false
+        }
+        if chat, token.contains("<") || token.contains(">") { return false } // Slack's <@user>, <#channel>, <!here>, <url|label>
+        if (token as NSString).substring(to: (token as NSString).length - range.length).contains(".") { return false } // file.name, e.g.word
+        return true
+    }
+
+    /// The text at `location` is a text node outside code, math, HTML, front matter, images, tables,
+    /// reference definitions and autolinks.
+    static func isProseNode(at location: Int, document: MarkdownDocument) -> Bool {
+        var current: MarkdownNode? = node(at: location, in: document)
         guard current?.kind == .text else { return false }
         while let node = current {
             switch node.kind {
@@ -394,21 +514,13 @@ public enum TextMechanics {
                 current = node.parent
             }
         }
-        var tokenStart = range.location
-        while tokenStart > 0 {
-            let c = ns.character(at: tokenStart - 1)
-            if c == 0x20 || c == 0x09 || c == newline { break }
-            tokenStart -= 1
-        }
-        let token = ns.substring(with: NSRange(location: tokenStart, length: NSMaxRange(range) - tokenStart))
-        if token.contains("/") || token.contains("@") || token.contains("#") || token.contains("\\") || token.contains(":") || token.contains("_") {
-            return false
-        }
-        if (token as NSString).substring(to: (token as NSString).length - range.length).contains(".") { return false } // file.name, e.g.word
         return true
     }
 
-    /// A code span or inline math still being typed: an odd number of backticks or dollar signs earlier on the line.
+    /// Markdown still being typed that the parser can't see as code, math, a link or front matter
+    /// until it's closed: an odd number of backticks or dollar signs earlier on the line, a table
+    /// row, a link reference definition, a link or image address not yet closed with `)`, or
+    /// front matter not yet closed with `---`.
     static func insideUnclosedSpan(before location: Int, ns: NSString) -> Bool {
         var backticks = 0
         var dollars = 0
@@ -420,7 +532,47 @@ public enum TextMechanics {
             if c == 0x24, i < 2 || ns.character(at: i - 2) != 0x5C { dollars += 1 }
             i -= 1
         }
-        return backticks % 2 == 1 || dollars % 2 == 1
+        if backticks % 2 == 1 || dollars % 2 == 1 { return true }
+        let linePrefix = ns.substring(with: NSRange(location: i, length: location - i))
+        if linePrefix.range(of: "^[ \\t]*\\|", options: .regularExpression) != nil { return true }
+        if linePrefix.range(of: "^ {0,3}\\[[^\\[\\]]+\\]:", options: .regularExpression) != nil { return true }
+        if insideUnclosedLinkDestination(linePrefix as NSString) { return true }
+        return insideUnclosedFrontMatter(before: location, ns: ns)
+    }
+
+    /// A `](` on the line with no matching `)` yet.
+    private static func insideUnclosedLinkDestination(_ line: NSString) -> Bool {
+        var inCode = false
+        var depth = 0
+        var i = 0
+        while i < line.length {
+            let c = line.character(at: i)
+            if c == 0x5C { i += 2; continue }
+            if c == 0x60 { inCode.toggle(); i += 1; continue }
+            if !inCode {
+                if depth == 0, c == 0x5D, i + 1 < line.length, line.character(at: i + 1) == 0x28 {
+                    depth = 1
+                    i += 2
+                    continue
+                } else if depth > 0 {
+                    if c == 0x28 { depth += 1 } else if c == 0x29 { depth -= 1 }
+                }
+            }
+            i += 1
+        }
+        return depth > 0
+    }
+
+    /// Front matter at the start of the text whose `key:` lines have begun and whose closing `---` hasn't been typed.
+    private static func insideUnclosedFrontMatter(before location: Int, ns: NSString) -> Bool {
+        let first: Int
+        if ns.hasPrefix("---\n") { first = 4 } else if ns.hasPrefix("---\r\n") { first = 5 } else { return false }
+        guard location >= first else { return false }
+        var end = min(ns.length, location + 1)
+        while end < ns.length, ns.character(at: end - 1) != newline { end += 1 }
+        let lines = ns.substring(with: NSRange(location: first, length: end - first)).components(separatedBy: "\n")
+        guard let firstLine = lines.first, firstLine.range(of: "^[A-Za-z0-9_-]+[ \\t]*:", options: .regularExpression) != nil else { return false }
+        return !lines.dropFirst().contains { $0.trimmingCharacters(in: .whitespaces) == "---" || $0.trimmingCharacters(in: .whitespaces) == "..." }
     }
 
     // MARK: Sentences

@@ -6,7 +6,8 @@
  * you type (`textMechanicsEditsAt`).
  */
 import type { AgentTool, AgentToolProvider } from './registry.js';
-import { textMechanicsFindings, TEXT_MECHANICS_CHECKS, type TextMechanicsCheckId, type TextMechanicsEdit, type TextMechanicsOptions } from './text-mechanics.js';
+import { textMechanicsFindings, TEXT_MECHANICS_CHECKS,
+	TEXT_MECHANICS_OFF_BY_DEFAULT, type TextMechanicsCheckId, type TextMechanicsEdit, type TextMechanicsOptions } from './text-mechanics.js';
 
 export interface TextMechanicsHost {
 	/** The Markdown source as it is now. */
@@ -49,7 +50,7 @@ export function createTextMechanicsToolProvider(host: TextMechanicsHost, options
 			profile: options.profile,
 			spelling: options.spelling,
 			tagger: options.tagger,
-			enabled: (c) => (!only || only.includes(c)) && (options.enabled?.(c) ?? true)
+			enabled: (c) => (!only || only.includes(c)) && (options.enabled?.(c) ?? !TEXT_MECHANICS_OFF_BY_DEFAULT.has(c))
 		});
 		return { text, findings };
 	};

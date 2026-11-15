@@ -11,6 +11,7 @@ import {
 	textMechanicsEditsAt,
 	textMechanicsFindings,
 	TEXT_MECHANICS_CHECKS,
+	TEXT_MECHANICS_OFF_BY_DEFAULT,
 	type TextMechanicsCheckId,
 	type TextMechanicsTagger,
 	type TextMechanicsWordClass
@@ -27,6 +28,8 @@ export interface TextMechanicsScenario {
 	profile?: 'prose' | 'chat';
 	/** Checks turned off. */
 	disabled?: TextMechanicsCheckId[];
+	/** Checks that are off by default (typography), turned on. */
+	enable?: TextMechanicsCheckId[];
 	/** Spelling corrections by exact word; none means no spell checker. */
 	spelling?: Record<string, string>;
 	/** Word classes for this scenario, over `TEXT_MECHANICS_LEXICON` (lower-case words). */
@@ -124,7 +127,7 @@ export function runTextMechanicsScenario(scenario: TextMechanicsScenario): {
 		const full = text + suffix;
 		const edits = textMechanicsEditsAt(full, boundary, {
 			profile: scenario.profile,
-			enabled: (c) => !disabled.has(c),
+			enabled: (c) => !disabled.has(c) && (!TEXT_MECHANICS_OFF_BY_DEFAULT.has(c) || (scenario.enable ?? []).includes(c)),
 			spelling,
 			tagger
 		}).sort((a, b) => b.from - a.from);
@@ -134,6 +137,8 @@ export function runTextMechanicsScenario(scenario: TextMechanicsScenario): {
 	}
 	return { text: text + suffix, checks };
 }
+
+const TYPOGRAPHY: TextMechanicsCheckId[] = ['curly-quotes', 'dashes', 'ellipses'];
 
 const FAKE_SPELLING = {
 	becuase: 'because',
@@ -286,6 +291,31 @@ export const TEXT_MECHANICS_SCENARIOS: readonly TextMechanicsScenario[] = [
 		typed: 'hte ',
 		spelling: { hte: 'the end' }
 	},
+
+	// Markdown still being typed (Pixerate/Swash#121)
+	{ name: 'a table row before its delimiter', typed: '| dont | i |\n|---|---|\n' },
+	{ name: 'front matter being typed', typed: '---\ntitle: dont i\n---\n' },
+	{ name: "an image's title", typed: '![alt](img.png "dont i") ' },
+	{ name: 'a reference definition', typed: '[ref]: https://x.y "dont i"\n' },
+
+	// Typography, when turned on
+	{ name: 'curly quotes', typed: '"hello" she said ', enable: TYPOGRAPHY },
+	{ name: 'a curly apostrophe', typed: "don't stop ", enable: TYPOGRAPHY },
+	{ name: 'a contraction with a curly apostrophe', typed: 'dont stop ', enable: TYPOGRAPHY },
+	{ name: 'an en dash', typed: 'wait -- what ', enable: TYPOGRAPHY },
+	{ name: 'an em dash', typed: 'a long---winded day ', enable: TYPOGRAPHY },
+	{ name: 'not a --flag', typed: 'use --verbose here ', enable: TYPOGRAPHY },
+	{ name: 'an ellipsis', typed: 'Wait... and then ', enable: TYPOGRAPHY },
+	{ name: 'single quotes and an apostrophe', typed: "it's 'quoted' text ", enable: TYPOGRAPHY },
+	{ name: 'no typography in code', typed: "see `don't` ", enable: TYPOGRAPHY },
+	{ name: 'quotes around a sentence end', typed: 'he said "done." then left ', enable: TYPOGRAPHY },
+	{ name: "it's with a curly apostrophe", typed: 'its really odd ', enable: TYPOGRAPHY },
+	{ name: 'typography is off by default', typed: 'wait -- "what" ' },
+
+	// Chat
+	{ name: 'chat shorthand is not spelling', typed: 'lol teh cat ', profile: 'chat', spelling: { lol: 'LOL', teh: 'the' } },
+	{ name: "chat leaves Slack's syntax alone", typed: 'ping <!here> dont ', profile: 'chat' },
+	{ name: 'no typography in chat', typed: 'wait -- dont ', profile: 'chat', enable: TYPOGRAPHY },
 
 	// Checks turned off
 	{ name: 'contractions off', typed: 'so i dont ', disabled: ['contractions'] },
