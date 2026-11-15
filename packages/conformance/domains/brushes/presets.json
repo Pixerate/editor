@@ -2753,6 +2753,41 @@
     }
   },
   {
+    "id": "antimatter-beam",
+    "name": "Antimatter beam",
+    "kind": "mark",
+    "medium": "paint",
+    "variety": "antimatter",
+    "family": "volatile",
+    "tip": {
+      "shape": "round",
+      "hardness": 0.75
+    },
+    "marks": {
+      "kind": "antimatter",
+      "blastRadius": 3,
+      "blastSpacing": 0.5,
+      "scorch": 0.4,
+      "sparks": 0.15,
+      "crater": 0.2,
+      "duration": 0.3
+    },
+    "dynamics": {
+      "smoothing": 0.3,
+      "minSize": 0.5
+    },
+    "colour": {
+      "default": "#38bdf8",
+      "palette": [
+        "#38bdf8",
+        "#f472b6",
+        "#a855f7",
+        "#fb923c",
+        "#4ade80"
+      ]
+    }
+  },
+  {
     "id": "antimatter-flare",
     "name": "Antimatter flare",
     "kind": "mark",
