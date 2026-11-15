@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.331.1
+
+### Patch Changes
+
+- 3205122: The Select stroke tool picks the stroke under the pointer on any visible stroke layer (the active layer first, then top-down) and makes that layer active, instead of refusing when another layer is active.
+
 ## 0.331.0
 
 ### Minor Changes
