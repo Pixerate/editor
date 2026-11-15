@@ -147,6 +147,22 @@ The host may add the shared document tools (see `pixerate-agent-tools`). A diagr
 | `list_saved_diagram_documents` | List saved diagrams (`key`, `name`, `savedAt`), newest first. |
 | `open_saved_diagram_document` | Replace the diagram with a saved one by `key` from the list. One undo step. Ask before opening over unsaved work the user has not saved. |
 
+## Diagrams as UI components
+
+Hosts that build pages from a component library can take a simple diagram as a component instead
+of an editable diagram: `diagramUiComponents()` (from `@pixerate/editor/canvas`) lists `flow`
+(`{ steps: [{ id?, label }], links?: [{ from, to, label? }], direction?: 'LR' | 'TD' }`, steps joined
+in order unless `links` say otherwise), `timeline` (`{ title?, periods: [{ label, events }] }`) and
+`mindmap` (`{ root, branches: [{ label, children? }] }`, two levels of children at most), each with a
+`UiDescriptor` and a `render(data, { width, height, theme, colors })` that lays the data out the
+way this editor does and returns accessible SVG of that size. `toMermaid(data)` gives the source, so a
+host can open the same picture as an editable diagram. There is no agent tool for it: use the
+component when a page needs a fixed picture of a short process, a history or a topic map in the
+page's own colours; reach for the diagram tools when the user wants to edit, regroup or restyle it.
+Roles: `surface` the background, `surface-raised` the flow's boxes, `ink` labels, `ink-muted`
+arrows and the timeline's axis, `border` box outlines and the mind map's root, `accent` the first
+period or branch (the rest follow the categorical palette).
+
 ## Pitfalls
 
 - Ids are Mermaid ids, not labels. Always take them from `get_diagram` or from what a write
