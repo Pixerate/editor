@@ -124,11 +124,12 @@ final class TextMechanicsTests: XCTestCase {
     }
 
     func testTheSystemTaggerReadsContractions() {
-        // The system tagger tags every word with a class
+        // The system tagger finds every word
         let words = TextMechanics.naturalLanguageTagger("I tried but it failed")
         XCTAssertEqual(words.map(\.range.length), [1, 5, 3, 2, 6])
-        XCTAssertTrue(words.contains { $0.tag == .verb })
         #if os(macOS)
+        // macOS's model gives word classes (the iOS simulator's gives none, so these are macOS-only)
+        XCTAssertTrue(words.contains { $0.tag == .verb })
         // macOS's model, as Swash uses it: "id" before "like" is "I'd"; "the id field" stays. (The
         // iOS model reads "id like" differently, so the scenarios use a fixed lexicon instead.)
         let typed = "for now id like "
