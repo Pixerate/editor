@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/paint-ui] `CALayer.isGeometryFlipped = true` on macOS Flips Descendant Tile `CGImage` Contents
+
+- **Issue / Symptom**: On macOS (`PaintTilesLayerView`), setting `root.isGeometryFlipped = true` on the layer-hosting `NSView` root layer caused each 256×256 tile's `CGImage` `contents` to draw vertically upside down, showing placed images as horizontal 256 px bands (issue #896). iOS (`UIView`) was unaffected.
+- **Root Cause**: On AppKit, `isGeometryFlipped = true` flips `contentsAreFlipped()` for the root and its descendant layers, which makes Core Animation invert `CGImage` `contents` vertically inside each tile layer; setting `isGeometryFlipped = true` on the child tile layer does not undo it (it only flips that layer's own sublayers).
+- **Solution / Workaround**: On AppKit (`#if canImport(AppKit) && !targetEnvironment(macCatalyst)`), give each tile `CALayer` `anchorPoint = CGPoint(x: 0.5, y: 0.5)` and `setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))` so each tile's `CGImage` flips back upright in place while keeping `l.frame == tile.rect` and `content.affineTransform() == v.transform`.
+
 ### [core/rich-text] Text Treatments Draw Behind the Text Only Where the Editor's Background Is Clear (#887)
 
 - **Issue / Symptom**: With `setAgentTextTreatments`, a treatment's `behind` layers (the selection tint, the checking sweep, the landed tint) don't show, while its caret and name tag (`above`) do.

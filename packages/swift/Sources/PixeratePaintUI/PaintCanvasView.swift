@@ -270,7 +270,14 @@ final class PaintTilesLayerView: PaintPlatformView {
             layers = [:]
             for key in keys {
                 let l = CALayer()
+                #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+                // `root.isGeometryFlipped = true` flips `contents` (`CGImage`) vertically in each tile
+                // layer on AppKit; flip each tile layer back around its centre so pixels stay upright.
+                l.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+                l.setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))
+                #else
                 l.anchorPoint = .zero
+                #endif
                 content.addSublayer(l)
                 layers[key] = l
             }
