@@ -2,7 +2,6 @@
 import Foundation
 import ImageIO
 import PixeratePaint
-import PixerateRaster
 import SwiftUI
 import UniformTypeIdentifiers
 import XCTest
@@ -73,95 +72,16 @@ final class PaintSnapshotTests: XCTestCase {
         XCTAssertTrue(blueish && reddish, "both strokes are drawn")
     }
 
-    func testPlaceImageOnLargeSheetTilesLayerView() throws {
-        let model = try PaintEditorModel(controller: PaintEditorController(width: 2880, height: 1800))
-        // Smooth spatial gradient (no step edges) so interpolation differences stay <= 2,
-        // while any tile flip or shift produces large errors across tile boundaries.
-        let w = 1024, h = 1024
-        var rgba = [UInt8](repeating: 0, count: w * h * 4)
-        for y in 0..<h {
-            for x in 0..<w {
-                let i = (y * w + x) * 4
-                rgba[i] = UInt8(x * 255 / (w - 1))
-                rgba[i + 1] = UInt8(y * 255 / (h - 1))
-                rgba[i + 2] = UInt8(((x + y) * 255) / (w + h - 2))
-                rgba[i + 3] = 255
-            }
-        }
-        let png = Data(encodePng(w, h, rgba)).base64EncodedString()
-        let placed = try model.controller.placeImage(png: png)
-        XCTAssertEqual(placed.bounds, RasterRect(x: 540, y: 0, width: 1800, height: 1800))
-
-        let vw = 1200, vh = 800
-        model.viewport = (Double(vw), Double(vh))
-        model.fitView()
-        let m = paintViewMatrix(model.view, model.canvas, viewport: Double(vw), Double(vh))
-        let t = CGAffineTransform(a: m[0], b: m[2], c: m[1], d: m[3], tx: m[4], ty: m[5])
-
-        let presenter = PaintCanvasPresenter(controller: model.controller)
-        let tiles = presenter.tiles()
-        let fullImage = try XCTUnwrap(presenter.image())
-
-        // Reference: draw fullImage with transform `t` in top-down coordinates.
-        var refBytes = [UInt8](repeating: 0, count: vw * vh * 4)
-        refBytes.withUnsafeMutableBytes { buf in
-            let ctx = CGContext(
-                data: buf.baseAddress, width: vw, height: vh, bitsPerComponent: 8, bytesPerRow: vw * 4,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )!
-            ctx.translateBy(x: 0, y: CGFloat(vh))
-            ctx.scaleBy(x: 1, y: -1)
-            ctx.concatenate(t)
-            ctx.translateBy(x: 0, y: CGFloat(fullImage.height))
-            ctx.scaleBy(x: 1, y: -1)
-            ctx.draw(fullImage, in: CGRect(x: 0, y: 0, width: fullImage.width, height: fullImage.height))
-        }
-
-        // Actual: PaintTilesLayerView hosted in an NSView/NSWindow or rendered via its layer.
+    /// In a window, AppKit sets the root layer's `isGeometryFlipped` from the view's `isFlipped`;
+    /// the tiles are laid out y-down, so it must stay flipped or tile rows stack in reverse (#896).
+    func testTilesViewStaysFlippedInAWindow() {
         let tilesView = PaintTilesLayerView()
-        tilesView.frame = CGRect(x: 0, y: 0, width: vw, height: vh)
-        tilesView.update(PaintTilesView(tiles: tiles, transform: t, smooth: model.view.zoom < 2))
-        tilesView.layoutSubtreeIfNeeded()
-
-        var layerBytes = [UInt8](repeating: 0, count: vw * vh * 4)
-        layerBytes.withUnsafeMutableBytes { buf in
-            let ctx = CGContext(
-                data: buf.baseAddress, width: vw, height: vh, bitsPerComponent: 8, bytesPerRow: vw * 4,
-                space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            )!
-            // Render the AppKit layer hierarchy from top-down.
-            ctx.translateBy(x: 0, y: CGFloat(vh))
-            ctx.scaleBy(x: 1, y: -1)
-            tilesView.layer!.render(in: ctx)
-        }
-
-        // Also write PNGs to inspect if needed.
-        if let refProvider = CGDataProvider(data: Data(refBytes) as CFData),
-           let refImg = CGImage(width: vw, height: vh, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: vw * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: refProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) {
-            _ = try writePNG(refImg, "place-image-ref.png")
-        }
-        if let layProvider = CGDataProvider(data: Data(layerBytes) as CFData),
-           let layImg = CGImage(width: vw, height: vh, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: vw * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue), provider: layProvider, decode: nil, shouldInterpolate: false, intent: .defaultIntent) {
-            _ = try writePNG(layImg, "place-image-layer.png")
-        }
-
-        // Compare pixels inside the placed image across multiple tile rows.
-        var maxDiff = 0
-        var diffCount = 0
-        for sy in stride(from: 100, to: 700, by: 20) {
-            for sx in stride(from: 300, to: 900, by: 20) {
-                let i = (sy * vw + sx) * 4
-                let dr = abs(Int(refBytes[i]) - Int(layerBytes[i]))
-                let dg = abs(Int(refBytes[i + 1]) - Int(layerBytes[i + 1]))
-                let db = abs(Int(refBytes[i + 2]) - Int(layerBytes[i + 2]))
-                let d = max(dr, dg, db)
-                if d > maxDiff { maxDiff = d }
-                if d > 4 { diffCount += 1 }
-            }
-        }
-        XCTAssertEqual(diffCount, 0, "maxDiff=\(maxDiff)")
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.contentView?.addSubview(tilesView)
+        tilesView.frame = CGRect(x: 0, y: 0, width: 400, height: 300)
+        window.contentView?.layoutSubtreeIfNeeded()
+        XCTAssertTrue(tilesView.isFlipped)
+        XCTAssertEqual(tilesView.layer?.isGeometryFlipped, true)
     }
 }
 #endif

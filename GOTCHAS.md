@@ -21,11 +21,11 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
-### [swift/paint-ui] `CALayer.isGeometryFlipped = true` on macOS Flips Descendant Tile `CGImage` Contents
+### [swift/paint-ui] AppKit Resets a View's Root Layer `isGeometryFlipped` to Match `isFlipped` (#896)
 
-- **Issue / Symptom**: On macOS (`PaintTilesLayerView`), setting `root.isGeometryFlipped = true` on the layer-hosting `NSView` root layer caused each 256×256 tile's `CGImage` `contents` to draw vertically upside down, showing placed images as horizontal 256 px bands (issue #896). iOS (`UIView`) was unaffected.
-- **Root Cause**: On AppKit, `isGeometryFlipped = true` flips `contentsAreFlipped()` for the root and its descendant layers, which makes Core Animation invert `CGImage` `contents` vertically inside each tile layer; setting `isGeometryFlipped = true` on the child tile layer does not undo it (it only flips that layer's own sublayers).
-- **Solution / Workaround**: On AppKit (`#if canImport(AppKit) && !targetEnvironment(macCatalyst)`), give each tile `CALayer` `anchorPoint = CGPoint(x: 0.5, y: 0.5)` and `setAffineTransform(CGAffineTransform(scaleX: 1, y: -1))` so each tile's `CGImage` flips back upright in place while keeping `l.frame == tile.rect` and `content.affineTransform() == v.transform`.
+- **Issue / Symptom**: On macOS, `PaintCanvasView` drew content that spans several tile rows (a placed picture, long strokes) as horizontal 256 px bands, each showing another part of the painting. iOS was unaffected, and exports, `compositeTiles` and `PaintCanvasPresenter` were all correct.
+- **Root Cause**: `PaintTilesLayerView` set `root.isGeometryFlipped = true` in `init`, but once the view is in a window AppKit sets a view's layer `isGeometryFlipped` to match the view's `isFlipped` (false by default). The tiles were then laid out y-up under a y-down view transform, so the tile rows stacked in reverse order while each tile's image stayed upright. Rendering the layer with `render(in:)` outside a window doesn't show it.
+- **Solution / Workaround**: Override `isFlipped` to return `true` on the AppKit `PaintTilesLayerView`. Don't flip each tile layer instead: that turns the whole painting upside down on screen. Test it with the view hosted in an `NSWindow` (`testTilesViewStaysFlippedInAWindow`).
 
 ### [core/rich-text] Text Treatments Draw Behind the Text Only Where the Editor's Background Is Clear (#887)
 
