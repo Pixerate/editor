@@ -629,6 +629,14 @@ export const BRUSH_PRESETS: readonly Brush[] = [
     colour: { default: '#38bdf8', palette: ['#38bdf8', '#f472b6', '#a855f7', '#fb923c', '#4ade80'] },
   },
   {
+    // Blasts every half tip, large and overlapping, with few sparks: a continuous burnt stroke rather than a row of craters.
+    id: 'antimatter-beam', name: 'Antimatter beam', kind: 'mark', medium: 'paint', variety: 'antimatter', family: 'volatile',
+    tip: { shape: 'round', hardness: 0.75 },
+    marks: { kind: 'antimatter', blastRadius: 3, blastSpacing: 0.5, scorch: 0.4, sparks: 0.15, crater: 0.2, duration: 0.3 },
+    dynamics: { smoothing: 0.3, minSize: 0.5 },
+    colour: { default: '#38bdf8', palette: ['#38bdf8', '#f472b6', '#a855f7', '#fb923c', '#4ade80'] },
+  },
+  {
     id: 'antimatter-flare', name: 'Antimatter flare', kind: 'mark', medium: 'paint', variety: 'antimatter', family: 'volatile',
     tip: { shape: 'round', size: 18, hardness: 0.7, spacing: 0.08 },
     marks: { kind: 'antimatter', blastRadius: 2, blastSpacing: 1.4, invert: 0.75, invertMode: 'oklab', scorch: 0.35, annihilate: 0.15, sparks: 0.95, sparkReach: 5, crater: 0.3 },
