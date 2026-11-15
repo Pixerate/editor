@@ -52,6 +52,10 @@ public final class AgentTextDirector {
     public var options: AgentTypingOptions
     /// How long an agent's caret and its changed-text tint stay after its last call, in ms (0 keeps them).
     public var linger: Double
+    /// The text treatment agents' edits are drawn with when an agent doesn't choose one
+    /// (`AgentCaretInfo.treatment`); nil for the host's default. Stamped on each caret, for the
+    /// host's overlay (`AgentTextTreatments.plans`).
+    public var treatment: String?
 
     private weak var target: AgentTextTarget?
     private let clock: PresenceClock
@@ -72,13 +76,16 @@ public final class AgentTextDirector {
         carets: AgentCaretStore = AgentCaretStore(),
         clock: PresenceClock = RealPresenceClock(),
         options: AgentTypingOptions = AgentTypingOptions(),
-        linger: Double = 1500
+        linger: Double = 1500,
+        treatment: String? = nil
     ) {
         self.target = target
         self.carets = carets
         self.clock = clock
         self.options = options
         self.linger = linger
+        self.treatment = treatment
+        if carets.clock == nil { carets.clock = clock }
     }
 
     /// Plays `edit` out for `agent` and returns where the new text landed (UTF-16 range). Calls by
@@ -144,6 +151,8 @@ public final class AgentTextDirector {
     // MARK: Playing a call
 
     private func play(_ edit: AgentTextEdit, by agent: AgentCaretInfo, actionName: String, options: AgentTypingOptions, call: Int) async throws -> NSRange {
+        var agent = agent
+        if agent.treatment == nil { agent.treatment = treatment }
         guard let target else { throw AgentTextDirectorError.targetGone }
         if let reason = target.agentReadOnlyReason { throw AgentTextDirectorError.readOnly(reason) }
         let text = target.agentText as NSString
@@ -181,9 +190,14 @@ public final class AgentTextDirector {
         do {
             for step in plan {
                 switch step {
+                case .check(let from, let to, let ms):
+                    // The caret waits at the edit while the treatment sweeps the range it checks.
+                    let span = running[call]!.span
+                    carets.set(agent, anchor: span.location, stage: .checking, check: NSRange(location: from, length: to - from))
+                    try await wait(ms)
                 case .select(_, _, let ms):
                     let span = running[call]!.span
-                    carets.set(agent, anchor: span.location, head: NSMaxRange(span))
+                    carets.set(agent, anchor: span.location, head: NSMaxRange(span), stage: .selecting)
                     try await wait(ms)
                 case .type(_, let typed, let ms):
                     try check()
@@ -193,7 +207,8 @@ public final class AgentTextDirector {
                     let typedLength = (typed as NSString).length
                     running[call]!.expected = (running[call]!.expected as NSString).replacingCharacters(in: span, with: typed)
                     running[call]!.span.length = typedLength
-                    carets.set(agent, anchor: span.location + typedLength)
+                    carets.set(agent, anchor: span.location + typedLength, stage: .typing,
+                               typed: NSRange(location: span.location, length: typedLength))
                     if ms > 0 { try await wait(ms) }
                 case .commit:
                     try check()

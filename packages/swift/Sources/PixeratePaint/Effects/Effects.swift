@@ -42,7 +42,7 @@ public struct EffectDescription: Sendable {
 
     public var id: String { json["id"]?.stringValue ?? "" }
     public var name: String { json["name"]?.stringValue ?? id }
-    /// `shader`, `vector`, `motion`, `camera` or `timing`.
+    /// `shader`, `vector`, `motion`, `camera`, `timing` or `text-treatment`.
     public var kind: String { json["kind"]?.stringValue ?? "shader" }
     public var category: String { json["category"]?.stringValue ?? "" }
     /// What it is for: `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, …

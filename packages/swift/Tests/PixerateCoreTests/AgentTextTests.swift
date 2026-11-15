@@ -64,11 +64,18 @@ final class AgentTextTests: XCTestCase {
             if let v = raw["maxDurationMs"] as? Double { options.maxDurationMs = v }
             if let v = raw["selectMs"] as? Double { options.selectMs = v }
             if let v = raw["animate"] as? Bool { options.animate = v }
-            let steps = planAgentTyping(AgentTextEdit(from: edit["from"] as! Int, to: edit["to"] as! Int, text: edit["text"] as! String), options: options)
+            if let v = raw["checkMs"] as? Double { options.checkMs = v }
+            let check = (edit["check"] as? [String: Int]).map { $0["from"]!..<$0["to"]! }
+            let steps = planAgentTyping(AgentTextEdit(from: edit["from"] as! Int, to: edit["to"] as! Int, text: edit["text"] as! String, check: check), options: options)
             let expected = try XCTUnwrap(plan["steps"] as? [[String: Any]])
             XCTAssertEqual(steps.count, expected.count, name)
             for (step, want) in zip(steps, expected) {
                 switch step {
+                case .check(let from, let to, let ms):
+                    XCTAssertEqual(want["type"] as? String, "check", name)
+                    XCTAssertEqual(want["from"] as? Int, from, name)
+                    XCTAssertEqual(want["to"] as? Int, to, name)
+                    XCTAssertEqual(want["ms"] as? Double ?? -1, ms, accuracy: 1e-9, name)
                 case .select(let from, let to, let ms):
                     XCTAssertEqual(want["type"] as? String, "select", name)
                     XCTAssertEqual(want["from"] as? Int, from, name)
@@ -93,10 +100,129 @@ final class AgentTextTests: XCTestCase {
         XCTAssertEqual(defaults["charsPerSecond"] as? Double, AgentTypingOptions.defaultCharsPerSecond)
         XCTAssertEqual(defaults["maxDurationMs"] as? Double, AgentTypingOptions.defaultMaxDurationMs)
         XCTAssertEqual(defaults["selectMs"] as? Double, AgentTypingOptions.defaultSelectMs)
+        XCTAssertEqual(defaults["checkMs"] as? Double, AgentTypingOptions.defaultCheckMs)
+        XCTAssertEqual(AgentTypingOptions.defaultCheckMs, BuiltInTextTreatment.checkMs)
         XCTAssertEqual(defaults["frameMs"] as? Double ?? 0, AgentTypingOptions.frameMs, accuracy: 1e-12)
     }
 
+    // MARK: The built-in text treatment matches the TypeScript one
+
+    func testBuiltInTreatmentPlansMatchTheConformanceContracts() throws {
+        let data = try Data(contentsOf: ConformanceContracts.url("domains/agent-text/treatment-plans.json"))
+        let cases = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertGreaterThan(cases.count, 100)
+        func num(_ v: Any?) -> Double { (v as? NSNumber)?.doubleValue ?? .nan }
+        func rgba(_ v: Any?) -> TextTreatmentRGBA? {
+            guard let a = v as? [Any], a.count == 4 else { return nil }
+            return TextTreatmentRGBA(num(a[0]), num(a[1]), num(a[2]), num(a[3]))
+        }
+        func near(_ a: TextTreatmentRGBA?, _ b: TextTreatmentRGBA?, _ at: String) {
+            guard let a, let b else { return XCTAssertEqual(a == nil, b == nil, at) }
+            for (x, y) in [(a.r, b.r), (a.g, b.g), (a.b, b.b), (a.a, b.a)] { XCTAssertEqual(x, y, accuracy: 1e-12, at) }
+        }
+        for c in cases {
+            let raw = try XCTUnwrap(c["target"] as? [String: Any])
+            let target = TextTreatmentTarget(
+                lines: (raw["lines"] as? [[String: Any]] ?? []).map { TextTreatmentRect(x: num($0["x"]), y: num($0["y"]), width: num($0["width"]), height: num($0["height"])) },
+                caret: (raw["caret"] as? [String: Any]).map { TextTreatmentCaret(x: num($0["x"]), y: num($0["y"]), height: num($0["height"])) },
+                label: raw["label"] as? String)
+            let stage = try XCTUnwrap(TextTreatmentStage(rawValue: c["stage"] as? String ?? ""))
+            let request = TextTreatmentPlanRequest(stage: stage, time: num(c["time"]), target: target, reduceMotion: c["reduceMotion"] as? Bool ?? false)
+            let plan = try BuiltInTextTreatment.plan(request, color: (c["values"] as? [String: Any])?["color"] as? String)
+            let want = try XCTUnwrap(c["plan"] as? [String: Any])
+            let at = "\(c["name"] ?? "") \(stage.rawValue) at \(request.time)\(request.reduceMotion ? " reduced" : "")"
+            XCTAssertEqual(plan.duration, num(want["duration"]), at)
+            XCTAssertEqual(plan.done, want["done"] as? Bool, at)
+            XCTAssertEqual(plan.reduced, want["reduced"] as? Bool, at)
+            let layers = try XCTUnwrap(want["layers"] as? [[String: Any]])
+            XCTAssertEqual(plan.layers.count, layers.count, at)
+            for (l, w) in zip(plan.layers, layers) {
+                XCTAssertEqual(l.kind.rawValue, w["kind"] as? String, at)
+                XCTAssertEqual(l.source, w["source"] as? String, at)
+                XCTAssertEqual(l.z.rawValue, w["z"] as? String, at)
+                XCTAssertEqual(l.blend, w["blend"] as? String, at)
+                XCTAssertEqual(l.text, w["text"] as? String, at)
+                for (x, y) in [(l.x, w["x"]), (l.y, w["y"]), (l.width, w["width"]), (l.height, w["height"]), (l.radius, w["radius"]), (l.opacity, w["opacity"])] {
+                    XCTAssertEqual(x, num(y), accuracy: 1e-9, at)
+                }
+                XCTAssertEqual(l.size, (w["size"] as? NSNumber)?.doubleValue, at)
+                XCTAssertEqual(l.padX, (w["padX"] as? NSNumber)?.doubleValue, at)
+                near(l.color, rgba(w["color"]), at)
+                near(l.textColor, rgba(w["textColor"]), at)
+                let g = w["gradient"] as? [String: Any]
+                XCTAssertEqual(l.gradient == nil, g == nil, at)
+                if let lg = l.gradient, let g {
+                    for (x, y) in [(lg.x0, g["x0"]), (lg.y0, g["y0"]), (lg.x1, g["x1"]), (lg.y1, g["y1"])] { XCTAssertEqual(x, num(y), accuracy: 1e-9, at) }
+                    let stops = g["stops"] as? [[String: Any]] ?? []
+                    XCTAssertEqual(lg.stops.count, stops.count, at)
+                    for (s, ws) in zip(lg.stops, stops) {
+                        XCTAssertEqual(s.offset, num(ws["offset"]), at)
+                        near(s.color, rgba(ws["color"]), at)
+                    }
+                }
+            }
+        }
+    }
+
+    func testTreatmentFramesRemoveFinishedStagesAndHoldTheSelection() throws {
+        let target = TextTreatmentTarget(lines: [TextTreatmentRect(x: 0, y: 0, width: 50, height: 20)])
+        let planAt = { (stage: TextTreatmentStage) in { (t: Double) in try BuiltInTextTreatment.plan(TextTreatmentPlanRequest(stage: stage, time: t, target: target)) } }
+        XCTAssertNotNil(try textTreatmentFrame(.checking, at: 100, planAt: planAt(.checking)))
+        XCTAssertNil(try textTreatmentFrame(.checking, at: 900, planAt: planAt(.checking)))
+        XCTAssertEqual(try textTreatmentFrame(.selecting, at: 900, planAt: planAt(.selecting))?.time, 0)
+        XCTAssertThrowsError(try BuiltInTextTreatment.plan(TextTreatmentPlanRequest(stage: .caret, time: -1, target: target))) {
+            XCTAssertEqual(($0 as? TextTreatmentError)?.message, "The time is ms into the stage, 0 or more; it was -1.")
+        }
+        XCTAssertThrowsError(try BuiltInTextTreatment.plan(TextTreatmentPlanRequest(stage: .caret, time: 0, target: target), color: "red"))
+    }
+
     // MARK: The director
+
+    /// A provider with one treatment that draws only a caret, in the agent's colour.
+    private final class CaretOnly: TextTreatmentProvider {
+        var defaultTextTreatment: String? { "caret-only" }
+        func textTreatmentPlan(_ id: String, _ request: TextTreatmentPlanRequest, values: JSONObject?) throws -> TextTreatmentPlan {
+            guard id == "caret-only" else { throw TextTreatmentError("unknown_effect", "Unknown effect \"\(id)\".") }
+            let color = TextTreatmentRGBA(hex: values?["color"]?.stringValue ?? "") ?? TextTreatmentRGBA(0, 0, 0)
+            let layers = request.target.caret.map { [TextTreatmentLayer(kind: .rect, source: "caret", z: .above, x: $0.x, y: $0.y, width: 1, height: $0.height, color: color)] } ?? []
+            return TextTreatmentPlan(stage: request.stage, time: request.time, duration: 100, done: false, reduced: request.reduceMotion, layers: layers)
+        }
+    }
+
+    @MainActor
+    func testTheDirectorRecordsEachStageForATextTreatment() async throws {
+        let text = FakeText("I dont know it")
+        let clock = HookClock()
+        let director = AgentTextDirector(target: text, clock: clock, linger: 0, treatment: "caret-only")
+        var stages: [(AgentCaretStage, NSRange?, Double)] = []
+        clock.onWait = { _ in
+            if let c = director.carets.carets.first { stages.append((c.stage, c.check ?? c.typed, c.stageSince)) }
+        }
+        try await director.perform(AgentTextEdit(from: 2, to: 6, text: "don't", check: 0..<14), by: pixie)
+        XCTAssertEqual(stages.first?.0, .checking)
+        XCTAssertEqual(stages.first?.1, NSRange(location: 0, length: 14))
+        XCTAssertEqual(stages[1].0, .selecting)
+        XCTAssertEqual(stages[1].2, 480, "a stage's clock starts when it does")
+        XCTAssertEqual(stages.last?.0, .typing)
+        XCTAssertEqual(stages.last?.1, NSRange(location: 2, length: 3))
+        let caret = try XCTUnwrap(director.carets.caret("pixie"))
+        XCTAssertEqual(caret.stage, .caret)
+        XCTAssertEqual(caret.treatment, "caret-only")
+        XCTAssertEqual(caret.changed, [NSRange(location: 2, length: 5)])
+        XCTAssertEqual(caret.changedSince, clock.time)
+
+        // An overlay plans what to draw, back to front: what landed, then the caret, from the
+        // provider's treatment in the agent's colour.
+        let lines = { (r: NSRange) in [TextTreatmentRect(x: Double(r.location) * 8, y: 0, width: Double(r.length) * 8, height: 20)] }
+        let caretAt = { (p: Int) in TextTreatmentCaret(x: Double(p) * 8, y: 0, height: 20) }
+        let plans = AgentTextTreatments(provider: CaretOnly()).plans(for: director.carets.carets, at: clock.time + 10, lines: lines, caretAt: caretAt)
+        XCTAssertEqual(plans.map(\.stage), [.landed, .caret])
+        XCTAssertEqual(plans[1].layers.first?.color, TextTreatmentRGBA(hex: "#7c3aed"))
+        // Without a provider, the built-in look: an 18% tint on what landed, then the caret and its tag.
+        let builtIn = AgentTextTreatments().plans(for: director.carets.carets, at: clock.time + 10, lines: lines, caretAt: caretAt)
+        XCTAssertEqual(builtIn.flatMap { $0.layers.map(\.source) }, ["changed", "caret", "tag"])
+        XCTAssertEqual(builtIn[0].layers[0].x, 16)
+    }
 
     @MainActor
     func testReplacesAWordAsOneUndoStepAfterSelectingAndTypingIt() async throws {

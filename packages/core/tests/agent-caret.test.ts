@@ -10,8 +10,12 @@ import {
 	getAgentCarets,
 	markAgentChanges,
 	setAgentCaret,
+	setAgentTextTreatments,
+	textTreatmentFrame,
+	textTreatmentMarkup,
 	typeAgentText
 } from '../src';
+import { builtInTextTreatmentPlan, createFakeEffectProvider } from '../src/effects';
 
 beforeAll(() => {
 	// Visible, so typing animates (a hidden document applies edits at once).
@@ -224,5 +228,117 @@ describe('rich-text tools show the agent caret', () => {
 		await registry.callTool('replace_range', { ...BRAVE, text: 'bold' });
 		expect(agentCaretPluginKey.getState(editor.state)).toBeUndefined();
 		expect(editor.getText()).toBe('Hello bold world');
+	});
+});
+
+describe('agent carets drawn with a text treatment', () => {
+	/** An editor in a page, with the browser's layout faked: every character is 8 px wide on 20 px lines. */
+	function mounted(content = '<p>Hello brave world</p>') {
+		const host = document.createElement('div');
+		document.body.append(host);
+		const editor = new Editor({ element: host, extensions: createRichTextPreset(), content });
+		const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height, x: left, y: top }) as DOMRect;
+		(window.Range.prototype as any).getClientRects = function (this: Range) {
+			const start = this.startContainer.nodeType === 3 ? this.startOffset : 0;
+			const end = this.endContainer.nodeType === 3 ? this.endOffset : 0;
+			return end > start ? [rect(start * 8, 0, (end - start) * 8, 20)] : [];
+		};
+		editor.view.coordsAtPos = (pos: number) => ({ left: (pos - 1) * 8, right: (pos - 1) * 8, top: 0, bottom: 20 });
+		let now = 0;
+		const clock = { now: () => now, set: (ms: number) => (now = ms) };
+		return { editor, host, clock };
+	}
+	const frame = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+	it('keeps the decorations without a provider that has text treatments', () => {
+		const editor = makeEditor();
+		setAgentTextTreatments(editor, { provider: createFakeEffectProvider() });
+		setAgentCaret(editor, { id: 'a', name: 'Claude', ...BRAVE });
+		expect(caretEl(editor)).not.toBeNull();
+		expect(editor.view.dom.querySelector('.pe-agent-selection')).not.toBeNull();
+	});
+
+	it('draws each stage from the provider in an overlay behind and above the text', async () => {
+		const { editor, host, clock } = mounted();
+		setAgentTextTreatments(editor, { provider: createFakeEffectProvider({ textTreatments: true }), now: clock.now, reduceMotion: false });
+		setAgentCaret(editor, { id: 'a', name: 'Claude', color: 'rgb(255, 0, 0)', ...BRAVE });
+		await frame();
+		// No decorations: the treatment draws the selection, the caret and its tag.
+		expect(caretEl(editor)).toBeNull();
+		expect(editor.view.dom.querySelector('.pe-agent-selection')).toBeNull();
+		const behind = host.querySelector('.pe-agent-treatment-behind')!;
+		const above = host.querySelector('.pe-agent-treatment-above')!;
+		expect(host.firstElementChild).toBe(behind);
+		expect(behind.querySelectorAll('rect')).toHaveLength(1);
+		// "brave" is characters 6..11 of the text node: 48 px in, 40 px wide, tinted in the agent's colour.
+		expect(behind.querySelector('rect')!.outerHTML).toContain('x="48" y="0" width="40" height="20"');
+		expect(behind.querySelector('rect')!.getAttribute('fill')).toBe('rgba(255,0,0,0.28)');
+		expect(above.querySelector('.pe-agent-treatment-tag')!.textContent).toBe('Claude');
+		expect(getAgentCarets(editor.state)[0]).toMatchObject({ stage: 'selecting', stageSince: 0 });
+
+		// What lands is tinted; the overlay follows the caret's stage.
+		clock.set(1000);
+		markAgentChanges(editor, 'a', [BRAVE]);
+		setAgentCaret(editor, { id: 'a', from: BRAVE.to });
+		await frame();
+		expect(getAgentCarets(editor.state)[0]).toMatchObject({ stage: 'caret', stageSince: 1000, changedSince: 1000 });
+		expect(behind.querySelector('rect')!.getAttribute('fill')).toBe('rgba(255,0,0,0.18)');
+
+		// Each agent can have its own treatment.
+		setAgentCaret(editor, { id: 'a', from: 1, to: 6, treatment: 'fake.underline' });
+		clock.set(1150);
+		await frame();
+		expect(behind.innerHTML).toBe('');
+		expect(above.querySelectorAll('rect').length).toBeGreaterThan(1);
+
+		// Without the provider, it is decorations again.
+		setAgentTextTreatments(editor, null);
+		expect(behind.innerHTML).toBe('');
+		expect(caretEl(editor)).not.toBeNull();
+		editor.destroy();
+		expect(host.querySelector('.pe-agent-treatment')).toBeNull();
+		host.remove();
+	});
+
+	it('plays checking, selecting and typing stages as the agent types', async () => {
+		const { editor, clock } = mounted();
+		setAgentTextTreatments(editor, { provider: createFakeEffectProvider({ textTreatments: true }), now: clock.now });
+		const stages: unknown[] = [];
+		await typeAgentText(editor, {
+			...BRAVE,
+			text: 'bold',
+			check: { from: 1, to: 18 },
+			caret: { id: 'a' },
+			wait: async (ms) => {
+				const c = getAgentCarets(editor.state)[0];
+				stages.push([c.stage, c.check ?? null, ms]);
+				clock.set(clock.now() + ms);
+			}
+		});
+		expect(stages[0]).toEqual(['checking', { from: 1, to: 18 }, 480]);
+		expect(stages[1]).toEqual(['selecting', null, 250]);
+		expect(stages.slice(2).every((s) => (s as unknown[])[0] === 'typing')).toBe(true);
+		expect(getAgentCarets(editor.state)[0]).toMatchObject({ stage: 'caret', changed: [{ from: 7, to: 11 }] });
+		expect(editor.getText()).toBe('Hello bold world');
+		editor.destroy();
+	});
+
+	it('removes a finished checking or landed stage, and holds a finished selection', () => {
+		const target = { lines: [{ x: 0, y: 0, width: 50, height: 20 }] };
+		const planAt = (stage: 'checking' | 'selecting') => (time: number) => builtInTextTreatmentPlan({ stage, time, target });
+		expect(textTreatmentFrame(planAt('checking'), 'checking', 100)!.layers.length).toBeGreaterThan(0);
+		expect(textTreatmentFrame(planAt('checking'), 'checking', 900)).toBeNull();
+		expect(textTreatmentFrame(planAt('selecting'), 'selecting', 900)).toMatchObject({ time: 0, layers: [{ source: 'selection' }] });
+	});
+
+	it('writes layers as SVG and HTML name tags', () => {
+		const layers = builtInTextTreatmentPlan({ stage: 'checking', time: 200, target: { lines: [{ x: 0, y: 0, width: 100, height: 20 }], caret: { x: 5, y: 0, height: 20 }, label: '<b>' } }).layers;
+		const behind = textTreatmentMarkup(layers, 'behind');
+		expect(behind).toContain('<linearGradient id="pe-tt-g0" gradientUnits="userSpaceOnUse"');
+		expect(behind).toContain('fill="url(#pe-tt-g0)"');
+		expect(textTreatmentMarkup(layers, 'above')).toBe('');
+		const tag = textTreatmentMarkup(builtInTextTreatmentPlan({ stage: 'caret', time: 0, target: { caret: { x: 5, y: 30, height: 20 }, label: '<b>' } }).layers, 'above');
+		expect(tag).toContain('class="pe-agent-treatment-tag"');
+		expect(tag).toContain('&lt;b&gt;</span>');
 	});
 });

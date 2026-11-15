@@ -57,12 +57,13 @@ export function resolveEffectValues(description: Pick<EffectDescription, 'id' | 
 // ---------------------------------------------------------------------------
 
 /** Kinds that draw no picture of their own, each offered only where its use (the same name) is. */
-const PIXELLESS_KINDS = ['motion', 'camera', 'timing'] as const;
+const PIXELLESS_KINDS = ['motion', 'camera', 'timing', 'text-treatment'] as const;
 
 /**
  * Whether an editor offering `uses` should offer `e` (in a picker or an `effect` enum). Motion,
- * camera and timing effects draw no picture of their own, so they are offered only where `uses`
- * names them (`motion`, `camera`, `timing`); with no `uses`, every other effect is.
+ * camera, timing and text-treatment effects draw no picture of their own, so they are offered only
+ * where `uses` names them (`motion`, `camera`, `timing`, `text-treatment`); with no `uses`, every
+ * other effect is.
  */
 export function effectOffered(e: Pick<EffectSummary, 'kind' | 'uses'>, uses?: readonly EffectUse[]): boolean {
 	const pixelless = (PIXELLESS_KINDS as readonly string[]).includes(e.kind);

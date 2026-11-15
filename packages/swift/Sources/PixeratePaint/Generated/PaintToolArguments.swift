@@ -2826,16 +2826,17 @@ public struct SetLayerEffectsEnabledArguments: Sendable {
 
 /// Arguments of `search_effects`.
 public struct SearchEffectsArguments: Sendable {
-    /// shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own).
+    /// shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels), timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own) or text-treatment (how an agent's edits to text look; drawn over a host's text, no pixels).
     public enum Kind: String, CaseIterable, Sendable {
         case shader
         case vector
         case motion
         case camera
         case timing
+        case textTreatment = "text-treatment"
     }
 
-    /// What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage.
+    /// What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage, text-treatment draws an agent's edits over text.
     public enum Use: String, CaseIterable, Sendable {
         case filter
         case transition
@@ -2846,6 +2847,7 @@ public struct SearchEffectsArguments: Sendable {
         case interactive
         case camera
         case timing
+        case textTreatment = "text-treatment"
     }
 
     /// Only effects that take every one of these (path: effects that draw along a path you give; describe_effect names the controls in pathControls).
@@ -2864,11 +2866,11 @@ public struct SearchEffectsArguments: Sendable {
 
     /// Words to match (default: every effect).
     public var query: String?
-    /// shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own).
+    /// shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels), timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own) or text-treatment (how an agent's edits to text look; drawn over a host's text, no pixels).
     public var kind: Kind?
     /// The provider's category, e.g.
     public var category: String?
-    /// What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage.
+    /// What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage, text-treatment draws an agent's edits over text.
     public var use: Use?
     /// Only effects carrying every one of these tags, as search_effects lists them (any case; spaces count as hyphens).
     public var tags: [String]?

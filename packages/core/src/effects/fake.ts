@@ -25,6 +25,10 @@
  * (slow or fast, blending frames), `freeze` (holds one frame, then plays on) and `echo` (fading
  * copies of the frames before, averaged or lightened).
  *
+ * With `textTreatments: true` it also has two text treatments (no pixels; they draw an agent's
+ * edits over a host's text, `textTreatmentPlan`): `soft` (the built-in look, its default) and
+ * `underline` (a line under the text instead of tints, 300 ms per stage, fading as it lands).
+ *
  * With `templates: true` it also has two sequence templates (see `fake-templates.ts`):
  * `fake.title-sequence` and `fake.picture-reveal`.
  */
@@ -32,6 +36,7 @@
 import { EffectDisposedError, EffectUnsupportedError, UnknownEffectError } from './errors.js';
 import { createEffectAuthoringSession } from './authoring-session.js';
 import { fakeTemplateMethods } from './fake-templates.js';
+import { builtInTextTreatmentPlan, checkTextTreatmentRequest, textTreatmentColor, type TextTreatmentPlan, type TextTreatmentPlanRequest } from './text-treatment.js';
 import {
 	checkTimingFootage,
 	checkTimingRequest,
@@ -463,6 +468,68 @@ const FAKE_PAINT_HINTS: Readonly<Record<string, EffectPaintHint>> = {
 	'fake.trail': { map: 'path', colors: ['color'], values: { width: 4 } }
 };
 
+const TREATMENT_CONTROLS = {
+	type: 'object' as const,
+	additionalProperties: false as const,
+	properties: { color: colour('The agent\'s colour, "#rrggbb". Default #8b5cf6.') }
+};
+
+const TREATMENT_DESCRIPTIONS: readonly EffectDescription[] = [
+	{
+		id: 'fake.soft',
+		name: 'Soft tint',
+		kind: 'text-treatment',
+		category: 'treatment',
+		uses: ['text-treatment'],
+		description: 'The editors\' built-in look: a caret with a name tag, a tinted selection and a tint on what changed, with a soft sweep while checking.',
+		tags: ['agent', 'caret', 'tint'],
+		transparent: true,
+		loop: false,
+		controls: TREATMENT_CONTROLS,
+		defaults: { color: '#8b5cf6' },
+		presets: [{ name: 'Teal', values: { color: '#30b0c7' } }],
+		inputs: []
+	},
+	{
+		id: 'fake.underline',
+		name: 'Underline',
+		kind: 'text-treatment',
+		category: 'treatment',
+		uses: ['text-treatment'],
+		description: 'A line under the text being checked, selected, typed and changed, each stage growing over 300 ms; the changed line fades.',
+		tags: ['agent', 'caret', 'underline'],
+		transparent: true,
+		loop: false,
+		controls: TREATMENT_CONTROLS,
+		defaults: { color: '#8b5cf6' },
+		presets: [],
+		inputs: []
+	}
+];
+
+/** `fake.underline`: a 2 px line under each line of the range, growing over 300 ms; landed fades over the next 300 ms. */
+function underlinePlan(request: TextTreatmentPlanRequest, hex: string): TextTreatmentPlan {
+	const [r, g, b] = textTreatmentColor(hex)!;
+	const { stage, time, target } = request;
+	const reduced = request.reduceMotion === true;
+	const loop = stage === 'caret' || stage === 'typing';
+	const duration = stage === 'landed' ? 600 : 300;
+	const p = reduced ? 1 : clamp01(time / 300);
+	const fade = stage === 'landed' ? clamp01(1 - (time - 300) / 300) : 1;
+	const layers: TextTreatmentPlan['layers'] = [];
+	if (stage !== 'caret') {
+		for (const l of target.lines ?? []) {
+			if (!(l.width > 0 && l.height > 0) || p <= 0 || fade <= 0) continue;
+			layers.push({ kind: 'rect', source: 'underline', z: 'above', x: l.x, y: l.y + l.height - 2, width: l.width * p, height: 2, radius: 1, opacity: fade, color: [r, g, b, 1], blend: 'normal' });
+		}
+	}
+	const c = target.caret;
+	if (c && c.height > 0 && stage !== 'checking' && stage !== 'landed') {
+		layers.push({ kind: 'rect', source: 'caret', z: 'above', x: c.x - 1, y: c.y, width: 2, height: c.height, radius: 0, opacity: 1, color: [r, g, b, 1], blend: 'normal' });
+	}
+	return { stage, time, duration, done: !loop && time >= duration, reduced, layers };
+}
+
 const summaryOf = ({ controls: _c, defaults: _d, presets: _p, inputs: _i, ...summary }: EffectDescription): EffectSummary => summary;
 
 const hexToRgb = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
@@ -698,13 +765,15 @@ export interface FakeEffectProviderOptions {
 	camera?: boolean;
 	/** Adds the timing effects and `timingLength` / `timingSample` (default false). */
 	timing?: boolean;
+	/** Adds two text treatments and `textTreatmentPlan`, with `fake.soft` as the default (default false). */
+	textTreatments?: boolean;
 	/** Adds two sequence templates and `listTemplates` / `describeTemplate` / `instantiateTemplate` (default false). */
 	templates?: boolean;
 	/** Declares `capabilities.paintHints` and gives `gradient` and `trail` paint hints, so only they suit paint (default false). */
 	paintHints?: boolean;
 }
 
-/** A deterministic CPU effects provider with nine effects, and camera moves, timing effects and templates on request (see the module comment). */
+/** A deterministic CPU effects provider with nine effects, and camera moves, timing effects, text treatments and templates on request (see the module comment). */
 export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}): EffectProvider {
 	const supportsAuthoring = options.authoring ?? true;
 	const capabilities: EffectProviderCapabilities = {
@@ -717,11 +786,12 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		...(options.camera ? { supportsCamera: true } : {}),
 		...(options.timing ? { supportsTiming: true } : {}),
 		...(options.templates ? { supportsTemplates: true } : {}),
+		...(options.textTreatments ? { supportsTextTreatments: true, defaultTextTreatment: 'fake.soft' } : {}),
 		...(options.paintHints ? { paintHints: true } : {}),
 		maxSize: 8192,
 		...options.capabilities
 	};
-	const all = [...DESCRIPTIONS, ...(options.camera ? CAMERA_DESCRIPTIONS : []), ...(options.timing ? TIMING_DESCRIPTIONS : [])].map((d) =>
+	const all = [...DESCRIPTIONS, ...(options.camera ? CAMERA_DESCRIPTIONS : []), ...(options.timing ? TIMING_DESCRIPTIONS : []), ...(options.textTreatments ? TREATMENT_DESCRIPTIONS : [])].map((d) =>
 		options.paintHints && FAKE_PAINT_HINTS[d.id] ? { ...d, paint: FAKE_PAINT_HINTS[d.id] } : d
 	);
 	const byId = new Map(all.map((d) => [d.id, d]));
@@ -757,6 +827,14 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 		return normaliseTimingSample(raw.frames, { ...request, fps }, raw.lighten ? 'lighten' : 'average');
 	};
 
+	const textTreatmentPlan = (id: string, request: TextTreatmentPlanRequest, values?: EffectValues): TextTreatmentPlan => {
+		const d = get(id);
+		if (d.kind !== 'text-treatment') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect, not a text treatment; the text treatments are "fake.soft", "fake.underline".`, id);
+		checkTextTreatmentRequest(request, id);
+		const v = resolveEffectValues(d, values);
+		return d.id === 'fake.soft' ? builtInTextTreatmentPlan(request, { color: v.color as string }) : underlinePlan(request, v.color as string);
+	};
+
 	const provider: EffectProvider = {
 		id: 'fake',
 		name: 'Fake effects',
@@ -769,6 +847,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 			const d = get(id);
 			if (d.kind === 'camera') throw new EffectUnsupportedError(`"${id}" is a camera move: it moves a scene's camera and draws no pixels. Use cameraView.`, id);
 			if (d.kind === 'timing') throw new EffectUnsupportedError(`"${id}" is a timing effect: it retimes video footage and draws no pixels of its own. Use timingSample and blend the footage frames it names.`, id);
+			if (d.kind === 'text-treatment') throw new EffectUnsupportedError(`"${id}" is a text treatment: it draws over a host's text, not a picture of its own. Use textTreatmentPlan.`, id);
 			if (d.kind !== 'shader') throw new EffectUnsupportedError(`"${id}" is a ${d.kind} effect; use applyVectorEffect.`, id);
 			const { width, height } = ro;
 			const depth = ro.depth ?? 8;
@@ -855,6 +934,7 @@ export function createFakeEffectProvider(options: FakeEffectProviderOptions = {}
 			  }
 			: {}),
 		...(options.timing ? { timingLength, timingSample } : {}),
+		...(options.textTreatments ? { textTreatmentPlan } : {}),
 		...(options.templates ? fakeTemplateMethods() : {}),
 		...(supportsAuthoring
 			? {

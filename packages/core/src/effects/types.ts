@@ -10,13 +10,15 @@
 import type { JsonSchema } from '../tools/schema.js';
 import type { FlairSvgAnimation } from '../animation-editor/flair.js';
 import type { EffectAuthoringSession, EffectAuthoringSource } from './authoring.js';
+import type { TextTreatmentPlan, TextTreatmentPlanRequest } from './text-treatment.js';
 
 /**
  * How an effect is drawn: a pixel shader, an animated vector picture, motion applied to someone
- * else's vector art, a camera move, which moves a scene's camera and draws no pixels, or a
- * timing effect, which retimes video footage and draws no pixels of its own.
+ * else's vector art, a camera move, which moves a scene's camera and draws no pixels, a timing
+ * effect, which retimes video footage and draws no pixels of its own, or a text treatment, which
+ * draws the stages of an agent's edit over a host's text as a layer plan (`textTreatmentPlan`).
  */
-export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera' | 'timing';
+export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera' | 'timing' | 'text-treatment';
 
 /**
  * What an effect is for. An effect may have several uses.
@@ -32,11 +34,14 @@ export type EffectKind = 'shader' | 'vector' | 'motion' | 'camera' | 'timing';
  *   no other use, so editors that draw pixels never offer them.
  * - `timing`: retimes video footage (`timingSample`): slow motion, a reverse, a freeze, a long
  *   exposure. Only `timing` effects have it, and they have no other use.
+ * - `text-treatment`: draws how an agent's edits to text look (`textTreatmentPlan`): checking,
+ *   selecting, typing, landed and its caret. Only `text-treatment` effects have it, and they have
+ *   no other use.
  */
-export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive' | 'camera' | 'timing';
+export type EffectUse = 'filter' | 'transition' | 'generator' | 'overlay' | 'title' | 'motion' | 'interactive' | 'camera' | 'timing' | 'text-treatment';
 
-export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion', 'camera', 'timing'];
-export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive', 'camera', 'timing'];
+export const EFFECT_KINDS: readonly EffectKind[] = ['shader', 'vector', 'motion', 'camera', 'timing', 'text-treatment'];
+export const EFFECT_USES: readonly EffectUse[] = ['filter', 'transition', 'generator', 'overlay', 'title', 'motion', 'interactive', 'camera', 'timing', 'text-treatment'];
 
 /**
  * What a camera move does to a shot.
@@ -684,6 +689,13 @@ export interface EffectProviderCapabilities {
 	supportsTiming?: boolean;
 	/** Implements `listTemplates`, `describeTemplate` and `instantiateTemplate`. */
 	supportsTemplates?: boolean;
+	/** Lists `text-treatment` effects and implements `textTreatmentPlan`. */
+	supportsTextTreatments?: boolean;
+	/**
+	 * The `text-treatment` effect editors draw agents' edits with when nobody has chosen one (e.g.
+	 * Flair's `soft-sweep`). Without it, editors draw the built-in treatment until one is chosen.
+	 */
+	defaultTextTreatment?: string;
 	/**
 	 * Every effect that suits paint carries a `paint` hint, and those without one do not suit it:
 	 * editors then offer only hinted effects as paint (effect layers, fills and the paper still
@@ -765,6 +777,17 @@ export interface EffectProvider {
 	 * not finite or an `fps` outside 0–`TIMING_MAX_FPS` also throw `EffectUnsupportedError`.
 	 */
 	timingSample?(id: string, request: TimingSampleRequest, values?: EffectValues): TimingSample;
+	/**
+	 * What a text treatment draws for `request.stage`, `request.time` ms into it, over the host's
+	 * text (`request.target`): a layer plan in the host's coordinates, with the stage's length and
+	 * whether it is done (see `TextTreatmentPlan`). Present when `capabilities.supportsTextTreatments`.
+	 * Synchronous and pure, so a host can call it every frame. Every treatment has a `color` colour
+	 * control (the agent's colour, `#rrggbb`), so several agents can be told apart. Unknown ids
+	 * throw `UnknownEffectError`, invalid values `EffectControlError`, and an effect that is not a
+	 * text treatment (or a bad stage, time or target: `checkTextTreatmentRequest`)
+	 * `EffectUnsupportedError`.
+	 */
+	textTreatmentPlan?(id: string, request: TextTreatmentPlanRequest, values?: EffectValues): TextTreatmentPlan;
 	/** Sequence templates, best match first. Present when `capabilities.supportsTemplates`. */
 	listTemplates?(options?: EffectTemplateSearchOptions): MaybePromise<readonly EffectTemplateSummary[]>;
 	/** A template with its slots. Unknown ids throw `UnknownTemplateError`. */

@@ -95,6 +95,11 @@ export interface RichTextAgentPresence {
 	/** CSS colour of the caret and its highlights (default violet). */
 	color?: string;
 	/**
+	 * The text treatment this agent's edits are drawn with, when the editor draws with an effects
+	 * provider (`setAgentTextTreatments`); default the provider's.
+	 */
+	treatment?: string;
+	/**
 	 * Type inserted and replacement text out a few characters at a time (still one undo step).
 	 * Default false: edits land at once. `true` uses the default speed.
 	 */
@@ -119,7 +124,8 @@ function createTextPresence(editor: () => Editor, providerId: string, option: Ri
 	const caret = {
 		id: config?.id ?? providerId,
 		name: config?.name ?? DEFAULT_AGENT_CARET_NAME,
-		color: config?.color ?? DEFAULT_AGENT_CARET_COLOR
+		color: config?.color ?? DEFAULT_AGENT_CARET_COLOR,
+		...(config?.treatment !== undefined && { treatment: config.treatment })
 	};
 	const typing: AgentTypingOptions | null = !config?.typing ? null : config.typing === true ? {} : config.typing;
 	const idleMs = config?.idleMs ?? 12000;
