@@ -319,6 +319,29 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(model.activeLayer?.type, "group")
     }
 
+    func testSelectStrokePicksAStrokeOnAnotherStrokeLayer() throws {
+        let model = try makeModel()
+        let c = model.controller
+        model.addLayer(type: "strokes")
+        let lower = try XCTUnwrap(c.doc.activeLayerId)
+        XCTAssertTrue(model.pointerDown(mouse(40, 40)))
+        model.pointerMove(mouse(120, 60))
+        model.pointerUp(mouse(120, 60))
+        let stroke = try XCTUnwrap(model.liveStrokes?.first)
+        model.addLayer(type: "strokes")
+        XCTAssertNotEqual(c.doc.activeLayerId, lower)
+        let undo = c.undoLabel
+        model.tool = "stroke"
+        XCTAssertTrue(model.pointerDown(mouse(80, 50)))
+        XCTAssertNil(model.gesture.error)
+        XCTAssertEqual(c.doc.activeLayerId, lower)
+        XCTAssertEqual(model.selectedStroke, stroke.id)
+        XCTAssertEqual(c.undoLabel, undo)
+        model.pointerUp(mouse(80, 50))
+        XCTAssertFalse(model.pointerDown(mouse(10, 190)))
+        XCTAssertNil(model.selectedStroke)
+    }
+
     func testStrokeLayerEditsAndLayerStyles() throws {
         let model = try makeModel()
         let c = model.controller

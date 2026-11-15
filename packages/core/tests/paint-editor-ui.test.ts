@@ -58,6 +58,27 @@ describe('PaintGesture', () => {
     expect(c.listLiveStrokes()[0].points[0]).toMatchObject({ x: 20, y: 50 });
   });
 
+  it('the Select stroke tool picks a stroke on another stroke layer and makes that layer active', () => {
+    const { c, g } = setup();
+    g.tool = 'stroke';
+    const lower = c.addLayer({ type: 'strokes' });
+    c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 90, y: 50 }], brushId: 'ink-pen', color: '#000000' });
+    const [s] = c.listLiveStrokes();
+    const upper = c.addLayer({ type: 'strokes' });
+    expect(c.getState().document.activeLayerId).toBe(upper.id);
+    const undo = c.getState().undoLabel;
+    expect(g.down(ev(50, 50))).toBe(true);
+    expect(g.error).toBeFalsy();
+    expect(c.getState().document.activeLayerId).toBe(lower.id);
+    expect(c.getState().selectedStroke).toBe(s.id);
+    expect(c.getState().undoLabel).toBe(undo);
+    g.up(ev(50, 50));
+    // Pressing empty canvas clears the pick and leaves the layer as it is.
+    expect(g.down(ev(150, 90))).toBe(false);
+    expect(c.getState().selectedStroke).toBeNull();
+    expect(c.getState().document.activeLayerId).toBe(lower.id);
+  });
+
   it('the Stickers tool places, picks and drags stickers, each one undo step', () => {
     const { c, g } = setup();
     c.setBrush({ id: 'sticker-stars', tip: { size: 30 } });
