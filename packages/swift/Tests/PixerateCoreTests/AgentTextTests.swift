@@ -111,56 +111,27 @@ final class AgentTextTests: XCTestCase {
         let data = try Data(contentsOf: ConformanceContracts.url("domains/agent-text/treatment-plans.json"))
         let cases = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
         XCTAssertGreaterThan(cases.count, 100)
-        func num(_ v: Any?) -> Double { (v as? NSNumber)?.doubleValue ?? .nan }
-        func rgba(_ v: Any?) -> TextTreatmentRGBA? {
-            guard let a = v as? [Any], a.count == 4 else { return nil }
-            return TextTreatmentRGBA(num(a[0]), num(a[1]), num(a[2]), num(a[3]))
-        }
-        func near(_ a: TextTreatmentRGBA?, _ b: TextTreatmentRGBA?, _ at: String) {
-            guard let a, let b else { return XCTAssertEqual(a == nil, b == nil, at) }
-            for (x, y) in [(a.r, b.r), (a.g, b.g), (a.b, b.b), (a.a, b.a)] { XCTAssertEqual(x, y, accuracy: 1e-12, at) }
-        }
         for c in cases {
             let raw = try XCTUnwrap(c["target"] as? [String: Any])
-            let target = TextTreatmentTarget(
-                lines: (raw["lines"] as? [[String: Any]] ?? []).map { TextTreatmentRect(x: num($0["x"]), y: num($0["y"]), width: num($0["width"]), height: num($0["height"])) },
-                caret: (raw["caret"] as? [String: Any]).map { TextTreatmentCaret(x: num($0["x"]), y: num($0["y"]), height: num($0["height"])) },
-                label: raw["label"] as? String)
+            let rawLines = raw["lines"] as? [[String: Any]] ?? []
+            var lines: [TextTreatmentRect] = []
+            for l in rawLines { lines.append(TextTreatmentRect(x: treatmentNumber(l["x"]), y: treatmentNumber(l["y"]), width: treatmentNumber(l["width"]), height: treatmentNumber(l["height"]))) }
+            var caret: TextTreatmentCaret?
+            if let rc = raw["caret"] as? [String: Any] { caret = TextTreatmentCaret(x: treatmentNumber(rc["x"]), y: treatmentNumber(rc["y"]), height: treatmentNumber(rc["height"])) }
+            let target = TextTreatmentTarget(lines: lines, caret: caret, label: raw["label"] as? String)
             let stage = try XCTUnwrap(TextTreatmentStage(rawValue: c["stage"] as? String ?? ""))
-            let request = TextTreatmentPlanRequest(stage: stage, time: num(c["time"]), target: target, reduceMotion: c["reduceMotion"] as? Bool ?? false)
-            let plan = try BuiltInTextTreatment.plan(request, color: (c["values"] as? [String: Any])?["color"] as? String)
+            let reduce = c["reduceMotion"] as? Bool ?? false
+            let request = TextTreatmentPlanRequest(stage: stage, time: treatmentNumber(c["time"]), target: target, reduceMotion: reduce)
+            let colour = (c["values"] as? [String: Any])?["color"] as? String
+            let plan = try BuiltInTextTreatment.plan(request, color: colour)
             let want = try XCTUnwrap(c["plan"] as? [String: Any])
-            let at = "\(c["name"] ?? "") \(stage.rawValue) at \(request.time)\(request.reduceMotion ? " reduced" : "")"
-            XCTAssertEqual(plan.duration, num(want["duration"]), at)
+            let at = "\(c["name"] as? String ?? "") \(stage.rawValue) at \(request.time)\(reduce ? " reduced" : "")"
+            XCTAssertEqual(plan.duration, treatmentNumber(want["duration"]), at)
             XCTAssertEqual(plan.done, want["done"] as? Bool, at)
             XCTAssertEqual(plan.reduced, want["reduced"] as? Bool, at)
             let layers = try XCTUnwrap(want["layers"] as? [[String: Any]])
             XCTAssertEqual(plan.layers.count, layers.count, at)
-            for (l, w) in zip(plan.layers, layers) {
-                XCTAssertEqual(l.kind.rawValue, w["kind"] as? String, at)
-                XCTAssertEqual(l.source, w["source"] as? String, at)
-                XCTAssertEqual(l.z.rawValue, w["z"] as? String, at)
-                XCTAssertEqual(l.blend, w["blend"] as? String, at)
-                XCTAssertEqual(l.text, w["text"] as? String, at)
-                for (x, y) in [(l.x, w["x"]), (l.y, w["y"]), (l.width, w["width"]), (l.height, w["height"]), (l.radius, w["radius"]), (l.opacity, w["opacity"])] {
-                    XCTAssertEqual(x, num(y), accuracy: 1e-9, at)
-                }
-                XCTAssertEqual(l.size, (w["size"] as? NSNumber)?.doubleValue, at)
-                XCTAssertEqual(l.padX, (w["padX"] as? NSNumber)?.doubleValue, at)
-                near(l.color, rgba(w["color"]), at)
-                near(l.textColor, rgba(w["textColor"]), at)
-                let g = w["gradient"] as? [String: Any]
-                XCTAssertEqual(l.gradient == nil, g == nil, at)
-                if let lg = l.gradient, let g {
-                    for (x, y) in [(lg.x0, g["x0"]), (lg.y0, g["y0"]), (lg.x1, g["x1"]), (lg.y1, g["y1"])] { XCTAssertEqual(x, num(y), accuracy: 1e-9, at) }
-                    let stops = g["stops"] as? [[String: Any]] ?? []
-                    XCTAssertEqual(lg.stops.count, stops.count, at)
-                    for (s, ws) in zip(lg.stops, stops) {
-                        XCTAssertEqual(s.offset, num(ws["offset"]), at)
-                        near(s.color, rgba(ws["color"]), at)
-                    }
-                }
-            }
+            for (l, w) in zip(plan.layers, layers) { checkTreatmentLayer(l, w, at) }
         }
     }
 
@@ -413,5 +384,57 @@ final class AgentTextTests: XCTestCase {
         XCTAssertEqual(store.caret("pixie")?.selection, NSRange(location: 8, length: 1))
         store.clear()
         XCTAssertTrue(store.carets.isEmpty)
+    }
+}
+
+private func treatmentNumber(_ v: Any?) -> Double {
+    (v as? NSNumber)?.doubleValue ?? .nan
+}
+
+private func treatmentColour(_ v: Any?) -> TextTreatmentRGBA? {
+    guard let a = v as? [Any], a.count == 4 else { return nil }
+    return TextTreatmentRGBA(treatmentNumber(a[0]), treatmentNumber(a[1]), treatmentNumber(a[2]), treatmentNumber(a[3]))
+}
+
+private func assertNear(_ a: TextTreatmentRGBA?, _ b: TextTreatmentRGBA?, _ at: String) {
+    guard let a, let b else {
+        XCTAssertEqual(a == nil, b == nil, at)
+        return
+    }
+    XCTAssertEqual(a.r, b.r, accuracy: 1e-12, at)
+    XCTAssertEqual(a.g, b.g, accuracy: 1e-12, at)
+    XCTAssertEqual(a.b, b.b, accuracy: 1e-12, at)
+    XCTAssertEqual(a.a, b.a, accuracy: 1e-12, at)
+}
+
+/// One planned layer against the TypeScript plan's JSON.
+private func checkTreatmentLayer(_ l: TextTreatmentLayer, _ w: [String: Any], _ at: String) {
+    XCTAssertEqual(l.kind.rawValue, w["kind"] as? String, at)
+    XCTAssertEqual(l.source, w["source"] as? String, at)
+    XCTAssertEqual(l.z.rawValue, w["z"] as? String, at)
+    XCTAssertEqual(l.blend, w["blend"] as? String, at)
+    XCTAssertEqual(l.text, w["text"] as? String, at)
+    XCTAssertEqual(l.x, treatmentNumber(w["x"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.y, treatmentNumber(w["y"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.width, treatmentNumber(w["width"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.height, treatmentNumber(w["height"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.radius, treatmentNumber(w["radius"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.opacity, treatmentNumber(w["opacity"]), accuracy: 1e-9, at)
+    XCTAssertEqual(l.size, (w["size"] as? NSNumber)?.doubleValue, at)
+    XCTAssertEqual(l.padX, (w["padX"] as? NSNumber)?.doubleValue, at)
+    assertNear(l.color, treatmentColour(w["color"]), at)
+    assertNear(l.textColor, treatmentColour(w["textColor"]), at)
+    let g = w["gradient"] as? [String: Any]
+    XCTAssertEqual(l.gradient == nil, g == nil, at)
+    guard let lg = l.gradient, let g else { return }
+    XCTAssertEqual(lg.x0, treatmentNumber(g["x0"]), accuracy: 1e-9, at)
+    XCTAssertEqual(lg.y0, treatmentNumber(g["y0"]), accuracy: 1e-9, at)
+    XCTAssertEqual(lg.x1, treatmentNumber(g["x1"]), accuracy: 1e-9, at)
+    XCTAssertEqual(lg.y1, treatmentNumber(g["y1"]), accuracy: 1e-9, at)
+    let stops = g["stops"] as? [[String: Any]] ?? []
+    XCTAssertEqual(lg.stops.count, stops.count, at)
+    for (stop, ws) in zip(lg.stops, stops) {
+        XCTAssertEqual(stop.offset, treatmentNumber(ws["offset"]), at)
+        assertNear(stop.color, treatmentColour(ws["color"]), at)
     }
 }
