@@ -1,0 +1,806 @@
+[
+  {
+    "name": "capital I",
+    "typed": "so i think ",
+    "expect": {
+      "text": "So I think ",
+      "checks": [
+        "sentence-case",
+        "pronoun-i"
+      ]
+    }
+  },
+  {
+    "name": "i'm",
+    "typed": "Then i'm off ",
+    "expect": {
+      "text": "Then I'm off ",
+      "checks": [
+        "pronoun-i"
+      ]
+    }
+  },
+  {
+    "name": "a contraction",
+    "typed": "I dont know ",
+    "expect": {
+      "text": "I don't know ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "a contraction before a comma",
+    "typed": "It doesnt matter, ",
+    "expect": {
+      "text": "It doesn't matter, ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "a capitalised contraction",
+    "typed": "Dont go ",
+    "expect": {
+      "text": "Don't go ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "an upper-case contraction",
+    "typed": "DONT STOP ",
+    "expect": {
+      "text": "DON'T STOP ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "im",
+    "typed": "Well im here ",
+    "expect": {
+      "text": "Well I'm here ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "real words without an apostrophe stay",
+    "typed": "Its fine, well see ",
+    "expect": {
+      "text": "Its fine, well see ",
+      "checks": []
+    }
+  },
+  {
+    "name": "its before an adverb",
+    "typed": "its really interesting ",
+    "expect": {
+      "text": "It's really interesting ",
+      "checks": [
+        "sentence-case",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "its before a determiner",
+    "typed": "I think its a good day ",
+    "expect": {
+      "text": "I think it's a good day ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "its before a verb",
+    "typed": "its going well ",
+    "expect": {
+      "text": "It's going well ",
+      "checks": [
+        "sentence-case",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "Its before not",
+    "typed": "Its not fine ",
+    "expect": {
+      "text": "It's not fine ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "its before a pronoun",
+    "typed": "I know its me ",
+    "expect": {
+      "text": "I know it's me ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "its before a noun stays",
+    "typed": "The dog wagged its tail ",
+    "expect": {
+      "text": "The dog wagged its tail ",
+      "checks": []
+    }
+  },
+  {
+    "name": "Its before a noun stays",
+    "typed": "Its colour is red ",
+    "expect": {
+      "text": "Its colour is red ",
+      "checks": []
+    }
+  },
+  {
+    "name": "its before an adjective stays",
+    "typed": "in its own way ",
+    "expect": {
+      "text": "In its own way ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "its about stays",
+    "typed": "its about time ",
+    "expect": {
+      "text": "Its about time ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "its in code stays",
+    "typed": "See `its really` ",
+    "expect": {
+      "text": "See `its really` ",
+      "checks": []
+    }
+  },
+  {
+    "name": "wont stays",
+    "typed": "The wont of it ",
+    "expect": {
+      "text": "The wont of it ",
+      "checks": []
+    }
+  },
+  {
+    "name": "mixed case stays",
+    "typed": "iPhone is here ",
+    "expect": {
+      "text": "iPhone is here ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a name stays",
+    "typed": "Ask McDonalds now ",
+    "expect": {
+      "text": "Ask McDonalds now ",
+      "checks": []
+    }
+  },
+  {
+    "name": "its before an unknown word stays",
+    "typed": "its really here ",
+    "lexicon": {
+      "really": "other"
+    },
+    "expect": {
+      "text": "Its really here ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "after a full stop",
+    "typed": "hello world. this is it ",
+    "expect": {
+      "text": "Hello world. This is it ",
+      "checks": [
+        "sentence-case",
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "after ? and !, and OK",
+    "typed": "Really? yes! ok ",
+    "expect": {
+      "text": "Really? Yes! OK ",
+      "checks": [
+        "sentence-case",
+        "capitals"
+      ]
+    }
+  },
+  {
+    "name": "not after an abbreviation",
+    "typed": "See e.g. this one ",
+    "expect": {
+      "text": "See e.g. this one ",
+      "checks": []
+    }
+  },
+  {
+    "name": "not after a decimal",
+    "typed": "It costs 3.50 today ",
+    "expect": {
+      "text": "It costs 3.50 today ",
+      "checks": []
+    }
+  },
+  {
+    "name": "not after an ellipsis",
+    "typed": "Wait... and then ",
+    "expect": {
+      "text": "Wait... and then ",
+      "checks": []
+    }
+  },
+  {
+    "name": "not after an initial",
+    "typed": "Ask J. smith ",
+    "expect": {
+      "text": "Ask J. smith ",
+      "checks": []
+    }
+  },
+  {
+    "name": "after a closing quote",
+    "typed": "He said \"done.\" then left ",
+    "expect": {
+      "text": "He said \"done.\" Then left ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "each line is a sentence",
+    "typed": "first line\nsecond line ",
+    "expect": {
+      "text": "First line\nSecond line ",
+      "checks": [
+        "sentence-case",
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a heading",
+    "typed": "# hello there ",
+    "expect": {
+      "text": "# Hello there ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a list item",
+    "typed": "- buy milk ",
+    "expect": {
+      "text": "- Buy milk ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a quote",
+    "typed": "> quoted text ",
+    "expect": {
+      "text": "> Quoted text ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "bold that starts a paragraph stays",
+    "typed": "**bold** start ",
+    "expect": {
+      "text": "**bold** start ",
+      "checks": []
+    }
+  },
+  {
+    "name": "bold being typed",
+    "typed": "**bold start ",
+    "expect": {
+      "text": "**Bold start ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a code span",
+    "typed": "`dont i` ",
+    "expect": {
+      "text": "`dont i` ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a code block",
+    "typed": "```\ndont i \n",
+    "expect": {
+      "text": "```\ndont i \n",
+      "checks": []
+    }
+  },
+  {
+    "name": "math",
+    "typed": "$x i y$ ",
+    "expect": {
+      "text": "$x i y$ ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a URL",
+    "typed": "See https://example.com/dont i ",
+    "expect": {
+      "text": "See https://example.com/dont I ",
+      "checks": [
+        "pronoun-i"
+      ]
+    }
+  },
+  {
+    "name": "an email",
+    "typed": "Mail me@dont.com ",
+    "expect": {
+      "text": "Mail me@dont.com ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a tag",
+    "typed": "Tag #dont here ",
+    "expect": {
+      "text": "Tag #dont here ",
+      "checks": []
+    }
+  },
+  {
+    "name": "an identifier",
+    "typed": "A file_dont name ",
+    "expect": {
+      "text": "A file_dont name ",
+      "checks": []
+    }
+  },
+  {
+    "name": "HTML",
+    "typed": "<span>dont</span> ",
+    "expect": {
+      "text": "<span>dont</span> ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a table",
+    "typed": "| a | b |\n|---|---|\n| dont | i |",
+    "expect": {
+      "text": "| a | b |\n|---|---|\n| dont | i |",
+      "checks": []
+    }
+  },
+  {
+    "name": "a full stop",
+    "typed": "this is a whole sentence\n",
+    "expect": {
+      "text": "This is a whole sentence.\n",
+      "checks": [
+        "sentence-case",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "a full stop, then a blank line",
+    "typed": "this is a whole sentence\n\n",
+    "expect": {
+      "text": "This is a whole sentence.\n\n",
+      "checks": [
+        "sentence-case",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "a question mark",
+    "typed": "how does this work then\n",
+    "expect": {
+      "text": "How does this work then?\n",
+      "checks": [
+        "sentence-case",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "too short",
+    "typed": "Too short\n\n",
+    "expect": {
+      "text": "Too short\n\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "already punctuated",
+    "typed": "Already done here, really.\n\n",
+    "expect": {
+      "text": "Already done here, really.\n\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "only the long line",
+    "typed": "roses are red\nviolets are blue now\n",
+    "expect": {
+      "text": "Roses are red\nViolets are blue now.\n",
+      "checks": [
+        "sentence-case",
+        "sentence-case",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "three lines",
+    "typed": "It's really interesting becuase I dont know how to do this any more\nwhat could be happenign here\nthis should be capitilised but isnt\n",
+    "expect": {
+      "text": "It's really interesting becuase I don't know how to do this any more.\nWhat could be happenign here?\nThis should be capitilised but isn't.\n",
+      "checks": [
+        "contractions",
+        "terminal-punctuation",
+        "sentence-case",
+        "terminal-punctuation",
+        "sentence-case",
+        "terminal-punctuation",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "three words get no full stop",
+    "typed": "ends in isnt\n",
+    "expect": {
+      "text": "Ends in isn't\n",
+      "checks": [
+        "sentence-case",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "Enter that splits a line adds nothing",
+    "typed": "\n",
+    "after": "Split this line here and",
+    "suffix": " there",
+    "expect": {
+      "text": "Split this line here and\n there",
+      "checks": []
+    }
+  },
+  {
+    "name": "not in a list item",
+    "typed": "- a list item with words\n\n",
+    "expect": {
+      "text": "- A list item with words\n\n",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "not in a heading",
+    "typed": "# A heading with four words\n\n",
+    "expect": {
+      "text": "# A heading with four words\n\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "not after code",
+    "typed": "Ends with a `code span`\n\n",
+    "expect": {
+      "text": "Ends with a `code span`\n\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "not after a link",
+    "typed": "It ends with a [link here](https://x.y)\n\n",
+    "expect": {
+      "text": "It ends with a [link here](https://x.y)\n\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "chat keeps capitals and full stops out",
+    "typed": "ok so i dont know\n\n",
+    "profile": "chat",
+    "expect": {
+      "text": "ok so I don't know\n\n",
+      "checks": [
+        "pronoun-i",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "after a paragraph",
+    "typed": "so i ",
+    "after": "Intro.\n\n",
+    "expect": {
+      "text": "Intro.\n\nSo I ",
+      "checks": [
+        "sentence-case",
+        "pronoun-i"
+      ]
+    }
+  },
+  {
+    "name": "between paragraphs",
+    "typed": "dont ",
+    "after": "Para one.\n\n",
+    "suffix": "\n\nPara two.",
+    "expect": {
+      "text": "Para one.\n\nDon't \n\nPara two.",
+      "checks": [
+        "contractions",
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "spelling",
+    "typed": "teh dog was there becuase i said so\n",
+    "spelling": {
+      "becuase": "because",
+      "teh": "the",
+      "happenign": "happening",
+      "Becuase": "Because"
+    },
+    "expect": {
+      "text": "The dog was there because I said so.\n",
+      "checks": [
+        "spelling",
+        "sentence-case",
+        "spelling",
+        "pronoun-i",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "spelling, then a capital",
+    "typed": "becuase ",
+    "spelling": {
+      "becuase": "because",
+      "teh": "the",
+      "happenign": "happening",
+      "Becuase": "Because"
+    },
+    "expect": {
+      "text": "Because ",
+      "checks": [
+        "spelling",
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "no spelling in code",
+    "typed": "see `becuase` ",
+    "spelling": {
+      "becuase": "because",
+      "teh": "the",
+      "happenign": "happening",
+      "Becuase": "Because"
+    },
+    "expect": {
+      "text": "See `becuase` ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "spelling off",
+    "typed": "teh ",
+    "spelling": {
+      "becuase": "because",
+      "teh": "the",
+      "happenign": "happening",
+      "Becuase": "Because"
+    },
+    "disabled": [
+      "spelling"
+    ],
+    "expect": {
+      "text": "Teh ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "no spelling for two-letter words",
+    "typed": "ab ",
+    "spelling": {
+      "ab": "an"
+    },
+    "expect": {
+      "text": "Ab ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "no spelling for mixed case",
+    "typed": "McDonlads ",
+    "spelling": {
+      "McDonlads": "McDonalds"
+    },
+    "expect": {
+      "text": "McDonlads ",
+      "checks": []
+    }
+  },
+  {
+    "name": "no corrections that split a word",
+    "typed": "hte ",
+    "spelling": {
+      "hte": "the end"
+    },
+    "expect": {
+      "text": "Hte ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "contractions off",
+    "typed": "so i dont ",
+    "disabled": [
+      "contractions"
+    ],
+    "expect": {
+      "text": "So I dont ",
+      "checks": [
+        "sentence-case",
+        "pronoun-i"
+      ]
+    }
+  },
+  {
+    "name": "OK, a comma and I'd",
+    "typed": "this is ok but for now id like to see what can be done to make it better\n",
+    "expect": {
+      "text": "This is OK, but for now I'd like to see what can be done to make it better.\n",
+      "checks": [
+        "sentence-case",
+        "capitals",
+        "clause-comma",
+        "contractions",
+        "terminal-punctuation"
+      ]
+    }
+  },
+  {
+    "name": "I'll",
+    "typed": "ill be there soon ",
+    "expect": {
+      "text": "I'll be there soon ",
+      "checks": [
+        "sentence-case",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "ill as an adjective stays",
+    "typed": "I feel ill today ",
+    "lexicon": {
+      "ill": "adjective"
+    },
+    "expect": {
+      "text": "I feel ill today ",
+      "checks": []
+    }
+  },
+  {
+    "name": "id as a noun stays",
+    "typed": "the id field is empty ",
+    "lexicon": {
+      "id": "noun"
+    },
+    "expect": {
+      "text": "The id field is empty ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a comma before but",
+    "typed": "I tried but it failed ",
+    "expect": {
+      "text": "I tried, but it failed ",
+      "checks": [
+        "clause-comma"
+      ]
+    }
+  },
+  {
+    "name": "no comma between adjectives",
+    "typed": "it was cheap but good ",
+    "expect": {
+      "text": "It was cheap but good ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "no comma in not … but",
+    "typed": "not red but blue ",
+    "expect": {
+      "text": "Not red but blue ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "no comma in nothing but",
+    "typed": "I have nothing but the best ",
+    "expect": {
+      "text": "I have nothing but the best ",
+      "checks": []
+    }
+  },
+  {
+    "name": "no second comma",
+    "typed": "It works, but it is slow ",
+    "expect": {
+      "text": "It works, but it is slow ",
+      "checks": []
+    }
+  },
+  {
+    "name": "Ok stays",
+    "typed": "Ok so ",
+    "expect": {
+      "text": "Ok so ",
+      "checks": []
+    }
+  }
+]

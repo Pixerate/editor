@@ -1,0 +1,87 @@
+[
+  {
+    "name": "a paragraph",
+    "text": "so i dont know. its really odd\n",
+    "expect": [
+      {
+        "from": 0,
+        "to": 2,
+        "replacement": "So",
+        "checks": [
+          "sentence-case"
+        ]
+      },
+      {
+        "from": 3,
+        "to": 4,
+        "replacement": "I",
+        "checks": [
+          "pronoun-i"
+        ]
+      },
+      {
+        "from": 5,
+        "to": 9,
+        "replacement": "don't",
+        "checks": [
+          "contractions"
+        ]
+      },
+      {
+        "from": 16,
+        "to": 19,
+        "replacement": "It's",
+        "checks": [
+          "sentence-case",
+          "contractions"
+        ]
+      },
+      {
+        "from": 30,
+        "to": 30,
+        "replacement": ".",
+        "checks": [
+          "terminal-punctuation"
+        ]
+      }
+    ]
+  },
+  {
+    "name": "code and a list",
+    "text": "# notes\n\n- buy milk\n\n```\ndont i\n```\n\nthis is the end of it\n",
+    "expect": [
+      {
+        "from": 2,
+        "to": 7,
+        "replacement": "Notes",
+        "checks": [
+          "sentence-case"
+        ]
+      },
+      {
+        "from": 11,
+        "to": 14,
+        "replacement": "Buy",
+        "checks": [
+          "sentence-case"
+        ]
+      },
+      {
+        "from": 37,
+        "to": 41,
+        "replacement": "This",
+        "checks": [
+          "sentence-case"
+        ]
+      },
+      {
+        "from": 58,
+        "to": 58,
+        "replacement": ".",
+        "checks": [
+          "terminal-punctuation"
+        ]
+      }
+    ]
+  }
+]

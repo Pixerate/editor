@@ -26,6 +26,7 @@ import {
 	type AgentToolProvider
 } from '../src/agent';
 import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
+import { createTextMechanicsToolProvider } from '../src/tools/text-mechanics-tools';
 import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
 import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
 import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
@@ -138,7 +139,8 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createFindReplaceCommands(doc)),
 			...commandIds(createTableCommands(doc)),
 			...toolNames(createDocumentToolProvider(createRichTextEditorDocument(doc), { store: documentStore() })),
-			...toolNames(createRichTextStyleToolProvider(doc, styles))
+			...toolNames(createRichTextStyleToolProvider(doc, styles)),
+			...toolNames(createTextMechanicsToolProvider({ getText: () => '', applyEdits: () => {} }))
 		],
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
@@ -305,6 +307,7 @@ const FACTORIES: Record<string, string> = {
 	createChartCommands: 'pixerate-chart',
 	createChartStyleToolProvider: 'pixerate-chart',
 	createRichTextStyleToolProvider: 'pixerate-rich-text',
+	createTextMechanicsToolProvider: 'pixerate-rich-text',
 	createTokensStyleToolProvider: 'pixerate-tokens',
 	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',
