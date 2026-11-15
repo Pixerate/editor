@@ -1,7 +1,7 @@
 {
   "$schema": "../../../schema/fixture.schema.json",
   "id": "view3d",
-  "description": "A 3-D view set, merged, refused when out of range and cleared through update_chart (#795).",
+  "description": "A 3-D view set, merged, refused when out of range and cleared through update_chart (#795), with particles and relief merged, refused and turned off (#806, #807).",
   "setup": {
     "width": 640,
     "height": 400,
@@ -293,6 +293,405 @@
           }
         },
         "isError": true
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "view3d": {
+          "particles": {
+            "unit": 10,
+            "order": "largest-first"
+          },
+          "relief": {
+            "amount": 0.06
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Revenue",
+                "values": [
+                  100,
+                  120
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "view3d": {
+              "azimuth": 40,
+              "depth": 3,
+              "elevation": 25,
+              "particles": {
+                "order": "largest-first",
+                "unit": 10
+              },
+              "relief": {
+                "amount": 0.06
+              }
+            },
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "view3d": {
+          "particles": {
+            "order": "smallest-first"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Revenue",
+                "values": [
+                  100,
+                  120
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "view3d": {
+              "azimuth": 40,
+              "depth": 3,
+              "elevation": 25,
+              "particles": {
+                "order": "smallest-first",
+                "unit": 10
+              },
+              "relief": {
+                "amount": 0.06
+              }
+            },
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        }
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "view3d": {
+          "particles": {
+            "unit": -1
+          },
+          "relief": {
+            "octaves": 2.5,
+            "shine": 1
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "invalid_arguments",
+            "details": [
+              {
+                "message": "Must be > 0.",
+                "path": "/view3d/particles/unit"
+              },
+              {
+                "message": "Expected integer, got number.",
+                "path": "/view3d/relief/octaves"
+              },
+              {
+                "message": "Unknown property \"shine\". Allowed: amount, scale, octaves, seed.",
+                "path": "/view3d/relief/shine"
+              }
+            ],
+            "message": "Invalid arguments for tool \"update_chart\"."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
+      "tool": "update_chart",
+      "arguments": {
+        "view3d": {
+          "relief": null
+        }
+      },
+      "expect": {
+        "result": {
+          "spec": {
+            "bins": null,
+            "categories": [
+              "Q1",
+              "Q2"
+            ],
+            "curve": "linear",
+            "dataLabels": false,
+            "gapWidth": 0.28,
+            "highlight": [],
+            "innerRadius": 0.55,
+            "labelPosition": "auto",
+            "legend": {
+              "position": "bottom",
+              "show": true
+            },
+            "likertNeutral": "split",
+            "likertSort": "none",
+            "links": [],
+            "map": "europe",
+            "mapSteps": 5,
+            "mapThresholds": [],
+            "note": "",
+            "orientation": "vertical",
+            "overlap": -0.12,
+            "palette": [
+              "#4269d0",
+              "#efb118",
+              "#ff725c",
+              "#6cc5b0",
+              "#3ca951",
+              "#ff8ab7",
+              "#a463f2",
+              "#97bbf5",
+              "#9c6b4e",
+              "#9498a0"
+            ],
+            "parliamentArc": 180,
+            "parliamentLabel": "",
+            "parliamentMajority": null,
+            "points": true,
+            "raceTopN": 10,
+            "radarGraticule": "polygon",
+            "radarTicks": null,
+            "referenceBands": [],
+            "referenceLines": [],
+            "sankeyLinkColor": "source",
+            "sankeyNodes": [],
+            "series": [
+              {
+                "id": "s1",
+                "name": "Revenue",
+                "values": [
+                  100,
+                  120
+                ]
+              }
+            ],
+            "showTotal": true,
+            "stacking": "none",
+            "subtitle": "",
+            "sunburstLabel": "",
+            "title": "",
+            "tree": [],
+            "type": "bar",
+            "varyColors": false,
+            "version": 1,
+            "view3d": {
+              "azimuth": 40,
+              "depth": 3,
+              "elevation": 25,
+              "particles": {
+                "order": "smallest-first",
+                "unit": 10
+              }
+            },
+            "xAxis": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis": {
+              "format": {},
+              "gridlines": true,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            },
+            "yAxis2": {
+              "format": {},
+              "gridlines": false,
+              "max": null,
+              "min": null,
+              "show": true,
+              "step": null,
+              "title": ""
+            }
+          }
+        }
       }
     },
     {

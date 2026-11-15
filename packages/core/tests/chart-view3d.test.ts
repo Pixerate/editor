@@ -10,7 +10,7 @@ describe('chart view3d (#795)', () => {
 		expect(normalizeChartSpec({ view3d: { azimuth: 45, depth: '2' } }).spec.view3d).toEqual({ azimuth: 45, elevation: 15, depth: 2 });
 		const bad = normalizeChartSpec({ view3d: { azimuth: 400, elevation: -1, depth: 0, tilt: 3 } });
 		expect(bad.issues.map((i) => i.message)).toEqual([
-			'view3d has no "tilt"; it takes azimuth, elevation and depth.',
+			'view3d has no "tilt"; it takes azimuth, elevation, depth, particles and relief.',
 			'view3d.azimuth must be a turn from 0 to 360 degrees.',
 			'view3d.elevation must be an angle from 0 to 90 degrees.',
 			'view3d.depth must be a multiple of the bar width from 0.2 to 20.'

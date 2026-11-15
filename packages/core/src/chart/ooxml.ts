@@ -621,6 +621,7 @@ export function chartToOoxml(spec: ChartSpec): ChartOoxmlWriteResult {
 	if (pieLike && visible.length > 1) issues.push('Only the first series of a pie is drawn; the others are kept in the part.');
 	// A 3-D view is written as Office's bar3D / line3D / area3D chart (#795): one group on one value axis.
 	const view = spec.view3d && !xy && !pieLike && groups.length === 1 && ['bar', 'line', 'area'].includes(groups[0].kind) && !groups[0].secondary ? spec.view3d : undefined;
+	if (view && (view.particles || view.relief)) issues.push(`Office has no ${[view.particles ? 'particles' : '', view.relief ? 'relief' : ''].filter(Boolean).join(' or ')}: the 3-D view is saved without ${view.particles && view.relief ? 'them' : 'it'}.`);
 	if (spec.view3d && !view)
 		issues.push(groups.length > 1 || groups.some((g) => g.secondary) ? 'The 3-D view is not written: Office draws one 3-D group on one value axis, so a chart with mixed series types or a secondary axis is saved flat.' : 'The 3-D view is not written: the chart is saved flat.');
 	const catLit = strLit(spec.categories);

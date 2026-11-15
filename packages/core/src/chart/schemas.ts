@@ -227,7 +227,27 @@ export const CHART_UPDATE_PROPERTIES: Record<string, JsonSchema> = {
 					properties: {
 						azimuth: { type: 'number', minimum: 0, maximum: 360, description: 'Turn around the vertical axis, in degrees.' },
 						elevation: { type: 'number', minimum: 0, maximum: 90, description: 'Height of the eye above the floor, in degrees.' },
-						depth: { type: 'number', minimum: 0.2, maximum: 20, description: 'Depth of the bars and ribbons, in bar widths.' }
+						depth: { type: 'number', minimum: 0.2, maximum: 20, description: 'Depth of the bars and ribbons, in bar widths.' },
+						particles: {
+							type: ['object', 'null'],
+							properties: {
+								unit: { type: 'number', exclusiveMinimum: 0, description: 'What one grain stands for, in the value\'s units (default a round unit for about 600 grains). Say it in the caption.' },
+								order: { type: 'string', enum: ['categories', 'largest-first', 'smallest-first'], description: 'Layer order from the floor up (default categories).' }
+							},
+							additionalProperties: false,
+							description: 'Draw the first series as grains settling into layers, one layer per category (decoration over data: values round to whole grains). null turns it off.'
+						},
+						relief: {
+							type: ['object', 'null'],
+							properties: {
+								amount: { type: 'number', minimum: 0, maximum: 0.25, description: 'Largest change to a thickness, as a fraction of the value (default 0.04). Keep it small when people compare values.' },
+								scale: { type: 'number', minimum: 0.1, maximum: 20, description: 'Noise frequency per category width (default 1.5): higher is finer.' },
+								octaves: { type: 'integer', minimum: 1, maximum: 8, description: 'Octaves of noise (default 4).' },
+								seed: { type: 'integer', description: 'Seed for the noise (default 1).' }
+							},
+							additionalProperties: false,
+							description: 'Sculpt area tops with seeded noise in proportion to the value (decoration, not data). null turns it off.'
+						}
 					},
 					additionalProperties: false,
 					description: 'Bar, line and area drawn in 3-D, seen at these angles; missing fields keep their value or take Office\'s defaults. null goes back to flat. Rendered in 3-D by hosts using @pixerate/editor/three, else flat.'

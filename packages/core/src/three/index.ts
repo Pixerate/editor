@@ -163,7 +163,10 @@ export function heightfieldGeometry(field: Heightfield): THREE.BufferGeometry {
 /** The scene and fitted camera for `spec` (its `view3d`, or Office's default view). */
 export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Chart3dScene {
 	const theme: ChartTheme = { ...DEFAULT_CHART_THEME, ...options.theme };
-	const pile = options.particles ? layoutChartParticles(spec, options.particles) : undefined;
+	// The spec's own 3-D settings (update_chart view3d) unless the host passes its own.
+	const particleOptions = options.particles ?? spec.view3d?.particles;
+	const reliefOptions = options.relief ?? spec.view3d?.relief;
+	const pile = particleOptions ? layoutChartParticles(spec, particleOptions) : undefined;
 	const base3d = layoutChart3d(spec);
 	// Particles: the container takes the bars' place; the camera fits it and the pile above it.
 	const layout = pile
@@ -282,14 +285,14 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: b.seriesId, index: b.index });
 	}
 	const ribbonThickness = layout.height * 0.02;
-	const reliefAmount = options.relief ? Math.min(0.25, Math.max(0, options.relief.amount ?? 0.04)) : 0;
-	const reliefNoise = (x: number, z: number) => fbm2(x * (options.relief?.scale ?? 1.5), z * (options.relief?.scale ?? 1.5), { seed: options.relief?.seed ?? 1, octaves: Math.min(8, Math.max(1, options.relief?.octaves ?? 4)) });
+	const reliefAmount = reliefOptions ? Math.min(0.25, Math.max(0, reliefOptions.amount ?? 0.04)) : 0;
+	const reliefNoise = (x: number, z: number) => fbm2(x * (reliefOptions?.scale ?? 1.5), z * (reliefOptions?.scale ?? 1.5), { seed: reliefOptions?.seed ?? 1, octaves: Math.min(8, Math.max(1, reliefOptions?.octaves ?? 4)) });
 	const sculpted: { geometry: THREE.BufferGeometry; build: (p: number) => Heightfield }[] = [];
 	let reliefError = 0;
 	for (const r of layout.ribbons) {
 		if (r.points.length < 2) continue;
 		let g: THREE.BufferGeometry;
-		if (options.relief && r.kind === 'area') {
+		if (reliefOptions && r.kind === 'area') {
 			// The area's top as a heightfield: its value, linear between points, times 1 ± amount × noise.
 			const pts = r.points;
 			const profile = (x: number) => {
@@ -415,7 +418,7 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		style,
 		background: surfaces.background,
 		...(pile ? { particles: pile } : {}),
-		...(options.relief ? { relief: { amount: reliefAmount, error: reliefError } } : {}),
+		...(reliefOptions ? { relief: { amount: reliefAmount, error: reliefError } } : {}),
 		setProgress,
 		labels() {
 			const out: Chart3dLabel[] = [];
