@@ -1,0 +1,114 @@
+// @vitest-environment jsdom
+import { describe, it, expect } from 'vitest';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { DIAGRAM_UI_RENDER_VERSIONS, diagramUiComponents, type DiagramUiComponent } from '../src/canvas';
+import { parseMermaid } from '../src/diagram/document';
+import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
+
+const descriptorSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-descriptor.schema.json'), 'utf8')) as JsonSchema;
+const byId = (id: string): DiagramUiComponent => diagramUiComponents().find((c) => c.id === id)!;
+
+const parseSvg = (svg: string): SVGSVGElement => {
+	const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+	expect(doc.getElementsByTagName('parsererror')).toHaveLength(0);
+	expect(doc.documentElement.tagName).toBe('svg');
+	return doc.documentElement as unknown as SVGSVGElement;
+};
+
+describe('diagramUiComponents', () => {
+	it('lists the diagram families as data visuals with valid descriptors', () => {
+		const list = diagramUiComponents();
+		expect(list.map((c) => c.id)).toEqual(['flow', 'timeline', 'mindmap']);
+		for (const c of list) {
+			expect(c.descriptor).toMatchObject({ implements: c.id, group: 'data-visual', platforms: ['html-page'], swiftReady: false });
+			const json = JSON.parse(JSON.stringify(c.descriptor));
+			expect(json).toEqual(c.descriptor);
+			expect(validateJsonSchema(json, descriptorSchema)).toEqual([]);
+			const contract = c.descriptor.contract!;
+			expect(contract.props).toMatchObject({ type: 'object', additionalProperties: false });
+			expect(validateJsonSchema(c.descriptor.example, contract.props as JsonSchema)).toEqual([]);
+			expect(contract.a11y).toEqual({ role: 'img', keyboard: {}, labelFrom: 'content' });
+			expect(contract.motion).toBe(false);
+			expect(Object.keys(c.colorRoleUse).sort()).toEqual([...contract.colorRoles!].sort());
+			for (const mode of ['light', 'dark'] as const) expect(Object.keys(c.defaultColors[mode]).sort()).toEqual([...contract.colorRoles!].sort());
+		}
+		expect(Object.keys(DIAGRAM_UI_RENDER_VERSIONS)).toEqual(['flow', 'timeline', 'mindmap']);
+	});
+
+	it('writes Mermaid that parses as an editable diagram of the family', () => {
+		for (const c of diagramUiComponents()) {
+			const doc = parseMermaid(c.toMermaid(c.descriptor.example));
+			expect(doc.tier).toBe('editable');
+		}
+		const flow = byId('flow').toMermaid({ steps: [{ label: 'A "quoted" step' }, { label: 'Line\nbreak' }] });
+		expect(flow).toContain('s0["A #quot;quoted#quot; step"]');
+		expect(flow).toContain('s1["Line break"]');
+		expect(flow).toContain('s0 --> s1');
+		const linked = byId('flow').toMermaid({ steps: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], links: [{ from: 'a', to: 'c', label: 'skip' }], direction: 'TD' });
+		expect(linked).toMatch(/^flowchart TD/);
+		expect(linked).toContain('s0 -->|"skip"| s2');
+		expect(linked).not.toContain('s0 --> s1');
+		expect(byId('timeline').toMermaid({ periods: [{ label: 'Q1: plan', events: ['Kick-off: day 1'] }] })).toContain('Q1∶ plan : Kick-off∶ day 1');
+	});
+
+	it('renders each family at the size asked, light and dark, with an accessible name', () => {
+		for (const c of diagramUiComponents()) {
+			for (const theme of ['light', 'dark'] as const) {
+				const svg = c.render(c.descriptor.example, { width: 480, height: 300, theme });
+				const root = parseSvg(svg);
+				expect(root.getAttribute('width')).toBe('480');
+				expect(root.getAttribute('height')).toBe('300');
+				expect(root.getAttribute('role')).toBe('img');
+				expect(svg.slice(0, svg.indexOf('>')).match(/\srole=/g)).toHaveLength(1);
+				expect(root.getAttribute('viewBox')).toBeTruthy();
+				expect(svg).toContain(`fill="${c.defaultColors[theme].surface}"`);
+				const named = root.getAttribute('aria-label') ?? root.querySelector('title')?.textContent;
+				expect(named).toBeTruthy();
+			}
+			// The same input draws the same SVG.
+			expect(c.render(c.descriptor.example, { width: 400, height: 260 })).toBe(c.render(c.descriptor.example, { width: 400, height: 260 }));
+		}
+		const flow = byId('flow').render({ steps: [{ label: 'Sign up' }, { label: 'Pay' }] }, { width: 400, height: 120 });
+		expect(flow).toContain('Sign up');
+		expect(flow).toContain('Pay');
+	});
+
+	it('takes role colours, accent first', () => {
+		const svg = byId('mindmap').render(byId('mindmap').descriptor.example, { width: 480, height: 300, colors: { accent: '#ff00aa', surface: '#fafafa', border: '#222222' } });
+		expect(svg).toContain('stroke="#ff00aa"');
+		expect(svg).toContain('fill="#fafafa"');
+		// The root takes the border role, its label the surface.
+		expect(svg).toMatch(/<circle[^>]*fill="#222222"[^>]*data-target="root"/);
+		const flow = byId('flow').render(byId('flow').descriptor.example, { width: 480, height: 120, colors: { ink: '#111111', 'surface-raised': '#eeeeee', 'ink-muted': '#777777' } });
+		expect(flow).toContain('#111111');
+		expect(flow).toContain('fill="#eeeeee"');
+		expect(flow).toContain('#777777');
+	});
+
+	it('refuses bad data and sizes with a message', () => {
+		const flow = byId('flow');
+		expect(() => flow.render({ steps: [] }, { width: 300, height: 100 })).toThrow(/flow: invalid data/);
+		expect(() => flow.render({ steps: [{ label: 'A' }], links: [{ from: '1', to: '9' }] }, { width: 300, height: 100 })).toThrow(/names a step that does not exist/);
+		expect(() => flow.render(flow.descriptor.example, { width: 0, height: 100 })).toThrow(/width must be/);
+		expect(() => byId('mindmap').render({ root: 'R', branches: [{ label: 'a', children: [{ label: 'b', children: [{ label: 'c', children: [] }] }] }] }, { width: 300, height: 200 })).toThrow(/invalid data/);
+		expect(() => byId('timeline').toMermaid({ periods: [{ label: '2020' }] })).toThrow(/timeline: invalid data/);
+	});
+
+	it('keeps content hashes stable and returns copies', () => {
+		const a = diagramUiComponents();
+		const b = diagramUiComponents();
+		expect(a.map((c) => c.descriptor.contentHash)).toEqual(b.map((c) => c.descriptor.contentHash));
+		expect(new Set(a.map((c) => c.descriptor.contentHash)).size).toBe(3);
+		(a[0]!.descriptor.example as Record<string, unknown>).title = 'changed';
+		expect(diagramUiComponents()[0]!.descriptor.example).not.toHaveProperty('title');
+	});
+
+	it.skipIf(!process.env.DIAGRAM_UI_SHOTS)('writes renders for a look', () => {
+		const dir = process.env.DIAGRAM_UI_SHOTS!;
+		mkdirSync(dir, { recursive: true });
+		let html = '<body style="margin:0;display:grid;grid-template-columns:1fr 1fr;gap:8px;background:#888">';
+		for (const c of diagramUiComponents()) for (const theme of ['light', 'dark'] as const) html += `<div>${c.render(c.descriptor.example, { width: 560, height: 320, theme })}</div>`;
+		writeFileSync(join(dir, 'diagram-ui.html'), html + '</body>');
+	});
+});

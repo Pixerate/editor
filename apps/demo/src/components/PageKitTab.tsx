@@ -4,6 +4,7 @@ import { PAGE_KIT, PAGE_KIT_GUIDE, PAGE_KIT_HASH, PAGE_KIT_VERSION } from "@pixe
 import { drawPieces, type DrawPieces } from "@pixerate/editor/animation";
 import { useLinkFocus } from "@pixerate/editor-react";
 import { uiComponents, type ChartUiComponent } from "@pixerate/editor/chart";
+import { diagramUiComponents, type DiagramUiComponent } from "@pixerate/editor/canvas";
 import { EditorPage, EditorPanel } from "./EditorPage";
 
 /**
@@ -310,8 +311,24 @@ function UiComponentView({ component, dark }: { component: ChartUiComponent; dar
   );
 }
 
+/** Diagram families as UI components (#819): laid out by the diagram editor, drawn at a size. */
+function DiagramUiComponentView({ component, dark }: { component: DiagramUiComponent; dark: boolean }) {
+  const svg = useMemo(() => component.render(component.descriptor.example, { width: 560, height: component.id === "flow" ? 120 : 300, theme: dark ? "dark" : "light" }), [component, dark]);
+  return (
+    <figure className="space-y-2 rounded-lg border border-slate-800 p-3">
+      <figcaption className="flex flex-wrap items-center gap-2 text-sm text-slate-300">
+        <span className="font-medium text-slate-100">{component.title}</span>
+        <code className="text-xs text-slate-500">{component.descriptor.implements} · {component.descriptor.contentHash}</code>
+      </figcaption>
+      <div className="max-w-full overflow-hidden rounded" dangerouslySetInnerHTML={{ __html: svg }} />
+      <p className="text-xs text-slate-500">{component.description}</p>
+    </figure>
+  );
+}
+
 function UiComponentsView() {
   const components = useMemo(() => uiComponents(), []);
+  const diagrams = useMemo(() => diagramUiComponents(), []);
   const [dark, setDark] = useState(true);
   return (
     <div className="space-y-3">
@@ -325,6 +342,14 @@ function UiComponentsView() {
       <div className="grid gap-3 xl:grid-cols-2">
         {components.map((c) => (
           <UiComponentView key={c.id} component={c} dark={dark} />
+        ))}
+      </div>
+      <p className="text-sm text-slate-400">
+        <code>diagramUiComponents()</code> from <code>@pixerate/editor/canvas</code>: flow, timeline and mind map, laid out the way the diagram editor does.
+      </p>
+      <div className="grid gap-3 xl:grid-cols-2">
+        {diagrams.map((c) => (
+          <DiagramUiComponentView key={c.id} component={c} dark={dark} />
         ))}
       </div>
     </div>
