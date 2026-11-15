@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.75.0
+
+### Minor Changes
+
+- ca52899: New brush preset **Antimatter beam**: blasts every half tip, large and overlapping, with few sparks and a short flash, so a stroke burns a continuous line through the paint instead of a row of separate craters.
+
 ## 0.74.1
 
 ### Patch Changes
