@@ -7,6 +7,7 @@
 import { isEffectError } from './errors.js';
 import { createEffectPixels, effectPaintHintProblems, effectPaintHintShapeProblems, effectValueErrors, isCameraView, isEffectPixels, pathControlsOf, timingSampleProblems } from './helpers.js';
 import { checkEffectSequence, effectSequenceSlots, isSubjectTemplateSlot, templateValueProblem } from './templates.js';
+import { TEXT_TREATMENT_STAGES, textTreatmentPlanProblems, type TextTreatmentPlanRequest, type TextTreatmentTarget } from './text-treatment.js';
 import {
 	CAMERA_MOVE_ROLES,
 	EFFECT_ACCEPTS,
@@ -86,6 +87,9 @@ function checkSummary(e: EffectSummary, issues: EffectConformanceIssue[]) {
 		if (e.uses?.length !== 1 || e.uses[0] !== 'timing') at('a timing effect must have exactly the use "timing"');
 		if (e.duration !== undefined) at('a timing effect has no duration: its length depends on its footage (timingLength)');
 	} else if (e.uses?.includes('timing')) at('only timing effects may have the use "timing"');
+	if (e.kind === 'text-treatment') {
+		if (e.uses?.length !== 1 || e.uses[0] !== 'text-treatment') at('a text treatment must have exactly the use "text-treatment"');
+	} else if (e.uses?.includes('text-treatment')) at('only text treatments may have the use "text-treatment"');
 }
 
 function checkDescription(id: string, d: EffectDescription, issues: EffectConformanceIssue[]) {
@@ -135,7 +139,7 @@ async function checkRender(provider: EffectProvider, d: EffectDescription, size:
 		renderer = await provider.createRenderer(d.id, { width: size, height: size });
 	} catch (e) {
 		// A vector effect may need the host's help to become pixels (a Worker has no DOM to lay out SVG); camera and timing effects have none.
-		if (!((d.kind === 'vector' || d.kind === 'camera' || d.kind === 'timing') && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
+		if (!((d.kind === 'vector' || d.kind === 'camera' || d.kind === 'timing' || d.kind === 'text-treatment') && codeOf(e) === 'unsupported')) at(`createRenderer failed: ${codeOf(e)}`);
 		else if (!(e instanceof Error && e.message.trim())) at('createRenderer refused without saying why');
 		return;
 	}
@@ -208,6 +212,70 @@ const FOOTAGE: readonly { footage: number; fps?: number }[] = [{ footage: 3000 }
 
 /** True for a Promise or other thenable (timing methods must be synchronous). */
 const isPromise = (v: unknown) => !!v && typeof (v as { then?: unknown }).then === 'function';
+
+/** A range wrapping onto a second line, with a caret, a typed word, a name tag and colours. */
+const TREATMENT_TARGET: TextTreatmentTarget = {
+	lines: [
+		{ x: 40, y: 0, width: 120, height: 20 },
+		{ x: 0, y: 24, width: 64.5, height: 20 }
+	],
+	caret: { x: 64.5, y: 24, height: 20 },
+	text: 'word',
+	label: 'Agent',
+	color: '#1d1d1f',
+	background: '#ffffff'
+};
+
+/** A moment long after any stage that does not loop has finished (ms). */
+const TREATMENT_LATE_MS = 120_000;
+
+async function checkTextTreatment(provider: EffectProvider, d: EffectDescription, issues: EffectConformanceIssue[]) {
+	const at = (message: string) => issues.push({ effectId: d.id, message });
+	if (d.inputs.length) at('a text treatment takes no inputs: the host passes its text as line rectangles');
+	const color = d.controls?.properties?.color;
+	if (!color || color.type !== 'string') at('a text treatment needs a "color" control (the agent\'s colour, "#rrggbb"), so several agents can be told apart');
+	for (const stage of TEXT_TREATMENT_STAGES) {
+		for (const reduceMotion of [false, true]) {
+			let duration = 0;
+			for (const time of [0, 50, TREATMENT_LATE_MS]) {
+				const request: TextTreatmentPlanRequest = { stage, time, target: TREATMENT_TARGET, reduceMotion };
+				const where = `textTreatmentPlan ${stage} at ${time} ms${reduceMotion ? ' with reduceMotion' : ''}`;
+				try {
+					const plan = provider.textTreatmentPlan!(d.id, request);
+					if (isPromise(plan)) return at('textTreatmentPlan must be synchronous; it returned a Promise');
+					const problems = textTreatmentPlanProblems(plan, request);
+					for (const p of problems) at(`${where}: ${p}`);
+					if (problems.length) continue;
+					if (JSON.stringify(provider.textTreatmentPlan!(d.id, request)) !== JSON.stringify(plan)) at(`${where} is not pure: two calls gave different plans`);
+					if (time === 0) duration = plan.duration;
+					// The caret and typing loop until the host moves on; the others finish.
+					const loops = stage === 'caret' || stage === 'typing';
+					if (time === TREATMENT_LATE_MS && loops && plan.done) at(`${where}: the ${stage} stage loops until the host moves on, so it is never done`);
+					if (time === TREATMENT_LATE_MS && stage !== 'caret' && stage !== 'typing' && stage !== 'landed' && !plan.done) at(`${where}: the ${stage} stage never finished (done stays false)`);
+					if (time === TREATMENT_LATE_MS && !loops && plan.duration !== duration) at(`${where}: duration changed with time (${duration} at 0 ms)`);
+				} catch (e) {
+					at(`${where} failed: ${codeOf(e)}`);
+				}
+			}
+		}
+	}
+	const probe: TextTreatmentPlanRequest = { stage: 'caret', time: 0, target: TREATMENT_TARGET };
+	if (color) {
+		try {
+			provider.textTreatmentPlan!(d.id, probe, { color: '#3366cc' });
+		} catch (e) {
+			at(`textTreatmentPlan with color "#3366cc" failed: ${codeOf(e)}`);
+		}
+	}
+	const badValues = await rejectsWith('invalid_values', () => provider.textTreatmentPlan!(d.id, probe, { __not_a_control__: 1 }));
+	if (badValues) at(`textTreatmentPlan with an unknown control ${badValues}`);
+	const badStage = await rejectsWith('unsupported', () => provider.textTreatmentPlan!(d.id, { ...probe, stage: 'wiggling' as TextTreatmentPlanRequest['stage'] }));
+	if (badStage) at(`textTreatmentPlan of an unknown stage ${badStage}`);
+	const badTime = await rejectsWith('unsupported', () => provider.textTreatmentPlan!(d.id, { ...probe, time: -1 }));
+	if (badTime) at(`textTreatmentPlan at -1 ms ${badTime}`);
+	const badTarget = await rejectsWith('unsupported', () => provider.textTreatmentPlan!(d.id, { ...probe, target: { lines: [{ x: 0, y: 0, width: -1, height: 10 }] } }));
+	if (badTarget) at(`textTreatmentPlan over a line of width -1 ${badTarget}`);
+}
 
 async function checkTiming(provider: EffectProvider, d: EffectDescription, issues: EffectConformanceIssue[]) {
 	const at = (message: string) => issues.push({ effectId: d.id, message });
@@ -355,6 +423,8 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	if (provider.sampleCameraMove && typeof provider.cameraView !== 'function') top('sampleCameraMove is present but cameraView is missing');
 	if (caps?.supportsTiming !== undefined && typeof caps.supportsTiming !== 'boolean') top('capabilities.supportsTiming is not a boolean');
 	for (const m of ['timingLength', 'timingSample'] as const) if (caps?.supportsTiming && typeof provider[m] !== 'function') top(`supportsTiming is set but ${m} is missing`);
+	if (caps?.supportsTextTreatments !== undefined && typeof caps.supportsTextTreatments !== 'boolean') top('capabilities.supportsTextTreatments is not a boolean');
+	if (caps?.supportsTextTreatments && typeof provider.textTreatmentPlan !== 'function') top('supportsTextTreatments is set but textTreatmentPlan is missing');
 	if (caps?.paintHints !== undefined && typeof caps.paintHints !== 'boolean') top('capabilities.paintHints is not a boolean');
 	if (caps?.supportsTemplates !== undefined && typeof caps.supportsTemplates !== 'boolean') top('capabilities.supportsTemplates is not a boolean');
 	const templateMethods = ['listTemplates', 'describeTemplate', 'instantiateTemplate'] as const;
@@ -370,6 +440,12 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 	}
 	if (!caps?.supportsCamera && list.some((e) => e.kind === 'camera')) top('the catalog lists camera effects but capabilities.supportsCamera is not set');
 	if (!caps?.supportsTiming && list.some((e) => e.kind === 'timing')) top('the catalog lists timing effects but capabilities.supportsTiming is not set');
+	if (!caps?.supportsTextTreatments && list.some((e) => e.kind === 'text-treatment')) top('the catalog lists text treatments but capabilities.supportsTextTreatments is not set');
+	if (caps?.defaultTextTreatment !== undefined) {
+		const named = list.find((e) => e.id === caps.defaultTextTreatment);
+		if (!caps.supportsTextTreatments) top('capabilities.defaultTextTreatment is set but supportsTextTreatments is not');
+		if (!named || named.kind !== 'text-treatment') top(`capabilities.defaultTextTreatment "${String(caps.defaultTextTreatment)}" is not a text treatment in the catalog`);
+	}
 	const all = await provider.search('');
 	if (all.length !== list.length) top(`search("") returned ${all.length} effects, list() ${list.length}`);
 	const firstUse = list[0]?.uses[0];
@@ -405,6 +481,16 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		}
 	}
 
+	const treatments = caps?.supportsTextTreatments && provider.textTreatmentPlan;
+	if (treatments) {
+		const request: TextTreatmentPlanRequest = { stage: 'caret', time: 0, target: TREATMENT_TARGET };
+		const unknownPlan = await rejectsWith('unknown_effect', () => provider.textTreatmentPlan!('__no_such_effect__', request));
+		if (unknownPlan) top(`textTreatmentPlan of an unknown id ${unknownPlan}`);
+		const notTreatment = list.find((e) => e.kind !== 'text-treatment');
+		const wrongPlan = notTreatment && (await rejectsWith('unsupported', () => provider.textTreatmentPlan!(notTreatment.id, request)));
+		if (wrongPlan) issues.push({ effectId: notTreatment!.id, message: `textTreatmentPlan of a ${notTreatment!.kind} effect ${wrongPlan}` });
+	}
+
 	const size = options.size ?? 8;
 	for (const id of options.ids ?? [...ids]) {
 		let d: EffectDescription;
@@ -420,6 +506,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 		if (options.render !== false && d.kind !== 'motion') await checkRender(provider, d, size, issues);
 		if (d.kind === 'camera' && d.camera && caps.supportsCamera && provider.cameraView) await checkCamera(provider, d, issues);
 		if (d.kind === 'timing' && timing) await checkTiming(provider, d, issues);
+		if (d.kind === 'text-treatment' && treatments) await checkTextTreatment(provider, d, issues);
 		if ((d.kind === 'vector' || d.kind === 'motion') && caps.supportsVector && provider.applyVectorEffect) {
 			try {
 				const m = await provider.applyVectorEffect(id, '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect id="r" width="10" height="10"/></svg>');
@@ -436,7 +523,7 @@ export async function checkEffectProvider(provider: EffectProvider, options: Eff
 
 	if (caps?.supportsAuthoring && options.authoring !== false && typeof provider.openAuthoring === 'function') {
 		const targetEffect = (await Promise.all((options.ids ?? [...ids]).map((id) => provider.describe(id)))).find(
-			(d) => d.kind !== 'motion' && d.kind !== 'vector' && d.kind !== 'camera' && d.kind !== 'timing'
+			(d) => d.kind !== 'motion' && d.kind !== 'vector' && d.kind !== 'camera' && d.kind !== 'timing' && d.kind !== 'text-treatment'
 		);
 		if (targetEffect) {
 			try {

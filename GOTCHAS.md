@@ -21,6 +21,13 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/rich-text] Text Treatments Draw Behind the Text Only Where the Editor's Background Is Clear (#887)
+
+- **Issue / Symptom**: With `setAgentTextTreatments`, a treatment's `behind` layers (the selection tint, the checking sweep, the landed tint) don't show, while its caret and name tag (`above`) do.
+- **Root Cause**: The overlay can't go inside the ProseMirror element, because ProseMirror would read it as content. So it sits in the editor's parent: one layer before the editor at `z-index: -1` and one after it at `z-index: 1`. The parent becomes a stacking context (`position: relative` when it was static, `isolation: isolate`). The `behind` layer is painted above the parent's background but under the editor, so an opaque background on `.ProseMirror` (or on anything between it and the parent) hides it.
+- **Solution / Workaround**: Give the editor element a transparent background and put the page colour on its parent or further out. If the parent itself clips or scrolls, the overlay scrolls with it, which is intended.
+
+
 ### [core|swift/paint] External Paint Documents Grew With Every Stroke: Stroke Data Now Goes to the Asset Store in Runs
 
 - **Issue / Symptom**: `toJSONExternal(store)` put only PNGs in the store. Stroke layers' strokes (`liveStrokes`), the stroke log and the wet / paint events stayed inline at full precision (about 26 KB for a 160-point pen stroke), so a host saving the external document to Firestore (1 MiB per document) after every stroke hit the limit after about 40 long strokes (Pixerate/pixerate#676).

@@ -17529,7 +17529,7 @@
         {
           "name": "search_effects",
           "title": "Search effects",
-          "description": "Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing), category, use (filter, transition, generator, overlay, title, motion, interactive, camera, timing) or tags (effects carrying every one), and accepts [\"path\"] for effects that draw along a path you give, and place for the effects one place in this editor takes. For this editor, apply_effect takes uses filter. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts, paint: { map, colors, values, live, repeat, size } when the provider suggests how to paint with it }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.",
+          "description": "Searches the effects provider's catalog. Every word of query must appear in an effect's id, name, category, tags or description; filter by kind (shader, vector, motion, camera, timing, text-treatment), category, use (filter, transition, generator, overlay, title, motion, interactive, camera, timing, text-treatment) or tags (effects carrying every one), and accepts [\"path\"] for effects that draw along a path you give, and place for the effects one place in this editor takes. For this editor, apply_effect takes uses filter. Returns { provider, effects: [{ id, name, kind, category, uses, description, tags, transparent, loop, duration (ms), camera: { role, durationMs, cut } for camera moves, accepts, paint: { map, colors, values, live, repeat, size } when the provider suggests how to paint with it }] (timing effects, kind timing, retime video footage and have no duration: their length depends on the footage), total, tags: [{ tag, count }] }: tags lists the tags of every match, the most used first, so a broad search (or none) shows the tags to narrow by. A tag the catalog does not have comes back in unknownTags with the nearest ones. With no provider registered it returns available: false and the reason. Call describe_effect next for an effect's controls.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -17544,9 +17544,10 @@
                   "vector",
                   "motion",
                   "camera",
-                  "timing"
+                  "timing",
+                  "text-treatment"
                 ],
-                "description": "shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels) or timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own)."
+                "description": "shader (pixels), vector (animated SVG), motion (animates vector art), camera (moves a scene's camera; no pixels), timing (retimes video footage: slow motion, reverse, freeze, long exposure; no pixels of its own) or text-treatment (how an agent's edits to text look; drawn over a host's text, no pixels)."
               },
               "category": {
                 "type": "string",
@@ -17564,9 +17565,10 @@
                   "motion",
                   "interactive",
                   "camera",
-                  "timing"
+                  "timing",
+                  "text-treatment"
                 ],
-                "description": "What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage."
+                "description": "What the effect is for: filter changes a picture, transition blends two, generator draws a background, overlay draws over content, title draws a title, motion animates vector art, interactive reacts to input, camera moves a scene's camera, timing retimes video footage, text-treatment draws an agent's edits over text."
               },
               "tags": {
                 "type": "array",

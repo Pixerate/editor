@@ -21,7 +21,8 @@ export const EFFECT_USE_LABELS: Readonly<Record<EffectUse, string>> = {
 	motion: 'Motion',
 	interactive: 'Interactive',
 	camera: 'Camera',
-	timing: 'Timing'
+	timing: 'Timing',
+	'text-treatment': 'Text treatment'
 };
 
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;

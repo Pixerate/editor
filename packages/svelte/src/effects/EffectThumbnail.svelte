@@ -11,7 +11,7 @@
     class?: string;
   }
 
-  const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing' };
+  const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing', 'text-treatment': 'Text treatment' };
 
   let { provider, effect: item, width = 96, height = 54, class: className = '' }: Props = $props();
   let canvas = $state<HTMLCanvasElement | null>(null);

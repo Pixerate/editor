@@ -629,5 +629,135 @@
         "type": "commit"
       }
     ]
+  },
+  {
+    "name": "check a sentence, then fix a word",
+    "edit": {
+      "from": 4,
+      "to": 8,
+      "text": "there",
+      "check": {
+        "from": 0,
+        "to": 20
+      }
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "check",
+        "from": 0,
+        "to": 20,
+        "ms": 480
+      },
+      {
+        "type": "select",
+        "from": 4,
+        "to": 8,
+        "ms": 250
+      },
+      {
+        "type": "type",
+        "chars": 3,
+        "text": "the",
+        "ms": 41.666666666666664
+      },
+      {
+        "type": "type",
+        "chars": 5,
+        "text": "there",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "quicker check before an insertion",
+    "edit": {
+      "from": 10,
+      "to": 10,
+      "text": ",",
+      "check": {
+        "from": 6,
+        "to": 14
+      }
+    },
+    "options": {
+      "checkMs": 200
+    },
+    "steps": [
+      {
+        "type": "check",
+        "from": 6,
+        "to": 14,
+        "ms": 200
+      },
+      {
+        "type": "type",
+        "chars": 1,
+        "text": ",",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "an empty check is skipped",
+    "edit": {
+      "from": 2,
+      "to": 5,
+      "text": "and",
+      "check": {
+        "from": 3,
+        "to": 3
+      }
+    },
+    "options": {},
+    "steps": [
+      {
+        "type": "select",
+        "from": 2,
+        "to": 5,
+        "ms": 250
+      },
+      {
+        "type": "type",
+        "chars": 2,
+        "text": "an",
+        "ms": 25
+      },
+      {
+        "type": "type",
+        "chars": 3,
+        "text": "and",
+        "ms": 0
+      },
+      {
+        "type": "commit"
+      }
+    ]
+  },
+  {
+    "name": "no check when not animated",
+    "edit": {
+      "from": 0,
+      "to": 4,
+      "text": "word",
+      "check": {
+        "from": 0,
+        "to": 9
+      }
+    },
+    "options": {
+      "animate": false
+    },
+    "steps": [
+      {
+        "type": "commit"
+      }
+    ]
   }
 ]

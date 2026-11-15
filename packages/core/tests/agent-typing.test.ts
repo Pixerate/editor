@@ -22,6 +22,18 @@ describe('planAgentTyping', () => {
 		expect(typed(steps).at(-1)!.ms).toBe(0);
 	});
 
+	it('sweeps over what it checks first, when asked', () => {
+		const steps = planAgentTyping({ from: 4, to: 8, text: 'there', check: { from: 0, to: 20 } });
+		expect(steps.slice(0, 2)).toEqual([
+			{ type: 'check', from: 0, to: 20, ms: 480 },
+			{ type: 'select', from: 4, to: 8, ms: 250 }
+		]);
+		expect(planAgentTyping({ from: 4, to: 4, text: ',', check: { from: 0, to: 9 } }, { checkMs: 100 })[0]).toEqual({ type: 'check', from: 0, to: 9, ms: 100 });
+		// An empty range has nothing to sweep; an edit that isn't animated just lands.
+		expect(planAgentTyping({ from: 4, to: 8, text: 'x', check: { from: 3, to: 3 } })[0].type).toBe('select');
+		expect(planAgentTyping({ from: 4, to: 8, text: 'x', check: { from: 0, to: 9 } }, { animate: false })).toEqual([{ type: 'commit' }]);
+	});
+
 	it('has no selection for an insertion, and one frame for a single character', () => {
 		expect(planAgentTyping({ from: 12, to: 12, text: '.' })).toEqual([
 			{ type: 'type', chars: 1, text: '.', ms: 0 },

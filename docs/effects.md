@@ -1,6 +1,6 @@
 # Effects providers
 
-`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion, camera moves, timing effects) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
+`@pixerate/editor/effects` is a contract for **catalogs of visual effects** (shaders, vector pictures, motion, camera moves, timing effects, text treatments) that the editors can use without depending on any one effects library. The package ships the contract, its checks, a fake provider and the shared agent tools. It imports nothing: no GPU code, no Flair. Without a provider, every editor behaves as it did before effects support existed.
 
 The real provider is [Flair](https://github.com/Pixerate/flair): `flairEffects()` from `@pixerate/flair/integrations`. The adapter lives **in Flair**, not here, so this repo never depends on Flair. The demo is the only place that uses both: `@pixerate/flair` is a devDependency of `apps/demo`, and `apps/demo/src/demoEffects.ts` loads it on demand when the user picks it from the demo's effects switch (the default is the fake "test" provider).
 
@@ -23,6 +23,7 @@ interface EffectProvider {
   sampleCameraMove?(id, request): MaybePromise<CameraMoveSample>;
   timingLength?(id, footageMs, values?): number;            // timing effects; sync and pure
   timingSample?(id, { time, footage, fps? }, values?): TimingSample;
+  textTreatmentPlan?(id, { stage, time, target, reduceMotion? }, values?): TextTreatmentPlan; // sync and pure
   listTemplates?(options?): MaybePromise<EffectTemplateSummary[]>;          // sequence templates
   describeTemplate?(id): MaybePromise<EffectTemplateDescription>;            // slots shaped for a form
   instantiateTemplate?(id, values?, options?): MaybePromise<EffectTemplateResult>;
@@ -38,7 +39,7 @@ interface EffectRenderer {
 }
 ```
 
-- **Kinds** are `shader`, `vector`, `motion`, `camera` and `timing`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive`, `camera` and `timing`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion, camera and timing effects only where their use is named).
+- **Kinds** are `shader`, `vector`, `motion`, `camera`, `timing` and `text-treatment`. **Uses** are `filter`, `transition`, `generator`, `overlay`, `title`, `motion`, `interactive`, `camera`, `timing` and `text-treatment`; each editor offers the uses that make sense in it (`effectOffered(effect, uses)` decides, and offers motion, camera, timing and text-treatment effects only where their use is named).
 - **Capabilities:** `supportsWorker`, `supportsFloat`, `supportsMask`, `supportsHostImages`, `supportsVector`, an optional `maxSize`, and the optional `supportsAuthoring`, `supportsCamera`, `supportsTiming`, `supportsTemplates` and `paintHints` (see [Paint hints](#paint-hints)). Editors check them before asking for something (16/32-bit pixels, masks, vector output).
 - **Errors** (`errors.ts`) are typed with codes: `unknown_effect`, `invalid_values`, `unsupported`, `disposed`, `no_provider` and `unknown_template` (`UnknownEffectError`, `EffectControlError`, `EffectUnsupportedError`, `EffectDisposedError`, `NoEffectsProviderError`, `UnknownTemplateError`; `isEffectError`). Agent tools turn them into `isError` results.
 - **One render at a time per renderer.** `EffectRendererPool` (`pool.ts`) keeps a few renderers alive per effect, size and depth (default 4) and disposes the least recently used. GPU providers hold one WebGL context per renderer, and browsers drop the oldest after about sixteen (#281).
@@ -162,6 +163,19 @@ A `timing` effect retimes video footage rather than drawing pixels: Flair's spee
 - **No pixels.** `createRenderer` for a timing effect may refuse with `EffectUnsupportedError` and a sentence saying why; thumbnails show "Timing".
 - **Checks.** `checkEffectProvider` checks the summary fields, that timing effects are listed only with `supportsTiming`, and for each timing effect calls `timingLength` and `timingSample` across two probe footages (3 s at 30 fps, 1 s at 24 fps): lengths > 0, every sample keeping the rules (`timingSampleProblems`), the same answer twice, synchronous results, and refusals of unknown ids, other kinds, unknown controls, no footage, 0 fps and a NaN time. `createFakeEffectProvider({ timing: true })` adds three: `fake.speed` (blends neighbouring frames when slowed, averages passed-over ones when sped up), `fake.freeze` and `fake.echo` (`average`, or `lighten` with its `lighten` control).
 - **Agents.** `search_effects` filters by `kind: 'timing'` and `use: 'timing'`; `describe_effect` reports `appliesHere: false` in the editors that cannot use them yet. The video editor adopts timing effects (retimed clips) in a follow-up, with its own tools.
+
+## Text treatments
+
+A `text-treatment` effect is how an agent's edits to text look (#887): Flair's soft sweep, marker swipe, glow underline and others. An edit plays in stages: `checking` (a sweep over the word or line the agent looks at), `selecting` (its selection over what it will replace), `typing` (the new text, with the caret at its end), `landed` (what changed, tinted, then fading) and `caret` (its insertion point with a name tag). A treatment draws each stage over the host's text and never changes it. A provider offers treatments by setting `capabilities.supportsTextTreatments` (and `defaultTextTreatment`, the one editors draw with until one is chosen) and implementing `textTreatmentPlan`.
+
+- **Summary.** A treatment has `kind: 'text-treatment'`, exactly the use `text-treatment` (so pixel editors never offer it), no `inputs`, and a `color` control (`#rrggbb`): the agent's colour, so several agents with the same treatment are told apart.
+- **`textTreatmentPlan(id, { stage, time, target, reduceMotion? }, values?)`** returns a `TextTreatmentPlan`: the stage's `layers` (rectangles with optional gradients, outlines and glows, text, name-tag pills and ribbons, each `behind` or `above` the text, in the host's coordinates with y down), how long the stage takes (`duration`) and whether it is `done`. The `target` is the host's: the range's line rectangles in reading order, the caret `{ x, y, height }`, and optionally the typed `text`, a `label` (the agent's name), the text's `color`, `background` and `font`. A host whose typing frames already change its text (the rich-text editor, Swift's `AgentTextDirector`) leaves out `text` and `background`, so the typed word is not drawn twice.
+- **Stages over time.** `caret` and `typing` loop (never done). A host removes a `checking` or `landed` stage once it is done, and holds a `selecting` stage's last frame until typing starts (`textTreatmentFrame`). With `reduceMotion`, every stage is drawn without motion (held, and faded) and the plan says `reduced: true`.
+- **Pure and synchronous**, so a host can plan every frame. Refusals are typed: an unknown id (`unknown_effect`), invalid values (`invalid_values`), and another kind, an unknown stage, a negative time or a bad target (`unsupported`; `checkTextTreatmentRequest` throws them).
+- **The built-in treatment.** Without a provider (or with one that has no treatments), hosts draw `builtInTextTreatmentPlan`: the editors' own look, a 2 px caret with a name tag, a 28% selection tint, an 18% tint on what changed, and a soft band while checking. `planTextTreatment(provider, request, { id?, values? })` picks the agent's treatment, the provider's default or the built-in one. Swift's `BuiltInTextTreatment` matches it exactly (`@pixerate/conformance`, `agent-text/treatment-plans.json`).
+- **No pixels.** `createRenderer` for a treatment may refuse with `EffectUnsupportedError`; thumbnails show "Text treatment".
+- **Checks.** `checkEffectProvider` checks the summary fields, that treatments are listed only with `supportsTextTreatments`, that `defaultTextTreatment` names one, and for each treatment plans every stage at 0 ms, 50 ms and long after, with and without motion, over a range that wraps (well formed plans, `textTreatmentPlanProblems`; the same plan twice; looping stages never done, `checking` and `selecting` finishing), a colour value, and refusals of unknown ids, other kinds, unknown controls, an unknown stage, a negative time and a bad line. `createFakeEffectProvider({ textTreatments: true })` adds `fake.soft` (the built-in look, its default) and `fake.underline`.
+- **Editors.** The rich-text editor draws agents' carets from a treatment with `setAgentTextTreatments(editor, { provider, treatment?, reduceMotion? })`, each agent's own treatment coming from `AgentCaretInput.treatment` (or the rich-text tools' `presence.treatment`), and keeps its decorations without one. In Swift, `AgentCaretStore` keeps each caret's stage and `AgentTextTreatments.plans` turns the carets into plans for a `TextTreatmentRenderer` (Flair's `FlairTextTreatmentRenderer` draws them with Core Animation layers).
 
 ## Sequence templates
 
@@ -301,8 +315,9 @@ renders on the CPU, so recorded pixels never depend on a GPU (see
 3. Make `render` deterministic for the same request, and free GPU or Worker resources in `dispose`.
 4. For camera moves, set `supportsCamera`, give each `camera: { role, durationMs, cut? }` and the use `camera`, and implement `cameraView` as a pure function (see [Camera moves](#camera-moves)).
 5. For timing effects, set `supportsTiming`, give each the use `timing` and no `duration`, and implement `timingLength` and `timingSample` as pure, synchronous functions; `normaliseTimingSample` makes a sample keep the rules (see [Timing effects](#timing-effects)).
-6. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
-7. For paint, give each effect that makes good paint a `paint` hint (on its summary too) and set `paintHints`, so editors stop offering the rest as paint (see [Paint hints](#paint-hints)).
-8. Run `checkEffectProvider` in your tests.
+6. For text treatments, set `supportsTextTreatments` (and `defaultTextTreatment`), give each the use `text-treatment` and a `color` control, and implement `textTreatmentPlan` as a pure, synchronous function (see [Text treatments](#text-treatments)).
+7. For sequence templates, set `supportsTemplates` and implement `listTemplates`, `describeTemplate` and `instantiateTemplate`. Fill to an `EffectSequence` that names only effects you list, and return value problems as `{ ok: false, errors }` rather than throwing (see [Sequence templates](#sequence-templates)).
+8. For paint, give each effect that makes good paint a `paint` hint (on its summary too) and set `paintHints`, so editors stop offering the rest as paint (see [Paint hints](#paint-hints)).
+9. Run `checkEffectProvider` in your tests.
 
 See [outstanding.md](./outstanding.md) for what is not done here.

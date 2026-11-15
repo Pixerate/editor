@@ -15,7 +15,7 @@ export interface EffectThumbnailProps {
  * transitions half way, generators mid-way through). Motion effects, camera moves, timing
  * effects and failures show a label.
  */
-const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing' };
+const LABELS: Partial<Record<EffectSummary['kind'], string>> = { motion: 'Motion', camera: 'Camera', timing: 'Timing', 'text-treatment': 'Text treatment' };
 
 export function EffectThumbnail({ provider, effect, width = 96, height = 54, className = '' }: EffectThumbnailProps) {
   const ref = useRef<HTMLCanvasElement>(null);

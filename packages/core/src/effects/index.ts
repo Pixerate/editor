@@ -5,6 +5,7 @@
  * no TipTap, ProseMirror, DOM or framework imports.
  */
 export * from './types.js';
+export * from './text-treatment.js';
 export * from './errors.js';
 export * from './helpers.js';
 export * from './templates.js';

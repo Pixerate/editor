@@ -2603,11 +2603,11 @@
           "swift": "Planned (#533)"
         },
         {
-          "feature": "Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled; `presence` option, on by default)",
-          "core": "`AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })`; the timing from `planAgentTyping` (`/tools`)",
+          "feature": "Inline Agent Carets in Text (a named caret, selection and changed-text tint drawn as decorations where the rich-text tools read and write, as collaborators' carets look in Google Docs; optional typing playback that stays one undo step and rolls back if cancelled, with an optional checking sweep first; with an effects provider, each stage drawn from a text treatment chosen per agent, Reduce Motion honoured; `presence` option, on by default)",
+          "core": "`AgentCaret`, `setAgentCaret`, `typeAgentText` & `createRichTextToolProvider({ presence })`; the timing from `planAgentTyping` (`/tools`); treatments with `setAgentTextTreatments` over `textTreatmentPlan` (`/effects`), else the built-in look",
           "react": "Via core & `useAgentToolProvider`",
           "svelte": "Via core & `useAgentToolProvider`",
-          "swift": "Headless (#878): `planAgentTyping`, `AgentTextDirector` over an `AgentTextTarget` (frames as previews, one undo step, stops if the person edits the range) & `AgentCaretStore`; the host draws the carets"
+          "swift": "Headless (#878): `planAgentTyping`, `AgentTextDirector` over an `AgentTextTarget` (frames as previews, one undo step, stops if the person edits the range) & `AgentCaretStore` with each caret's stage; `AgentTextTreatments.plans` from a `TextTreatmentProvider` or `BuiltInTextTreatment`, drawn by the host's `TextTreatmentRenderer` (#887)"
         },
         {
           "feature": "Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot)",

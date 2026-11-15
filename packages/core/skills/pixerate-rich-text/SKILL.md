@@ -221,7 +221,9 @@ Run with `run_command` / `run_commands` when the host registers them. Check
   `replace_text` the replacement is literal (no `$1`); use `findReplace.replaceAll` with
   `wildcards` when you need group references.
 - **Agent presence.** Hosts may show your caret and type text out gradually; a long insertion
-  is still one undo step. Do not issue the next write before the previous call returns.
+  is still one undo step. Do not issue the next write before the previous call returns. How it
+  looks (a text treatment from the host's effects provider) is the host's choice; the tools and
+  their results are the same either way.
 - **Prompt tokens.** Editing inside a token can break it (`{subj|ect}` changes its default).
   Replace whole tokens, including braces or underscores. A template that includes itself, or nests
   deeper than the resolver's limit, resolves to an error marker rather than text. A literal `|`,
