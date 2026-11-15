@@ -1,0 +1,140 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "place-image",
+  "description": "A photo placed on its own layer, fitted and covering, then painted over.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "place_image",
+      "arguments": {
+        "png": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAALElEQVR4AYXIMQ0AQAjAwH7yApDDiHRG5OAA2BgZLmn6KEoykNQRfHMm1j0a0MQS1MVdGwoAAAAASUVORK5CYII=",
+        "name": "Photo"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 8,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Photo",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/place-image.1.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "3cfb6670107faf4a2adc98bd44da408ee2935301c93d1b1a2bbe7775461eca8d",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "place_image",
+      "arguments": {
+        "png": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAALElEQVR4AYXIMQ0AQAjAwH7yApDDiHRG5OAA2BgZLmn6KEoykNQRfHMm1j0a0MQS1MVdGwoAAAAASUVORK5CYII=",
+        "fit": "cover"
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 32,
+            "width": 48,
+            "x": 0,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@2",
+          "locks": {},
+          "name": "Image 3",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/place-image.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "6ebc93ab260299ac3e216c9cda3f1eec350350cc1f0ea1ccb3ea35681cd92be7",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "points": [
+          {
+            "x": 4,
+            "y": 6,
+            "pressure": 0.3
+          },
+          {
+            "x": 42,
+            "y": 26,
+            "pressure": 0.6
+          }
+        ],
+        "seed": 7
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 31,
+            "width": 48,
+            "x": -1,
+            "y": 1
+          },
+          "dabs": 86,
+          "layerId": "@2",
+          "strokeId": "s1"
+        },
+        "pixels": {
+          "file": "png/place-image.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "5f1ca4235fe3fbaee6a176b2362237d78bab1c326672b8b1f34ebb739dfa20ca",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "place_image",
+      "arguments": {
+        "png": "nope"
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "The image could not be decoded as a PNG (Not a PNG image.); decode other formats in the browser and pass pixels."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}

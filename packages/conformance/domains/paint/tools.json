@@ -723,6 +723,48 @@
           }
         },
         {
+          "name": "place_image",
+          "title": "Place an image on a new layer",
+          "description": "Places an image (a photo to paint over, a scan, a reference to work into) on a new pixel layer above the active one (or aboveId), scaled to fit inside the canvas (fit contain, the default) or to fill it, cropping the overflow (cover), centred. Its pixels become ordinary paint you can paint over, smudge, blend or erase; for a guide that never exports, use set_tracing_image instead. The new layer becomes active. One undo step. Returns the layer, with bounds where the image landed.",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "png": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The image as a PNG, base64 or a data:image/png URL (up to 8192 px a side)."
+              },
+              "name": {
+                "type": "string",
+                "description": "Layer name (default \"Image N\")."
+              },
+              "fit": {
+                "type": "string",
+                "enum": [
+                  "contain",
+                  "cover"
+                ],
+                "description": "contain fits the whole image inside the canvas; cover fills the canvas and crops (default contain)."
+              },
+              "aboveId": {
+                "type": "string",
+                "description": "Put the new layer above this layer id from list_layers (default the active layer)."
+              }
+            },
+            "required": [
+              "png"
+            ],
+            "additionalProperties": false
+          },
+          "annotations": {
+            "title": "Place an image on a new layer",
+            "readOnlyHint": false,
+            "destructiveHint": false,
+            "idempotentHint": false,
+            "openWorldHint": false
+          }
+        },
+        {
           "name": "fill_region",
           "title": "Fill a region (bucket / flats)",
           "description": "Flood-fills one or more enclosed regions on a pixel layer from a seed point (x, y) or a batch of seed points (points). Set reference to a line-art layer id from list_layers (or \"all\" / \"composite\" for all visible layers, or \"layer\" for the target layer itself) to drop flat colours onto a flats layer under the ink without touching the line art. closeGap (0..32 px) bridges small gaps in the line art so flats do not leak; expand (-16..16 px, e.g. 1..2 px) bleeds the fill under anti-aliased line edges so no halo shows; wet pours a watercolour wash into the region on the wet layer. One undo step. Returns layerId, bounds, pixelCount, regions, and leaked (true when the fill touched the canvas border).",
