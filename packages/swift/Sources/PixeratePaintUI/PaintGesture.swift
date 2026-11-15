@@ -160,25 +160,34 @@ public final class PaintGesture {
     }
 
     /**
-     * The Select stroke tool, on a stroke layer: pressing a stroke picks it and dragging moves it
-     * (one undo step at the drop); pressing where no stroke painted clears the pick.
+     * The Select stroke tool: pressing a stroke picks it, on whichever visible stroke layer painted it
+     * (the active layer first, then top-down), making that layer active; dragging moves it (one undo
+     * step at the drop). Pressing where no stroke painted clears the pick.
      */
     private func strokeDown(_ e: PaintPointerEvent) -> Bool {
         let p = doc(e)
-        guard let layerId = controller.doc.activeLayerId, controller.doc.liveStrokes?.get(layerId) != nil else {
+        let active = controller.doc.activeLayerId
+        let layers = controller.listLayers().filter { $0.visible && controller.doc.liveStrokes?.get($0.id) != nil }.map(\.id)
+        if layers.isEmpty {
             error = "Pick a stroke layer in the Layers panel (or add one) to select its strokes."
             return false
         }
-        do {
-            let hit = try controller.liveStrokeAt(layerId, p.x, p.y)
-            onSelectStroke?(hit?.id)
-            guard let hit else { return false }
-            mode = .moveStroke(pointerId: e.pointerId, id: hit.id, from: p, to: p)
-            return true
-        } catch {
-            self.error = "\(error)"
-            return false
+        let order = active.map { a in layers.contains(a) ? [a] + layers.filter { $0 != a } : layers } ?? layers
+        var failure: String?
+        for layerId in order {
+            do {
+                guard let hit = try controller.liveStrokeAt(layerId, p.x, p.y) else { continue }
+                if layerId != active { try controller.setActiveLayer(layerId) }
+                onSelectStroke?(hit.id)
+                mode = .moveStroke(pointerId: e.pointerId, id: hit.id, from: p, to: p)
+                return true
+            } catch {
+                if failure == nil { failure = "\(error)" }
+            }
         }
+        onSelectStroke?(nil)
+        if let failure { self.error = failure }
+        return false
     }
 
     /// While a stroke is dragged: how far it has moved (document pixels), to draw its outline there.

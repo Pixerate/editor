@@ -141,27 +141,37 @@ export class PaintGesture {
   }
 
   /**
-   * The Select stroke tool, on a stroke layer: pressing a stroke picks it and dragging moves it
-   * (one undo step at the drop); pressing where no stroke painted clears the pick.
+   * The Select stroke tool: pressing a stroke picks it, on whichever visible stroke layer painted it
+   * (the active layer first, then top-down), making that layer active; dragging moves it (one undo
+   * step at the drop). Pressing where no stroke painted clears the pick.
    */
   private strokeDown(e: PaintPointerEvent): boolean {
     const p = this.doc(e);
     const s = this.controller.getState();
-    const layerId = s.document.activeLayerId;
-    if (!layerId || !s.document.liveStrokes?.[layerId]) {
+    const live = s.document.liveStrokes ?? {};
+    const active = s.document.activeLayerId;
+    const layers = this.controller.listLayers().filter((l) => l.visible && live[l.id]).map((l) => l.id);
+    if (!layers.length) {
       this.error = 'Pick a stroke layer in the Layers panel (or add one) to select its strokes.';
       return false;
     }
-    try {
-      const hit = this.controller.liveStrokeAt(layerId, p.x, p.y);
-      this.controller.selectStroke(hit?.id ?? null);
-      if (!hit) return false;
-      this.mode = { kind: 'move-stroke', pointerId: e.pointerId, id: hit.id, from: p, to: p };
-      return true;
-    } catch (err) {
-      this.error = err instanceof Error ? err.message : String(err);
-      return false;
+    const order = active && layers.includes(active) ? [active, ...layers.filter((id) => id !== active)] : layers;
+    let failure: string | null = null;
+    for (const layerId of order) {
+      try {
+        const hit = this.controller.liveStrokeAt(layerId, p.x, p.y);
+        if (!hit) continue;
+        if (layerId !== active) this.controller.setActiveLayer(layerId);
+        this.controller.selectStroke(hit.id);
+        this.mode = { kind: 'move-stroke', pointerId: e.pointerId, id: hit.id, from: p, to: p };
+        return true;
+      } catch (err) {
+        failure ??= err instanceof Error ? err.message : String(err);
+      }
     }
+    this.controller.selectStroke(null);
+    if (failure) this.error = failure;
+    return false;
   }
 
   /** While a stroke is dragged: how far it has moved (document pixels), to draw its outline there. */
