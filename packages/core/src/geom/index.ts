@@ -11,3 +11,5 @@ export * from './iso';
 export * from './labels';
 export * from './connectors';
 export * from './helix';
+export * from './noise';
+export * from './heightfield';

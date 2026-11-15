@@ -19,6 +19,8 @@ import * as THREE from 'three';
 import { DEFAULT_CHART_THEME } from '../chart/spec.js';
 import { chartContrastRatio } from '../chart/color.js';
 import { chart3dMarkInFocus, layoutChart3d, type Chart3dLayout } from '../chart/layout3d.js';
+import { fbm2 } from '../geom/noise.js';
+import { heightfield, type Heightfield } from '../geom/heightfield.js';
 import { layoutChartParticles, settleFrame, type ChartParticlesLayout, type ChartParticlesOptions } from '../chart/particles.js';
 import { chart3dStyleColors, resolveChart3dStyle, type Chart3dMaterial, type Chart3dStyle, type Chart3dStyleInput } from '../chart/style3d.js';
 import type { ChartSelection, ChartSpec, ChartTheme } from '../chart/types.js';
@@ -42,6 +44,12 @@ export interface Chart3dOptions {
 	 * that settle on top of each other, one grain per `unit`. `setProgress` drops them in.
 	 */
 	particles?: ChartParticlesOptions & { /** An outline of the container (default true). */ outline?: boolean };
+	/**
+	 * Sculpted tops for area series (#807): seeded fractal noise on each area's top, in proportion
+	 * to its value, so no thickness changes by more than `amount` (a fraction, at most 0.25).
+	 * Decoration, not data: the measured error is in `scene.relief`. `setProgress` grows it in.
+	 */
+	relief?: Chart3dReliefOptions;
 }
 
 /** A label for the overlay, in CSS px from the top left. */
@@ -56,6 +64,16 @@ export interface Chart3dLabel {
 	index?: number;
 	/** The label belongs to the focused selection (its category), so an overlay can highlight it. */
 	focused?: boolean;
+}
+
+export interface Chart3dReliefOptions {
+	/** Largest change to a thickness, as a fraction of the value (0–0.25, default 0.04). */
+	amount?: number;
+	/** Noise frequency per world unit (default 1.5): higher is finer. */
+	scale?: number;
+	/** Octaves of noise (1–8, default 4). */
+	octaves?: number;
+	seed?: number;
 }
 
 /** What `pick` found: the bar, or the line or area point, under the pointer. */
@@ -76,7 +94,12 @@ export interface Chart3dScene {
 	background: string;
 	/** With `particles`: the pile (which category each layer is, the settled grains, the notes). */
 	particles?: ChartParticlesLayout;
-	/** With `particles`: drops the grains in to progress `p` (frame-pure; 1 at rest). Takes effect on the next render. */
+	/**
+	 * With `relief`: the stated bound (`amount`) and the largest change to a thickness actually
+	 * drawn (`error`, a fraction of the value; never above `amount`).
+	 */
+	relief?: { amount: number; error: number };
+	/** Drops the grains in (`particles`) and grows the relief (`relief`) to progress `p` (frame-pure; 1 at rest). Takes effect on the next render. */
 	setProgress(p: number): void;
 	/** The overlay labels for the current size. */
 	labels(): Chart3dLabel[];
@@ -125,6 +148,16 @@ function ribbonGeometry(points: { x: number; y: number }[], z0: number, z1: numb
 	const geometry = new THREE.ExtrudeGeometry(shape, { depth: z1 - z0, bevelEnabled: false });
 	geometry.translate(0, 0, z0);
 	return geometry;
+}
+
+/** A `heightfield` (`@pixerate/editor/tools`) as three.js geometry, with its normals. */
+export function heightfieldGeometry(field: Heightfield): THREE.BufferGeometry {
+	const g = new THREE.BufferGeometry();
+	g.setAttribute('position', new THREE.BufferAttribute(field.positions.slice(), 3));
+	g.setAttribute('normal', new THREE.BufferAttribute(field.normals.slice(), 3));
+	g.setIndex(new THREE.BufferAttribute(field.indices, 1));
+	g.computeBoundingSphere();
+	return g;
 }
 
 /** The scene and fitted camera for `spec` (its `view3d`, or Office's default view). */
@@ -249,9 +282,34 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		marks.push({ mesh, material: m, base: m.color.clone(), seriesId: b.seriesId, index: b.index });
 	}
 	const ribbonThickness = layout.height * 0.02;
+	const reliefAmount = options.relief ? Math.min(0.25, Math.max(0, options.relief.amount ?? 0.04)) : 0;
+	const reliefNoise = (x: number, z: number) => fbm2(x * (options.relief?.scale ?? 1.5), z * (options.relief?.scale ?? 1.5), { seed: options.relief?.seed ?? 1, octaves: Math.min(8, Math.max(1, options.relief?.octaves ?? 4)) });
+	const sculpted: { geometry: THREE.BufferGeometry; build: (p: number) => Heightfield }[] = [];
+	let reliefError = 0;
 	for (const r of layout.ribbons) {
 		if (r.points.length < 2) continue;
-		const g = ribbonGeometry(r.points, r.z0, r.z1, r.kind, ribbonThickness);
+		let g: THREE.BufferGeometry;
+		if (options.relief && r.kind === 'area') {
+			// The area's top as a heightfield: its value, linear between points, times 1 ± amount × noise.
+			const pts = r.points;
+			const profile = (x: number) => {
+				let k = 1;
+				while (k < pts.length - 1 && pts[k]!.x < x) k++;
+				const a = pts[k - 1]!, b = pts[k]!;
+				return b.x === a.x ? a.y : a.y + ((b.y - a.y) * (x - a.x)) / (b.x - a.x);
+			};
+			const build = (p: number) =>
+				heightfield((x, z) => profile(x) * (1 + reliefAmount * p * reliefNoise(x, z)), { x0: pts[0]!.x, x1: pts[pts.length - 1]!.x, z0: r.z0, z1: r.z1, resolution: [(pts.length - 1) * 16, 6] });
+			const field = build(1);
+			// The error actually drawn: the largest change to a thickness, as a fraction of the value.
+			for (let v = 0; v < field.heights.length; v++) {
+				const x = pts[0]!.x + ((pts[pts.length - 1]!.x - pts[0]!.x) * (v % field.columns)) / (field.columns - 1);
+				const want = profile(x);
+				if (want > 1e-9) reliefError = Math.max(reliefError, Math.abs(field.heights[v]! - want) / want);
+			}
+			g = heightfieldGeometry(field);
+			sculpted.push({ geometry: g, build });
+		} else g = ribbonGeometry(r.points, r.z0, r.z1, r.kind, ribbonThickness);
 		disposables.push(g);
 		const m = material(r.color, style.materials.ribbon);
 		const mesh = add(new THREE.Mesh(g, m));
@@ -264,6 +322,13 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 	let grains: THREE.InstancedMesh | null = null;
 	const grainBase: THREE.Color[] = [];
 	const setProgress = (p: number) => {
+		// Relief grows in with p (frame-pure; 1 is the sculpted top at rest).
+		for (const sc of sculpted) {
+			const field = sc.build(Math.min(1, Math.max(0, Number.isFinite(p) ? p : 1)));
+			(sc.geometry.getAttribute('position') as THREE.BufferAttribute).copyArray(field.positions).needsUpdate = true;
+			(sc.geometry.getAttribute('normal') as THREE.BufferAttribute).copyArray(field.normals).needsUpdate = true;
+			sc.geometry.computeBoundingSphere();
+		}
 		if (!grains || !pile) return;
 		const frame = settleFrame(pile.settled, p);
 		const m = new THREE.Matrix4();
@@ -350,6 +415,7 @@ export function createChart3dScene(spec: ChartSpec, options: Chart3dOptions): Ch
 		style,
 		background: surfaces.background,
 		...(pile ? { particles: pile } : {}),
+		...(options.relief ? { relief: { amount: reliefAmount, error: reliefError } } : {}),
 		setProgress,
 		labels() {
 			const out: Chart3dLabel[] = [];
@@ -485,6 +551,8 @@ export function checkChart3dLabelContrast(labels: readonly Chart3dLabel[], sampl
 export interface Chart3dRenderer {
 	/** The chart's 3-D layout (for `nextChart3dFocus` and the like). */
 	readonly layout: Chart3dLayout;
+	/** With `relief`: the stated bound and the largest thickness change drawn (see `Chart3dScene.relief`). */
+	readonly relief?: { amount: number; error: number };
 	/** Draws the chart once (call after a change; there is no animation loop). */
 	render(): void;
 	/** The canvas as a PNG data URL (call `render` first). */
@@ -558,6 +626,7 @@ export function renderChart3d(canvas: HTMLCanvasElement, spec: ChartSpec, option
 	});
 	return {
 		layout: view.layout,
+		...(view.relief ? { relief: view.relief } : {}),
 		render: () => renderer.render(view.scene, view.camera),
 		capture: () => canvas.toDataURL('image/png'),
 		captureAt,
@@ -621,6 +690,7 @@ export function renderChart3dImage(spec: ChartSpec, options: Chart3dOptions & { 
 }
 
 export { resolveChart3dStyle, chart3dStyleColors, DEFAULT_CHART_3D_STYLE, CHART_3D_LIGHT_PRESETS, CHART_3D_STYLE_VERSION, type Chart3dStyle, type Chart3dStyleInput, type Chart3dMaterial } from '../chart/style3d.js';
+export { heightfield, fbm2, fbm3, noise2, noise3, type Heightfield } from '../geom/index.js';
 export { settleParticles, settleFrame, layoutChartParticles, type SettledParticles, type SettledLayer, type ChartParticlesLayout, type ChartParticlesOptions } from '../chart/particles.js';
 export { layoutChart3d, CHART_3D_TYPES, chart3dMarkSeries, chart3dMarkInFocus, nextChart3dFocus, type Chart3dLayout, type Chart3dBox, type Chart3dRibbon } from '../chart/layout3d.js';
 export { describeChartSelectionIn } from '../chart/interaction.js';

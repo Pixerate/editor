@@ -38,4 +38,6 @@ export * from '../geom/iso.js';
 export * from '../geom/labels.js';
 export * from '../geom/connectors.js';
 export * from '../geom/helix.js';
+export * from '../geom/noise.js';
+export * from '../geom/heightfield.js';
 export * from '../interaction/linkFocus.js';
