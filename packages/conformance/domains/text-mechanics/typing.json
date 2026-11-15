@@ -687,6 +687,269 @@
     }
   },
   {
+    "name": "a table row before its delimiter",
+    "typed": "| dont | i |\n|---|---|\n",
+    "expect": {
+      "text": "| dont | i |\n|---|---|\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "front matter being typed",
+    "typed": "---\ntitle: dont i\n---\n",
+    "expect": {
+      "text": "---\ntitle: dont i\n---\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "an image's title",
+    "typed": "![alt](img.png \"dont i\") ",
+    "expect": {
+      "text": "![alt](img.png \"dont i\") ",
+      "checks": []
+    }
+  },
+  {
+    "name": "a reference definition",
+    "typed": "[ref]: https://x.y \"dont i\"\n",
+    "expect": {
+      "text": "[ref]: https://x.y \"dont i\"\n",
+      "checks": []
+    }
+  },
+  {
+    "name": "curly quotes",
+    "typed": "\"hello\" she said ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "“hello” she said ",
+      "checks": [
+        "curly-quotes",
+        "curly-quotes"
+      ]
+    }
+  },
+  {
+    "name": "a curly apostrophe",
+    "typed": "don't stop ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "Don’t stop ",
+      "checks": [
+        "sentence-case",
+        "curly-quotes"
+      ]
+    }
+  },
+  {
+    "name": "a contraction with a curly apostrophe",
+    "typed": "dont stop ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "Don’t stop ",
+      "checks": [
+        "contractions",
+        "sentence-case",
+        "curly-quotes"
+      ]
+    }
+  },
+  {
+    "name": "an en dash",
+    "typed": "wait -- what ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "Wait – what ",
+      "checks": [
+        "sentence-case",
+        "dashes"
+      ]
+    }
+  },
+  {
+    "name": "an em dash",
+    "typed": "a long---winded day ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "A long—winded day ",
+      "checks": [
+        "sentence-case",
+        "dashes"
+      ]
+    }
+  },
+  {
+    "name": "not a --flag",
+    "typed": "use --verbose here ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "Use --verbose here ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "an ellipsis",
+    "typed": "Wait... and then ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "Wait… and then ",
+      "checks": [
+        "ellipses"
+      ]
+    }
+  },
+  {
+    "name": "single quotes and an apostrophe",
+    "typed": "it's 'quoted' text ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "It’s ‘quoted’ text ",
+      "checks": [
+        "sentence-case",
+        "curly-quotes",
+        "curly-quotes",
+        "curly-quotes"
+      ]
+    }
+  },
+  {
+    "name": "no typography in code",
+    "typed": "see `don't` ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "See `don't` ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "quotes around a sentence end",
+    "typed": "he said \"done.\" then left ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "He said “done.” Then left ",
+      "checks": [
+        "sentence-case",
+        "curly-quotes",
+        "curly-quotes",
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "it's with a curly apostrophe",
+    "typed": "its really odd ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "It’s really odd ",
+      "checks": [
+        "sentence-case",
+        "contractions",
+        "curly-quotes"
+      ]
+    }
+  },
+  {
+    "name": "typography is off by default",
+    "typed": "wait -- \"what\" ",
+    "expect": {
+      "text": "Wait -- \"what\" ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "chat shorthand is not spelling",
+    "typed": "lol teh cat ",
+    "profile": "chat",
+    "spelling": {
+      "lol": "LOL",
+      "teh": "the"
+    },
+    "expect": {
+      "text": "lol the cat ",
+      "checks": [
+        "spelling"
+      ]
+    }
+  },
+  {
+    "name": "chat leaves Slack's syntax alone",
+    "typed": "ping <!here> dont ",
+    "profile": "chat",
+    "expect": {
+      "text": "ping <!here> don't ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "no typography in chat",
+    "typed": "wait -- dont ",
+    "profile": "chat",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "wait -- don't ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
     "name": "contractions off",
     "typed": "so i dont ",
     "disabled": [

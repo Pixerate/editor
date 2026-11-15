@@ -22,6 +22,7 @@ final class TextMechanicsTests: XCTestCase {
         var suffix: String?
         var profile: String?
         var disabled: [TextMechanicsCheck]?
+        var enable: [TextMechanicsCheck]?
         var spelling: [String: String]?
         var lexicon: [String: TextMechanicsWordClass]?
         var expect: Expect
@@ -59,10 +60,11 @@ final class TextMechanicsTests: XCTestCase {
 
     private func options(_ scenario: Scenario, lexicon: [String: TextMechanicsWordClass]) -> TextMechanicsOptions {
         let disabled = Set(scenario.disabled ?? [])
+        let enable = Set(scenario.enable ?? [])
         let spelling = scenario.spelling
         return TextMechanicsOptions(
             profile: scenario.profile == "chat" ? .chat : .prose,
-            enabled: { !disabled.contains($0) },
+            enabled: { !disabled.contains($0) && (!$0.isOffByDefault || enable.contains($0)) },
             spelling: spelling.map { table in { word, _, _ in table[word] } },
             tagger: TextMechanics.lexiconTagger(lexicon.merging(scenario.lexicon ?? [:]) { _, new in new })
         )

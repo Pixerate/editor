@@ -84,7 +84,26 @@ const EXPECTED: Record<string, string> = {
 	'no comma in not … but': 'Not red but blue ',
 	'no comma in nothing but': 'I have nothing but the best ',
 	'no second comma': 'It works, but it is slow ',
-	'Ok stays': 'Ok so '
+	'Ok stays': 'Ok so ',
+	'a table row before its delimiter': '| dont | i |\n|---|---|\n',
+	'front matter being typed': '---\ntitle: dont i\n---\n',
+	"an image's title": '![alt](img.png "dont i") ',
+	'a reference definition': '[ref]: https://x.y "dont i"\n',
+	'curly quotes': '“hello” she said ',
+	'a curly apostrophe': 'Don’t stop ',
+	'a contraction with a curly apostrophe': 'Don’t stop ',
+	'an en dash': 'Wait – what ',
+	'an em dash': 'A long—winded day ',
+	'not a --flag': 'Use --verbose here ',
+	'an ellipsis': 'Wait… and then ',
+	'single quotes and an apostrophe': 'It’s ‘quoted’ text ',
+	'no typography in code': "See `don't` ",
+	'quotes around a sentence end': 'He said “done.” Then left ',
+	"it's with a curly apostrophe": 'It’s really odd ',
+	'typography is off by default': 'Wait -- "what" ',
+	'chat shorthand is not spelling': 'lol the cat ',
+	"chat leaves Slack's syntax alone": "ping <!here> don't ",
+	'no typography in chat': "wait -- don't "
 };
 
 describe('text mechanics typing scenarios', () => {

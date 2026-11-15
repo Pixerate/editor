@@ -30,6 +30,18 @@
     {
       "id": "spelling",
       "title": "Spelling"
+    },
+    {
+      "id": "curly-quotes",
+      "title": "Curly quotes"
+    },
+    {
+      "id": "dashes",
+      "title": "Dashes"
+    },
+    {
+      "id": "ellipses",
+      "title": "Ellipses"
     }
   ],
   "lexicon": {
