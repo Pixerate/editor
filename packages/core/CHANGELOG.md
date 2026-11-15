@@ -1,5 +1,45 @@
 # @pixerate/editor
 
+## 0.327.0
+
+### Minor Changes
+
+- 67c1713: Agents' text edits play out the same way in TypeScript and Swift (#878).
+
+  - `planAgentTyping(edit, options)` (`/tools`): the pure planner behind `typeAgentText`. It selects what an edit replaces, types it in ~30 fps frames (60 characters a second, at most 1.5 s), then commits. It knows no editor. `typeAgentText` now takes its timing from it, with no change in behaviour. `agentTypingDuration`, and the defaults as constants.
+  - `@pixerate/conformance`: a new `agent-text` domain (`manifest.json`, `typing-plans.json`) with the plans for a set of edits, exported by `agentTextContracts()` and checked by a core test.
+  - Swift (`PixerateCore`):
+    - `planAgentTyping` reproduces every plan in the contract.
+    - `AgentTextDirector` plays an edit on any `AgentTextTarget`: the agent's caret selects the range, the typing shows as previews outside the undo history, the original goes back, and the edit commits as one undo step. Calls run one after another per agent. An edit by the person inside the range (`noteEdit`), an unreported change, or cancelling stops the call and leaves the text as it was.
+    - `AgentCaretStore`: carets, selections and changed-text tints for a host to draw, mapped through other people's edits.
+    - `PresenceClock`, with `RealPresenceClock` and `InstantPresenceClock`.
+
+- 3127d96: 3-D particles for data: counts drawn as grains that settle into layers (closes #806).
+
+  - `settleParticles({ container, layers, size, gap, jitter, seed })` (`/chart`, also `/three`): packs each layer's particles into a container, level by level from the floor, each level's cells filled in a seeded order and each particle wandering only within its own cell — no overlaps, every particle inside, the same result for the same seed. Layers follow on from each other (a ragged top, like sediment) and come back with their band (`bottom`, `top`), `thickness` and how full their top level is; particles past `container.height` are counted in `overflow`.
+  - `settleFrame(settled, p, { drop, fall })`: every particle's position at progress `p` — dropping in order, layer by layer then level by level, each falling for `fall` of the progress (so the last still visibly falls), speeding up as it falls; frame-pure, `p = 1` exactly at rest, with `visible` for particles that have not started.
+  - `layoutChartParticles(spec, { unit, order, width, depth, size, seed })`: the first visible series as a pile — a layer per category in its slice colour, one grain per `unit` (default a round unit for about 600 grains), ordered by category, largest or smallest first — with labels ("Search · 4,600 (92 grains)") and notes saying what a grain stands for.
+  - `createChart3dScene` / `renderChart3d` take `particles` (the options above, plus `outline`): one instanced mesh with a colour per grain, an outline of the container, a label beside each layer, `pick` returning the category and the grain (`instance`), `focus` fading the other layers, `anchor` on a visible grain of the layer, and `setProgress(p)` to drop the grains in (then `render`).
+  - Demo: Particles and Drop in on the Charts tab's 3-D view.
+
+### Patch Changes
+
+- 39fce31: Paint editor: pixel layers whose pixels the stroke log can't rebuild stay marked `unlogged` after reopening, whatever saved the document (#720).
+
+  - Saves keep the `unlogged` marks whenever there are any (not only with dual-colour strokes), and add `unloggedComplete: true` when the save keeps the stroke log and the marks are known to be complete. The saved file is the same in either colour scheme.
+  - A document opened without that flag (saved before the marks, or without its log) marks each pixel layer with pixels that no logged stroke or event names at once ("Opened from an older document", "Opened without its stroke log"). A layer the log does name is checked the first time the colour scheme needs it: the log as opened is replayed in the background (the frozen scheme replay, every stroke as recorded) and compared with the opened pixels, within 8/255 per premultiplied channel and leaving out paint the replay still has wet. A layer that doesn't match keeps its colours instead of losing its imported or merged pixels in the other scheme.
+  - Documents saved by #843 with marks but without the flag are checked the same way for their unmarked layers.
+  - `get_color_scheme_view` reports a layer being checked as `replay` `building` with a `reason`, then `ready` or `kept` with why. The check is view state: it is never saved or undone.
+  - Swift: the same saving, opening and check (`SchemeReplay(frozen:)`, `openLedger`, `runOpenedCheck`). Conformance: new `color-scheme-older-document` scenario; saved documents in the recorded scenarios gain `unloggedComplete`.
+
+- 4190f16: Paint editor: replays of wet paint keep to the wet clock it was painted at, across pen-up, saves and sessions (#720), so the other colour scheme of a reopened wet painting matches painting it fresh in that scheme.
+
+  - A wet stroke whose pen lifted after the simulation ran on past its last point records the clock its end was applied at (`RecordedStroke.endStep`, saved only then). The colour-scheme replay (live and after a reload), `renderHighRes` and the time-lapse step to it before ending the stroke.
+  - Paint that flowed on after the last logged stroke or event is replayed after a reload: saves write the wet clock (`wet.clock`) when it is past the latest clock the saved log records, inline and through the asset store. `renderHighRes` and the time-lapse of the live painting let the paint flow on to the editor's clock too.
+  - The wet clock no longer starts again at 0 when a document is reopened (or when the simulation is made again after a resize or a new canvas): it goes on from the saved clock (else the log's latest), so strokes of a later session come after those of an earlier one. Before, the scheme view of a document painted across sessions never got ready (its replay rolled back for ever). The opened log ends with a `dry` of every layer at that clock (the save dried the paint there), which a save of the unchanged document doesn't write.
+  - Documents saved before this, painted across sessions (clocks that start again at 0), are put in order when opened: a `dry` at each session break, and the later session's clocks moved to go on from the next multiple of the wet free interval. Documents without these cases keep their pixels and saved files.
+  - Swift: the same recording, saving, opening and replays. Conformance: new `color-scheme-wet-clock` scenario.
+
 ## 0.326.0
 
 ### Minor Changes
