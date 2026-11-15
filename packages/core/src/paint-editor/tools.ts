@@ -457,6 +457,27 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   });
 
   add({
+    name: 'place_image',
+    title: 'Place an image on a new layer',
+    description:
+      'Places an image (a photo to paint over, a scan, a reference to work into) on a new pixel layer above the active one (or aboveId), scaled to fit inside the canvas (fit contain, the default) or to fill it, cropping the overflow (cover), centred. Its pixels become ordinary paint you can paint over, smudge, blend or erase; for a guide that never exports, use set_tracing_image instead. The new layer becomes active. One undo step. Returns the layer, with bounds where the image landed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        png: { type: 'string', minLength: 1, description: 'The image as a PNG, base64 or a data:image/png URL (up to 8192 px a side).' },
+        name: { type: 'string', description: 'Layer name (default "Image N").' },
+        fit: { type: 'string', enum: ['contain', 'cover'], description: 'contain fits the whole image inside the canvas; cover fills the canvas and crops (default contain).' },
+        aboveId: { type: 'string', description: 'Put the new layer above this layer id from list_layers (default the active layer).' },
+      },
+      required: ['png'],
+      additionalProperties: false,
+    },
+    annotations: { title: 'Place an image on a new layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
+    handler: (a) => c.placeImage(a),
+  });
+
+  add({
     name: 'fill_region',
     title: 'Fill a region (bucket / flats)',
     description:

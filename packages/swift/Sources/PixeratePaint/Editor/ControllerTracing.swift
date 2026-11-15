@@ -32,6 +32,49 @@ extension PaintEditorController {
         }
     }
 
+    /**
+     * Places an image (a photo to paint over, a scan, a reference) on a new pixel layer above the
+     * active one (or `aboveId`), scaled to fit the canvas (`contain`, the default) or fill it
+     * (`cover`), centred. Its pixels become ordinary paint on that layer. One undo step.
+     */
+    public func placeImage(png: String?, name: String? = nil, fit fitIn: String? = nil, aboveId: String? = nil) throws -> PaintLayerInfo {
+        let fit = fitIn ?? "contain"
+        if fit != "contain" && fit != "cover" { throw PaintEditorError("fit \"\(fit)\" is not one of contain, cover.") }
+        let (_, pixels) = try importImage(png, "The image")
+        let width = doc.canvas.width, height = doc.canvas.height
+        let kx = Double(width) / Double(pixels.width), ky = Double(height) / Double(pixels.height)
+        let k = fit == "cover" ? Swift.max(kx, ky) : Swift.min(kx, ky)
+        let w = Swift.max(1, Int(JS.round(Double(pixels.width) * k)))
+        let h = Swift.max(1, Int(JS.round(Double(pixels.height) * k)))
+        let x = Int(JS.round(Double(width - w) / 2))
+        let y = Int(JS.round(Double(height - h) / 2))
+        let scaled = resampleImage(pixels, w, h)
+        let cx = Swift.max(0, x), cy = Swift.max(0, y)
+        let cw = Swift.min(width, x + w) - cx, ch = Swift.min(height, y + h) - cy
+        var crop = [UInt8](repeating: 0, count: cw * ch * 4)
+        for row in 0..<ch {
+            let from = ((cy - y + row) * w + (cx - x)) * 4
+            crop.replaceSubrange(row * cw * 4..<(row + 1) * cw * 4, with: scaled.data[from..<from + cw * 4])
+        }
+        let count = flattenLayers(doc.layers).count
+        let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let layer = createPaintLayer(trimmed.isEmpty ? "Image \(count + 1)" : trimmed)
+            .withSurface(surfaceFromPixels(width: cw, height: ch, data: crop, channels: 4, x: cx, y: cy))
+        var parent: String? = nil
+        var index: Int? = nil
+        if let above = aboveId ?? doc.activeLayerId {
+            guard let loc = findLayer(doc.layers, above) else { throw PaintEditorError("Unknown layer \"\(above)\". Call list_layers for the ids.") }
+            parent = loc.parent?.id
+            index = loc.index + 1
+        }
+        let layers = insertLayer(doc.layers, layer, parent, index)
+        commit("Place image", doc.with { d in
+            d.layers = layers
+            d.activeLayerId = layer.id
+        })
+        return describeLayer(layer)
+    }
+
     /// Puts an image under the paint to trace over: view only, never in exports.
     public func setTracingImage(_ a: JSONObject) throws -> TracingImage {
         let (src, pixels) = try importImage(a["png"]?.stringValue, "The tracing image")
@@ -120,10 +163,55 @@ extension PaintEditorController {
     }
 }
 
-/// The handlers of the tracing and reference image tools (`guide-tools.ts`).
+/**
+ * `image` resampled to `width × height` (straight RGBA): bilinear on premultiplied colour, so clear
+ * pixels don't darken the edges, averaging a box of samples when shrinking by more than 2× (`resampleImage`, controller.ts).
+ */
+public func resampleImage(_ image: PixelImage, _ width: Int, _ height: Int) -> PixelImage {
+    let sw = image.width, sh = image.height, src = image.data
+    var out = [UInt8](repeating: 0, count: width * height * 4)
+    let sx = Double(sw) / Double(width), sy = Double(sh) / Double(height)
+    let nx = max(1, Int(JS.floor(sx / 2))), ny = max(1, Int(JS.floor(sy / 2)))
+    for oy in 0..<height {
+        for ox in 0..<width {
+            var r = 0.0, g = 0.0, b = 0.0, a = 0.0
+            for j in 0..<ny {
+                for i in 0..<nx {
+                    let fx = (Double(ox) + (Double(i) + 0.5) / Double(nx)) * sx - 0.5
+                    let fy = (Double(oy) + (Double(j) + 0.5) / Double(ny)) * sy - 0.5
+                    let x0 = Int(JS.floor(fx)), y0 = Int(JS.floor(fy))
+                    let tx = fx - Double(x0), ty = fy - Double(y0)
+                    func tap(_ px: Int, _ py: Int, _ wt: Double) {
+                        let o = (min(sh - 1, max(0, py)) * sw + min(sw - 1, max(0, px))) * 4
+                        let al = Double(src[o + 3]) * wt
+                        r += Double(src[o]) * al
+                        g += Double(src[o + 1]) * al
+                        b += Double(src[o + 2]) * al
+                        a += al
+                    }
+                    tap(x0, y0, (1 - tx) * (1 - ty))
+                    tap(x0 + 1, y0, tx * (1 - ty))
+                    tap(x0, y0 + 1, (1 - tx) * ty)
+                    tap(x0 + 1, y0 + 1, tx * ty)
+                }
+            }
+            let k = (oy * width + ox) * 4
+            if a > 0 {
+                out[k] = UInt8(clamping: Int(JS.round(r / a)))
+                out[k + 1] = UInt8(clamping: Int(JS.round(g / a)))
+                out[k + 2] = UInt8(clamping: Int(JS.round(b / a)))
+                out[k + 3] = UInt8(clamping: Int(JS.round(a / Double(nx * ny))))
+            }
+        }
+    }
+    return PixelImage(width: width, height: height, data: out)
+}
+
+/// The handlers of the tracing and reference image tools (`guide-tools.ts`), and `place_image` (`tools.ts`).
 func paintTracingHandlers(_ c: PaintEditorController) -> [String: PaintToolHandler] {
     var h: [String: PaintToolHandler] = [:]
     h["set_tracing_image"] = { a in tracingInfo(try c.setTracingImage(a)) }
+    h["place_image"] = { a in try c.placeImage(png: a["png"]?.stringValue, name: a["name"]?.stringValue, fit: a["fit"]?.stringValue, aboveId: a["aboveId"]?.stringValue).json }
     h["update_tracing_image"] = { a in tracingInfo(try c.updateTracing(a)) }
     h["clear_tracing_image"] = { _ in
         c.clearTracingImage()

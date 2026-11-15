@@ -387,6 +387,32 @@ public struct FillLayerArguments: Sendable {
     }
 }
 
+/// Arguments of `place_image`.
+public struct PlaceImageArguments: Sendable {
+    /// contain fits the whole image inside the canvas; cover fills the canvas and crops (default contain).
+    public enum Fit: String, CaseIterable, Sendable {
+        case contain
+        case cover
+    }
+
+    /// The image as a PNG, base64 or a data:image/png URL (up to 8192 px a side).
+    public var png: String
+    /// Layer name (default "Image N").
+    public var name: String?
+    /// contain fits the whole image inside the canvas; cover fills the canvas and crops (default contain).
+    public var fit: Fit?
+    /// Put the new layer above this layer id from list_layers (default the active layer).
+    public var aboveId: String?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        png = try args.required(try args.string("png"), "png")
+        name = try args.string("name")
+        fit = try args.enumeration("fit", as: Fit.self)
+        aboveId = try args.string("aboveId")
+    }
+}
+
 /// Arguments of `fill_region`.
 public struct FillRegionArguments: Sendable {
     /// Blend mode (default normal; see list_blend_modes).
@@ -4108,6 +4134,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .moveLayer: try MoveLayerArguments(args)
     case .mergeLayerDown: try MergeLayerDownArguments(args)
     case .fillLayer: try FillLayerArguments(args)
+    case .placeImage: try PlaceImageArguments(args)
     case .fillRegion: try FillRegionArguments(args)
     case .findUnfilledRegions: try FindUnfilledRegionsArguments(args)
     case .clearLayer: try ClearLayerArguments(args)

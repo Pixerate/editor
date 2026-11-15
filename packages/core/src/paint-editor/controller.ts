@@ -7932,6 +7932,46 @@ export class PaintEditorController {
     return rgbToHex(src.data[i], src.data[i + 1], src.data[i + 2]);
   }
 
+  /**
+   * Places an image (a photo to paint over, a scan, a reference) on a new pixel layer above the
+   * active one (or `aboveId`), scaled to fit the canvas (`contain`, the default) or fill it
+   * (`cover`), centred. Its pixels become ordinary paint on that layer. One undo step.
+   */
+  placeImage(options: { png?: string; pixels?: PixelImage; name?: string; fit?: 'contain' | 'cover'; aboveId?: string }): PaintLayerInfo {
+    this.requireIdle('placing an image');
+    const fit = options.fit ?? 'contain';
+    if (fit !== 'contain' && fit !== 'cover') throw new PaintEditorError(`fit "${String(fit)}" is not one of contain, cover.`);
+    const { pixels } = this.importImage(options, 'The image');
+    const { width, height } = this.doc.canvas;
+    const k = fit === 'cover' ? Math.max(width / pixels.width, height / pixels.height) : Math.min(width / pixels.width, height / pixels.height);
+    const w = Math.max(1, Math.round(pixels.width * k));
+    const h = Math.max(1, Math.round(pixels.height * k));
+    const x = Math.round((width - w) / 2);
+    const y = Math.round((height - h) / 2);
+    const scaled = resampleImage(pixels, w, h);
+    // Cover crops to the canvas; contain already fits inside it.
+    const cx = Math.max(0, x), cy = Math.max(0, y);
+    const cw = Math.min(width, x + w) - cx, ch = Math.min(height, y + h) - cy;
+    const crop = new Uint8ClampedArray(cw * ch * 4);
+    for (let row = 0; row < ch; row++) {
+      const from = ((cy - y + row) * w + (cx - x)) * 4;
+      crop.set(scaled.data.subarray(from, from + cw * 4), row * cw * 4);
+    }
+    const count = flattenLayers(this.doc.layers).length;
+    const layer: PaintPixelLayer = { ...createPaintLayer(options.name?.trim() || `Image ${count + 1}`), surface: surfaceFromPixels({ width: cw, height: ch, data: crop }, 4, cx, cy) };
+    const above = options.aboveId ?? this.doc.activeLayerId;
+    let parentId: string | null = null;
+    let index: number | undefined;
+    if (above) {
+      const loc = findLayer(this.doc.layers, above);
+      if (!loc) throw new PaintEditorError(`Unknown layer "${above}". Call list_layers for the ids.`);
+      parentId = loc.parent?.id ?? null;
+      index = loc.index + 1;
+    }
+    this.commit('Place image', { ...this.doc, layers: insertLayer(this.doc.layers, layer, parentId, index), activeLayerId: layer.id });
+    return this.describeLayer(layer);
+  }
+
   /** Adds a floating reference image to look at and pick colours from. */
   addReferenceImage(options: { png?: string; pixels?: PixelImage; name?: string; x?: number; y?: number; displayWidth?: number }): ReferenceImage {
     const { src, pixels } = this.importImage(options, 'The reference image');
@@ -10082,6 +10122,40 @@ export type { Tile };
 
 /** Largest tracing or reference image side, in pixels. */
 export const MAX_IMAGE_SIDE = 8192;
+
+/**
+ * `image` resampled to `width × height` (straight RGBA): bilinear on premultiplied colour, so
+ * clear pixels don't darken the edges, averaging a box of samples when shrinking by more than 2×.
+ */
+export function resampleImage(image: PixelImage, width: number, height: number): PixelImage {
+  const { width: sw, height: sh, data: src } = image;
+  const out = new Uint8ClampedArray(width * height * 4);
+  const sx = sw / width, sy = sh / height;
+  const nx = Math.max(1, Math.floor(sx / 2)), ny = Math.max(1, Math.floor(sy / 2));
+  const at = (x: number, y: number, c: number) => src[(Math.min(sh - 1, Math.max(0, y)) * sw + Math.min(sw - 1, Math.max(0, x))) * 4 + c];
+  for (let oy = 0; oy < height; oy++) {
+    for (let ox = 0; ox < width; ox++) {
+      let r = 0, g = 0, b = 0, a = 0;
+      for (let j = 0; j < ny; j++) {
+        for (let i = 0; i < nx; i++) {
+          const fx = (ox + (i + 0.5) / nx) * sx - 0.5, fy = (oy + (j + 0.5) / ny) * sy - 0.5;
+          const x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          for (const [px, py, wt] of [[x0, y0, (1 - tx) * (1 - ty)], [x0 + 1, y0, tx * (1 - ty)], [x0, y0 + 1, (1 - tx) * ty], [x0 + 1, y0 + 1, tx * ty]] as const) {
+            const al = at(px, py, 3) * wt;
+            r += at(px, py, 0) * al; g += at(px, py, 1) * al; b += at(px, py, 2) * al; a += al;
+          }
+        }
+      }
+      const k = (oy * width + ox) * 4;
+      if (a > 0) {
+        out[k] = Math.round(r / a); out[k + 1] = Math.round(g / a); out[k + 2] = Math.round(b / a);
+        out[k + 3] = Math.round(a / (nx * ny));
+      }
+    }
+  }
+  return { width, height, data: out };
+}
 
 const movePoint = (p: { x: number; y: number }, dx: number, dy: number) => ({ x: p.x + dx, y: p.y + dy });
 const moveRect = <R extends { x: number; y: number }>(r: R, dx: number, dy: number): R => ({ ...r, x: r.x + dx, y: r.y + dy });
