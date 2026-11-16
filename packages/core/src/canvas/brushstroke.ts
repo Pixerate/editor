@@ -254,7 +254,8 @@ export async function renderCanvasBrushSwatch(brush: CanvasBrush, options: Canva
 }
 
 /**
- * `preview_brush` for brushed strokes (canvas and vector): the brush library tools' renderer
+ * `preview_brush` for canvas brushed strokes (the vector host's is `renderVectorBrushPreview`, which
+ * also draws wet paint and the Mixer Brush, smudge and blender): the brush library tools' renderer
  * (`createBrushLibraryToolProvider(library, { profile: CANVAS_PROFILE, renderPreview: renderCanvasBrushPreview })`),
  * a swatch of the brush as a canvas stroke paints it. Loads the renderer on first use.
  */

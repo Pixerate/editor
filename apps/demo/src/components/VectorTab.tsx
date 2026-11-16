@@ -11,7 +11,7 @@ import { createGenerationStyleToolProvider } from "@pixerate/editor/generation";
 import { demoStyles } from "../houseStyles";
 import { StickerInsertPanel } from "@pixerate/editor-react/stickers";
 import { createStickerToolProvider } from "@pixerate/editor/stickers";
-import { createVectorStickerHost, createVectorStyleToolProvider } from "@pixerate/editor/vector";
+import { createVectorStickerHost, createVectorStyleToolProvider, renderVectorBrushPreview } from "@pixerate/editor/vector";
 import { createStickerStyleToolProvider } from "@pixerate/editor/stickers";
 import { demoStickers } from "../demoStickers";
 import { EditorPage, EditorPanel } from "./EditorPage";
@@ -19,7 +19,6 @@ import { demoCommandRegistry, demoPlayback, demoToolRegistry } from "../agentToo
 import { AgentScriptPanel } from "./AgentScriptPanel";
 import { VECTOR_SCRIPTS } from "../agentScripts";
 import { createBrushLibraryToolProvider, VECTOR_PROFILE } from '@pixerate/editor/brushes';
-import { renderCanvasBrushPreview } from '@pixerate/editor/canvas';
 import { demoBrushLibrary } from '../demoBrushes';
 
 /** A live path effect for the sample document (defaults filled in). */
@@ -327,10 +326,10 @@ const STARTER: VectorDocument = {
 
 function VectorDemo() {
   // Brushstrokes may use the demo's shared brush library: a brush saved in the Paint tab paints here.
-  const controller = useVectorEditorController({ document: STARTER, brushLibrary: demoBrushLibrary, brushPreview: renderCanvasBrushPreview, colorScheme: 'dark' });
+  const controller = useVectorEditorController({ document: STARTER, brushLibrary: demoBrushLibrary, brushPreview: renderVectorBrushPreview, colorScheme: 'dark' });
   const state = useVectorEditorState(controller);
   // The library's tools for the vector profile (vectorbrushes__*), with previews as brushstrokes paint them.
-  const vectorBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: VECTOR_PROFILE, renderPreview: renderCanvasBrushPreview, id: 'vector-brushes', namespace: 'vectorbrushes' }), []);
+  const vectorBrushTools = useMemo(() => createBrushLibraryToolProvider(demoBrushLibrary, { profile: VECTOR_PROFILE, renderPreview: renderVectorBrushPreview, id: 'vector-brushes', namespace: 'vectorbrushes' }), []);
   useAgentToolProvider(demoToolRegistry, vectorBrushTools);
   useVectorCommands(demoCommandRegistry, controller);
   // The demo-wide effects provider (built-in test effects, or Flair).

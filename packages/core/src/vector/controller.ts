@@ -423,8 +423,9 @@ export interface VectorEditorOptions {
 	brushLibrary?: Pick<BrushLibrary, 'list' | 'subscribe'>;
 	/**
 	 * Draws a brush's preview stroke for the brush editor ("Edit brush…"), e.g.
-	 * `renderCanvasBrushPreview` from `@pixerate/editor/canvas` (the renderer brushstrokes paint
-	 * with; not bundled here). Without it the brush editor has no preview.
+	 * `renderVectorBrushPreview` from this module (every brush a brushstroke paints: dry brushes, wet
+	 * paint settled, the Mixer Brush, smudge and blender over two bands of colour). Without it the
+	 * brush editor has no preview.
 	 */
 	brushPreview?: BrushPreviewRenderer;
 	/** The app's colour scheme, which picks the side of a brush's light / dark default colour (default light). */

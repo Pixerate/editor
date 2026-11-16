@@ -19,6 +19,7 @@ export * from './appearance.js';
 export * from './pathEffects.js';
 export * from './brushstroke.js';
 export * from './brushstrokeMedia.js';
+export * from './brushPreview.js';
 export { parseVectorTransform, rasterizeVectorBackdrop } from './backdrop.js';
 export * from './generate.js';
 export * from './stylize.js';
