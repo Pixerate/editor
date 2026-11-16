@@ -138,6 +138,12 @@ drawn.
   `kept`; it is not stripped. To make a copy for this host only, `create_brush` from
   `check_brush`'s `degraded` brush instead.
 - **Ids.** Built-in ids can't be reused or changed; a taken id is refused (update it instead).
+- **Family from the base.** `basedOn` copies the base's `family` with its other facets, so it is
+  not derived again when new facets make the brush another kind of paint (metallic, glow,
+  living…). Set `family` to match, or base on a preset of that family.
+- **Previews of wet paint in vector strokes.** The vector host's `preview_brush` draws a canvas
+  stroke, which refuses wet paint, the Mixer Brush, smudge and blender; `check_brush` with
+  `host: "vector"` is what says whether vector strokes take the brush.
 - **Stamps.** Any marks take any sticker ref from `find_stickers`, or an editor stamp
   (`editor:star`…). A ref the host's sticker library can't load is refused with the closest
   refs. Only the paint editor renders stamp tips and scatter marks; canvas, vector and the image

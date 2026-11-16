@@ -1,0 +1,25 @@
+{
+  "name": "@pixerate/editor-evals",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Evals of how well a model drafts new brushes with the brush library's tools, from a brief or from reference strokes.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.2"
+  },
+  "scripts": {
+    "eval": "node src/cli.ts",
+    "compare": "node src/compare.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.6.0",
+    "@pixerate/editor": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^5.7.3",
+    "vitest": "^5.1.0"
+  }
+}

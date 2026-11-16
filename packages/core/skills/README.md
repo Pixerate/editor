@@ -154,6 +154,10 @@ same change.
   `$unique`, `$distinct`, `$sum`, `$column`, `$nonEmpty`, `$not`, `$in`, `$type`); a check's
   argument can read a value the job created with `{ "$read": "list_layers", "path":
   "layers.-1.id" }`. Checks test the outcome the user asked for, not one way of getting it.
+- **Model evals.** [`packages/evals`](../../evals/README.md) runs a model with the shipped
+  `pixerate-brushes` and `pixerate-brushes-design` skills and the real brush tools, drafting a
+  brush of every type from a brief or from a held-out preset's stroke, and grades the result. Rerun
+  it (`--model replay:` costs nothing) after changing those skills or the brush tools.
 - **Workflows and practice.** The test cannot check advice. When a feature changes the best
   way to do something (a new batch tool, a new check, a better default), update the working
   method and best practices too.

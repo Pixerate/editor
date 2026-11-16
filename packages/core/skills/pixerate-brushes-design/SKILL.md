@@ -19,7 +19,8 @@ This skill is the method. `pixerate-brushes` has the full tool reference.
 
 - The brush is saved under a clear `id` and `name`, with a truthful `medium` and `variety`.
 - `check_brush` for the host it is for returns `ok: true`; any warnings are understood.
-- It differs from its base preset only where the request asks (`describe_brush` shows it).
+- It differs from its base preset only where the request asks (`describe_brush` shows it), and
+  its `family` is the kind of paint it now is.
 - Built-in presets are untouched.
 
 ## Inputs to confirm
@@ -35,8 +36,9 @@ Ask when you cannot tell from the request; say what you assumed when you can.
 
 ## Working method
 
-1. **Find the base.** `list_brush_presets` with `medium` or `variety`, or `text`. Pick the
-   closest; `describe_brush` it to read its facets.
+1. **Find the base.** `list_brush_presets` with `family` (what the paint does: `wet`,
+   `metallic`, `glow`…), `medium` or `variety`, or `text`. Pick the closest; `describe_brush` it
+   to read its facets.
    **Check:** the base's `check` is `ok` for the target host (or `check_brush` with `host`).
 2. **Create from it.** `create_brush` with a new `id`, `name`, `basedOn` and only the facets
    that change: `variety` for what it is now, `colour.default` / `colour.palette`, `tip`
@@ -94,6 +96,13 @@ channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan ch
   also takes `wet`) or start from a dry preset.
 - **Lists replace.** Giving `colour.palette` or `tip.stamps` replaces the whole list; include
   every entry you want.
+- **The base's family sticks.** `basedOn` copies the base's `family`, so a brush whose new facets
+  make it another kind of paint keeps the old one: `impasto-brush` with `behaviour.thick.metallic`
+  1 still files under `thick`, `ink-pen` with `light` under `ink`. Base on a preset of the family
+  you want (`list_brush_presets` with `family`), or set `family` too; `describe_brush` shows it.
+- **Previews on the vector host.** `preview_brush` there draws a canvas stroke, which refuses
+  wet paint, the Mixer Brush, smudge and blender, though vector strokes take them. Trust
+  `check_brush` with `host: "vector"` for those, not the preview's refusal.
 - **Changing a built-in.** `update_brush` refuses built-ins; duplicate first.
 
 ## Tools used
