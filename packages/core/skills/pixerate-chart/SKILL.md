@@ -326,6 +326,9 @@ data in the page's own colours, the host's component does the job; reach for the
 the user wants to edit, annotate or restyle the chart itself. Bar chart roles: `accent` is the first
 series, `surface` the background, `ink` the title and legend, `ink-muted` ticks and axes, `border`
 the grid. Sparkline: `accent` is the line.
+The four chart types are drawn in Swift too (`chartUiComponents()` in PixerateChart,
+`ChartUiComponentView` in PixerateChartUI): their descriptors list `swiftui` and set `swiftReady`,
+and the same data and options give the same picture on both.
 
 ## Data visuals as sandboxed pages
 

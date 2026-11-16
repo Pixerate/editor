@@ -1768,7 +1768,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`uiComponents`, `ChartUiComponent`, `UiDescriptor`, `lineageInteraction`, `braidInteraction`, `weaveInteraction`, `chartPaletteWithAccent` (`/chart`)",
         "react": "Via core (`useLinkFocus` with `interaction(data)`)",
         "svelte": "Via core (`linkFocusOf` with `interaction(data)`)",
-        "swift": "Planned (#819): the Swift chart package does not list UI components yet"
+        "swift": "`chartUiComponents()` (`sparkline`, `bar-chart`, `line-chart`, `donut-chart`; descriptors from the `ui-components.json` contract, `render` byte-identical SVG, `drawing` scene), `chartPaletteWithAccent`, `ChartUiComponentView` (SwiftUI); the data visuals `lineage`, `braid` and `weave` are not ported yet"
       },
       {
         "feature": "Diagram Families as UI Components (`diagramUiComponents()`: `flow` (steps joined by arrows, left to right or top down, with optional labelled links), `timeline` (periods and their events) and `mindmap` (a root, branches and two levels of children), as `data-visual` `UiDescriptor`s with a data JSON Schema, colour roles, accessibility, sizing, example data and a stable `contentHash`; `render` lays the data out with the diagram editor's own layout and draws accessible SVG at a size in light or dark with role colours; `toMermaid` gives the source for editing it as a diagram)",

@@ -1,0 +1,516 @@
+{
+  "components": [
+    {
+      "id": "sparkline",
+      "title": "Sparkline",
+      "description": "A word-sized line chart of one run of values, without axes or labels.",
+      "descriptor": {
+        "implements": "sparkline",
+        "group": "data-visual",
+        "contract": {
+          "props": {
+            "type": "object",
+            "properties": {
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "description": "A finite number."
+                },
+                "minItems": 1,
+                "maxItems": 100000,
+                "description": "The values in order, left to right."
+              },
+              "label": {
+                "type": "string",
+                "description": "Accessible name, e.g. \"Weekly sign-ups\" (default: a description of the values)."
+              }
+            },
+            "required": [
+              "values"
+            ],
+            "additionalProperties": false
+          },
+          "state": [],
+          "events": [],
+          "a11y": {
+            "role": "img",
+            "keyboard": {},
+            "labelFrom": "content"
+          },
+          "colorRoles": [
+            "accent"
+          ],
+          "motion": false,
+          "sizing": {
+            "mode": "intrinsic",
+            "minWidth": 24,
+            "minHeight": 8,
+            "aspectRatio": 5
+          }
+        },
+        "platforms": [
+          "html-page",
+          "swiftui"
+        ],
+        "swiftReady": true,
+        "example": {
+          "values": [
+            12,
+            15,
+            14,
+            18,
+            22,
+            21,
+            26,
+            24,
+            29,
+            33
+          ],
+          "label": "Weekly sign-ups"
+        },
+        "contentHash": "h1-f5415ff4a27028bf"
+      },
+      "colorRoleUse": {
+        "accent": "The line."
+      },
+      "defaultColors": {
+        "light": {
+          "accent": "#4269d0"
+        },
+        "dark": {
+          "accent": "#97bbf5"
+        }
+      },
+      "exampleSize": {
+        "width": 120,
+        "height": 24
+      }
+    },
+    {
+      "id": "bar-chart",
+      "title": "Bar chart",
+      "description": "Vertical bars comparing values across categories, one colour per series, with a value axis and a legend for several series.",
+      "descriptor": {
+        "implements": "bar-chart",
+        "group": "data-visual",
+        "contract": {
+          "props": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "maxItems": 500,
+                "description": "Category labels along the axis, in order."
+              },
+              "series": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "description": "One bar per category for each series; several series are grouped side by side.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Series name (legend)."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "description": "A finite number."
+                      },
+                      "description": "One value per category, in category order."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "title": {
+                "type": "string",
+                "description": "Title drawn above the chart and used as its accessible name."
+              },
+              "unit": {
+                "type": "string",
+                "description": "Written after every tick and value, e.g. \"%\" or \" kWh\"."
+              }
+            },
+            "required": [
+              "categories",
+              "series"
+            ],
+            "additionalProperties": false
+          },
+          "state": [],
+          "events": [],
+          "a11y": {
+            "role": "img",
+            "keyboard": {},
+            "labelFrom": "content"
+          },
+          "colorRoles": [
+            "surface",
+            "ink",
+            "ink-muted",
+            "border",
+            "accent"
+          ],
+          "motion": false,
+          "sizing": {
+            "mode": "fill",
+            "minWidth": 160,
+            "minHeight": 120
+          }
+        },
+        "platforms": [
+          "html-page",
+          "swiftui"
+        ],
+        "swiftReady": true,
+        "example": {
+          "title": "Quarterly revenue",
+          "unit": "k",
+          "categories": [
+            "Q1",
+            "Q2",
+            "Q3",
+            "Q4"
+          ],
+          "series": [
+            {
+              "name": "2025",
+              "values": [
+                120,
+                135,
+                128,
+                160
+              ]
+            },
+            {
+              "name": "2026",
+              "values": [
+                140,
+                152,
+                149,
+                181
+              ]
+            }
+          ]
+        },
+        "contentHash": "h1-76ee0998eaac0913"
+      },
+      "colorRoleUse": {
+        "surface": "Background behind the chart (theme background and surface).",
+        "ink": "Title and legend text (theme text).",
+        "ink-muted": "Tick labels and axis lines (theme mutedText and axis).",
+        "border": "Grid lines (theme grid).",
+        "accent": "The first series; further series take the next colours of the categorical chart palette."
+      },
+      "defaultColors": {
+        "light": {
+          "surface": "#ffffff",
+          "ink": "#0f172a",
+          "ink-muted": "#64748b",
+          "border": "#e2e8f0",
+          "accent": "#4269d0"
+        },
+        "dark": {
+          "surface": "#0f172a",
+          "ink": "#e2e8f0",
+          "ink-muted": "#94a3b8",
+          "border": "#334155",
+          "accent": "#97bbf5"
+        }
+      },
+      "exampleSize": {
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "line-chart",
+      "title": "Line chart",
+      "description": "Lines showing how values change across ordered categories (time), one colour per series, with a value axis and a legend for several series.",
+      "descriptor": {
+        "implements": "line-chart",
+        "group": "data-visual",
+        "contract": {
+          "props": {
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 2,
+                "maxItems": 1000,
+                "description": "Labels along the x axis, in order."
+              },
+              "series": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 20,
+                "description": "One line per series, one value per category.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "description": "Series name (legend)."
+                    },
+                    "values": {
+                      "type": "array",
+                      "items": {
+                        "type": "number",
+                        "description": "A finite number."
+                      },
+                      "description": "One value per category, in category order."
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "values"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "title": {
+                "type": "string",
+                "description": "Title drawn above the chart and used as its accessible name."
+              },
+              "unit": {
+                "type": "string",
+                "description": "Written after every tick and value, e.g. \"%\" or \" kWh\"."
+              }
+            },
+            "required": [
+              "categories",
+              "series"
+            ],
+            "additionalProperties": false
+          },
+          "state": [],
+          "events": [],
+          "a11y": {
+            "role": "img",
+            "keyboard": {},
+            "labelFrom": "content"
+          },
+          "colorRoles": [
+            "surface",
+            "ink",
+            "ink-muted",
+            "border",
+            "accent"
+          ],
+          "motion": false,
+          "sizing": {
+            "mode": "fill",
+            "minWidth": 200,
+            "minHeight": 120
+          }
+        },
+        "platforms": [
+          "html-page",
+          "swiftui"
+        ],
+        "swiftReady": true,
+        "example": {
+          "title": "Active users",
+          "unit": "k",
+          "categories": [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun"
+          ],
+          "series": [
+            {
+              "name": "Web",
+              "values": [
+                42,
+                45,
+                51,
+                49,
+                58,
+                63
+              ]
+            },
+            {
+              "name": "Mobile",
+              "values": [
+                30,
+                34,
+                33,
+                41,
+                46,
+                52
+              ]
+            }
+          ]
+        },
+        "contentHash": "h1-7a9211007a63771b"
+      },
+      "colorRoleUse": {
+        "surface": "Background behind the chart (theme background and surface).",
+        "ink": "Title and legend text (theme text).",
+        "ink-muted": "Tick labels and axis lines (theme mutedText and axis).",
+        "border": "Grid lines (theme grid).",
+        "accent": "The first line; further lines take the next colours of the categorical chart palette."
+      },
+      "defaultColors": {
+        "light": {
+          "surface": "#ffffff",
+          "ink": "#0f172a",
+          "ink-muted": "#64748b",
+          "border": "#e2e8f0",
+          "accent": "#4269d0"
+        },
+        "dark": {
+          "surface": "#0f172a",
+          "ink": "#e2e8f0",
+          "ink-muted": "#94a3b8",
+          "border": "#334155",
+          "accent": "#97bbf5"
+        }
+      },
+      "exampleSize": {
+        "width": 480,
+        "height": 300
+      }
+    },
+    {
+      "id": "donut-chart",
+      "title": "Donut chart",
+      "description": "Parts of a whole as slices of a ring, one colour per slice, with a legend.",
+      "descriptor": {
+        "implements": "donut-chart",
+        "group": "data-visual",
+        "contract": {
+          "props": {
+            "type": "object",
+            "properties": {
+              "slices": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 12,
+                "description": "Parts of the whole, largest first reads best.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "description": "Slice label (legend)."
+                    },
+                    "value": {
+                      "type": "number",
+                      "minimum": 0,
+                      "description": "Slice size, 0 or more."
+                    }
+                  },
+                  "required": [
+                    "label",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "title": {
+                "type": "string",
+                "description": "Title drawn above the chart and used as its accessible name."
+              },
+              "unit": {
+                "type": "string",
+                "description": "Written after every value, e.g. \"%\"."
+              }
+            },
+            "required": [
+              "slices"
+            ],
+            "additionalProperties": false
+          },
+          "state": [],
+          "events": [],
+          "a11y": {
+            "role": "img",
+            "keyboard": {},
+            "labelFrom": "content"
+          },
+          "colorRoles": [
+            "surface",
+            "ink",
+            "accent"
+          ],
+          "motion": false,
+          "sizing": {
+            "mode": "intrinsic",
+            "minWidth": 160,
+            "minHeight": 140,
+            "aspectRatio": 1.4
+          }
+        },
+        "platforms": [
+          "html-page",
+          "swiftui"
+        ],
+        "swiftReady": true,
+        "example": {
+          "title": "Traffic by channel",
+          "unit": "%",
+          "slices": [
+            {
+              "label": "Search",
+              "value": 46
+            },
+            {
+              "label": "Direct",
+              "value": 27
+            },
+            {
+              "label": "Social",
+              "value": 17
+            },
+            {
+              "label": "Email",
+              "value": 10
+            }
+          ]
+        },
+        "contentHash": "h1-50feaa770e686a53"
+      },
+      "colorRoleUse": {
+        "surface": "Background behind the chart (theme background and surface).",
+        "ink": "Title, legend and value text (theme text and mutedText).",
+        "accent": "The first slice; further slices take the next colours of the categorical chart palette."
+      },
+      "defaultColors": {
+        "light": {
+          "surface": "#ffffff",
+          "ink": "#0f172a",
+          "accent": "#4269d0"
+        },
+        "dark": {
+          "surface": "#0f172a",
+          "ink": "#e2e8f0",
+          "accent": "#97bbf5"
+        }
+      },
+      "exampleSize": {
+        "width": 360,
+        "height": 260
+      }
+    }
+  ]
+}

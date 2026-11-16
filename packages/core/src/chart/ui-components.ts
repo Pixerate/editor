@@ -715,6 +715,17 @@ const EXAMPLE_SIZES: Record<ChartUiComponentId, { width: number; height: number 
 	weave: { width: 560, height: 280 }
 };
 
+/**
+ * The chart types the Swift package also draws (`chartUiComponents()` in PixerateChart, scene and
+ * SVG matching these renders byte for byte): their descriptors list `swiftui` and set `swiftReady`.
+ */
+export const CHART_UI_SWIFT_READY: readonly ChartUiComponentId[] = ['sparkline', 'bar-chart', 'line-chart', 'donut-chart'];
+
+/** The size each type's descriptor example is drawn at for its `contentHash` (CSS px). */
+export function chartUiExampleSize(id: ChartUiComponentId): { width: number; height: number } {
+	return { ...EXAMPLE_SIZES[id] };
+}
+
 let cache: ChartUiComponent[] | null = null;
 
 /**
@@ -732,7 +743,8 @@ let cache: ChartUiComponent[] | null = null;
 export function uiComponents(): ChartUiComponent[] {
 	if (!cache) {
 		cache = ([sparklineComponent(), barChartComponent(), lineChartComponent(), donutChartComponent(), lineageComponent(), braidComponent(), weaveComponent()] as VisualParts[]).map(({ contract, example, ...rest }) => {
-			const platforms: UiPlatformTarget[] = ['html-page'];
+			const swift = CHART_UI_SWIFT_READY.includes(rest.id);
+			const platforms: UiPlatformTarget[] = swift ? ['html-page', 'swiftui'] : ['html-page'];
 			const size = EXAMPLE_SIZES[rest.id];
 			const renders = (['light', 'dark'] as const).map((theme) => rest.render(example, { ...size, theme }));
 			const contentHash = hashValue({ id: rest.id, renderVersion: CHART_UI_RENDER_VERSIONS[rest.id], contract, platforms, example, renders });
@@ -741,7 +753,7 @@ export function uiComponents(): ChartUiComponent[] {
 				group: 'data-visual',
 				contract,
 				platforms,
-				swiftReady: false,
+				swiftReady: swift,
 				example: example as unknown as Record<string, UiJsonValue>,
 				contentHash
 			};
