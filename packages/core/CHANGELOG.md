@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.335.1
+
+### Patch Changes
+
+- 0d8233e: Text mechanics: the `dashes` check picks the dash by how `--` is typed. Spaced (`word -- word`) it becomes an en dash; between words (`word--word`) an em dash, as most American writers mean it. `---` is always an em dash.
+
 ## 0.335.0
 
 ### Minor Changes
