@@ -94,6 +94,7 @@ const EXPECTED: Record<string, string> = {
 	'a contraction with a curly apostrophe': 'Don’t stop ',
 	'an en dash': 'Wait – what ',
 	'an em dash': 'A long—winded day ',
+	'an em dash between words': 'It works—mostly ',
 	'not a --flag': 'Use --verbose here ',
 	'an ellipsis': 'Wait… and then ',
 	'single quotes and an apostrophe': 'It’s ‘quoted’ text ',

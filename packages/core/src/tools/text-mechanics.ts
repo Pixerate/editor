@@ -71,7 +71,7 @@ export const TEXT_MECHANICS_CHECKS: readonly {
 	{
 		id: 'dashes',
 		title: 'Dashes',
-		description: '`--` becomes an en dash (–) and `---` an em dash (—) between words in prose, never a `--flag`. Off unless turned on.'
+		description: 'Dashes in prose: a spaced `--` becomes an en dash (word – word), `--` between words and `---` an em dash (word—word); never a `--flag`. Off unless turned on.'
 	},
 	{
 		id: 'ellipses',
@@ -637,7 +637,8 @@ function typographyAt(source: Source, boundary: number, skip: { from: number; to
 			// Between words (word--word), or standing alone between spaces (word -- word); never a --flag
 			const between = isAlphanumeric(before) && isAlphanumeric(after);
 			const alone = (i === tokenStart || before === ' ') && (i + run === end || after === ' ' || after === '\n' || after === undefined);
-			if (between || alone) out.push({ from: i, to: i + run, replacement: run === 3 ? '—' : '–', checks: ['dashes'] });
+			// --- is an em dash; -- is an en dash when spaced (word -- word) and an em dash between words (word--word)
+			if (between || alone) out.push({ from: i, to: i + run, replacement: run === 3 || between ? '—' : '–', checks: ['dashes'] });
 			i += run - 1;
 			continue;
 		}

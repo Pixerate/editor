@@ -800,6 +800,22 @@
     }
   },
   {
+    "name": "an em dash between words",
+    "typed": "it works--mostly ",
+    "enable": [
+      "curly-quotes",
+      "dashes",
+      "ellipses"
+    ],
+    "expect": {
+      "text": "It works—mostly ",
+      "checks": [
+        "sentence-case",
+        "dashes"
+      ]
+    }
+  },
+  {
     "name": "not a --flag",
     "typed": "use --verbose here ",
     "enable": [
