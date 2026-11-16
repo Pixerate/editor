@@ -16,7 +16,12 @@
 	let barLeft = $state(0);
 	let barWidth = $state(0);
 
-	let isSyncing = false;
+	// The scrollLeft last mirrored into the floating bar from the target. The bar's
+	// scroll event for that write arrives a frame later, by which point a smooth
+	// scroll on the target has moved on; writing the stale value back would cancel
+	// that smooth scroll. Only a bar position that differs from what we mirrored
+	// came from the user dragging the bar.
+	let mirroredLeft: number | null = null;
 
 	function updateMetrics() {
 		if (!targetElement) {
@@ -42,22 +47,20 @@
 			barWidth = Math.max(0, right - left);
 
 			if (scrollbarRef && Math.abs(scrollbarRef.scrollLeft - targetElement.scrollLeft) > 1) {
-				isSyncing = true;
 				scrollbarRef.scrollLeft = targetElement.scrollLeft;
-				requestAnimationFrame(() => {
-					isSyncing = false;
-				});
+				mirroredLeft = scrollbarRef.scrollLeft;
 			}
 		}
 	}
 
 	function handleFloatingScroll() {
-		if (!scrollbarRef || !targetElement || isSyncing) return;
-		isSyncing = true;
-		targetElement.scrollLeft = scrollbarRef.scrollLeft;
-		requestAnimationFrame(() => {
-			isSyncing = false;
-		});
+		if (!scrollbarRef || !targetElement) return;
+		const left = scrollbarRef.scrollLeft;
+		if (mirroredLeft !== null && Math.abs(left - mirroredLeft) <= 1) return;
+		mirroredLeft = null;
+		if (Math.abs(targetElement.scrollLeft - left) > 1) {
+			targetElement.scrollLeft = left;
+		}
 	}
 
 	onMount(() => {
