@@ -159,9 +159,10 @@ way this editor does and returns accessible SVG of that size. `toMermaid(data)` 
 host can open the same picture as an editable diagram. There is no agent tool for it: use the
 component when a page needs a fixed picture of a short process, a history or a topic map in the
 page's own colours; reach for the diagram tools when the user wants to edit, regroup or restyle it.
-Roles: `surface` the background, `surface-raised` the flow's boxes, `ink` labels, `ink-muted`
-arrows and the timeline's axis, `border` box outlines and the mind map's root, `accent` the first
-period or branch (the rest follow the categorical palette).
+Roles: `surface` the background, `surface-raised` the flow's boxes, `ink` labels and the mind
+map's root, `ink-muted` arrows and the timeline's axis, `border` box outlines, `accent` the first
+period or branch (the rest follow the categorical palette; a colour too close to the label colour,
+such as a near-black brand primary, is lightened until its label meets WCAG AA).
 
 ## Pitfalls
 

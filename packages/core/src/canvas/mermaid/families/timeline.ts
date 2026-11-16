@@ -2,6 +2,9 @@
 import { TIMELINE_METRICS, textWidth, timelineGeometry, type TimelineBox, type TimelineColour } from '../../../diagram/timeline/geometry.js';
 import { DIAGRAM_TITLE_TARGET, sceneColor, type DiagramMark, type DiagramSceneTheme, type FamilyScene } from '../scene-kit.js';
 
+/** How much of the background washes over an event's box, below its period's (0–1). */
+export const TIMELINE_EVENT_WASH = 0.2;
+
 const M = TIMELINE_METRICS;
 const RADIUS = 5;
 /** Box text: 17px below the top, 16px with a 1.1 line height (Ursula's `.ursula-timeline__box`). */
@@ -76,7 +79,7 @@ export const timelineScene: FamilyScene = ({ graph, theme }) => {
 		const c = colours(theme, colour);
 		marks.push({ kind: 'path', key, role, target, d: boxPath(b), fill: c.fill, ...(opacity !== undefined ? { opacity } : {}) });
 		// Mermaid's `brightness(120%)` on events, as a translucent background-coloured wash.
-		if (brighten) marks.push({ kind: 'path', key: `${key}:wash`, role, target, d: boxPath(b), fill: theme.background, opacity: 0.2 });
+		if (brighten) marks.push({ kind: 'path', key: `${key}:wash`, role, target, d: boxPath(b), fill: theme.background, opacity: TIMELINE_EVENT_WASH });
 		if (c.line) marks.push({ kind: 'line', key: `${key}:line`, role, target, x1: b.x, y1: b.y + b.height, x2: b.x + b.width, y2: b.y + b.height, stroke: c.line, strokeWidth: 3 });
 		wrap(text, b.width - 2 * M.padding).forEach((t, i) =>
 			marks.push({ kind: 'text', key: `${key}:text:${i}`, role: `${role}-label`, target, x: b.x + b.width / 2, y: b.y + TEXT_TOP + TEXT_LINE * (i + 0.5), text: t, anchor: 'middle', baseline: 'middle', size: M.fontSize, fill: c.text })

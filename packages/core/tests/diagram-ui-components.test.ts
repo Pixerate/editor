@@ -2,7 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DIAGRAM_UI_RENDER_VERSIONS, diagramUiComponents, type DiagramUiComponent } from '../src/canvas';
+import { DIAGRAM_UI_RENDER_VERSIONS, diagramReadableFill, diagramUiComponents, type DiagramUiComponent } from '../src/canvas';
+import { contrastRatio } from '../src/color/contrast';
+import { parseColor } from '../src/color/parse';
+import { formatHex } from '../src/color/format';
 import { parseMermaid } from '../src/diagram/document';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 
@@ -78,12 +81,51 @@ describe('diagramUiComponents', () => {
 		const svg = byId('mindmap').render(byId('mindmap').descriptor.example, { width: 480, height: 300, colors: { accent: '#ff00aa', surface: '#fafafa', border: '#222222' } });
 		expect(svg).toContain('stroke="#ff00aa"');
 		expect(svg).toContain('fill="#fafafa"');
-		// The root takes the border role, its label the surface.
-		expect(svg).toMatch(/<circle[^>]*fill="#222222"[^>]*data-target="root"/);
+		// The root takes the ink role (border only outlines), its label the surface.
+		expect(svg).not.toMatch(/<circle[^>]*fill="#222222"[^>]*data-target="root"/);
 		const flow = byId('flow').render(byId('flow').descriptor.example, { width: 480, height: 120, colors: { ink: '#111111', 'surface-raised': '#eeeeee', 'ink-muted': '#777777' } });
 		expect(flow).toContain('#111111');
 		expect(flow).toContain('fill="#eeeeee"');
 		expect(flow).toContain('#777777');
+	});
+
+	it('keeps every label at WCAG AA on its box, whatever the brand colours', () => {
+		// Shapes and the labels drawn over them, paired by data-target (the box of a period, branch or root).
+		const pairs = (svg: string) => {
+			const out: { fill: string; text: string; label: string }[] = [];
+			const boxes = new Map<string, string>();
+			for (const m of svg.matchAll(/<(rect|circle|path|text)\b([^>]*)>([^<]*)/g)) {
+				const fill = /\sfill="(#[0-9a-fA-F]{3,8})"/.exec(m[2]!)?.[1];
+				const target = /\sdata-target="([^"]+)"/.exec(m[2]!)?.[1];
+				if (!fill || !target) continue;
+				if (m[1] !== 'text') {
+					// A translucent shape (a shade over a box) composites over the box under it.
+					const opacity = Number(/\sopacity="([\d.]+)"/.exec(m[2]!)?.[1] ?? 1);
+					const top = parseColor(fill)!;
+					const under = parseColor(boxes.get(target) ?? fill)!;
+					boxes.set(target, opacity < 1 ? formatHex({ r: top.r * opacity + under.r * (1 - opacity), g: top.g * opacity + under.g * (1 - opacity), b: top.b * opacity + under.b * (1 - opacity), a: 1 }) : fill);
+				} else if (boxes.has(target) && m[3]!.trim()) out.push({ fill: boxes.get(target)!, text: fill, label: m[3]!.trim() });
+			}
+			return out;
+		};
+		// Hairline borders and near-black or near-white primaries, as design systems define them.
+		const brands = [
+			{ theme: 'light' as const, colors: { surface: '#ffffff', 'surface-raised': '#fafafa', ink: '#18181b', 'ink-muted': '#52525b', border: '#d4d4d8', accent: '#18181b' } },
+			{ theme: 'dark' as const, colors: { surface: '#09090b', 'surface-raised': '#18181b', ink: '#fafafa', 'ink-muted': '#a1a1aa', border: '#3f3f46', accent: '#fafafa' } },
+			{ theme: 'light' as const, colors: { accent: '#1e3a8a' } },
+			{ theme: 'dark' as const, colors: { accent: '#7c3aed', border: '#27272a' } }
+		];
+		for (const id of ['timeline', 'mindmap'] as const) {
+			const c = byId(id);
+			for (const { theme, colors } of brands) {
+				const found = pairs(c.render(c.descriptor.example, { width: 560, height: 320, theme, colors }));
+				expect(found.length).toBeGreaterThan(3);
+				for (const p of found) expect(contrastRatio(parseColor(p.text)!, parseColor(p.fill)!), `${id} ${theme} ${p.label} ${p.text} on ${p.fill}`).toBeGreaterThanOrEqual(4.5);
+			}
+		}
+		expect(diagramReadableFill('#ffad5c', '#0f172a')).toBe('#ffad5c');
+		const shifted = diagramReadableFill('#18181b', '#0f172a');
+		expect(contrastRatio(parseColor('#0f172a')!, parseColor(shifted)!)).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('refuses bad data and sizes with a message', () => {
