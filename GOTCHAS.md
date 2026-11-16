@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/brushes] `create_brush` With `basedOn` Keeps the Base's `family`
+
+- **Issue / Symptom**: A brush made from `impasto-brush` with `behaviour.thick.metallic: 1` is listed under `thick`, not `metallic`; an `ink-pen` copy with `light` stays under `ink`. `list_brush_presets` with `family` and the brush browser's groups then miss it. Found by the brush drafting eval (`packages/evals`), which checks the family.
+- **Root Cause**: Presets set `family` explicitly, and `basedOn` copies every facet of the base, `family` included. `family` is derived from the other facets only when it is unset, so the new facets never re-derive it.
+- **Solution / Workaround**: Base on a preset of the family you want, or pass `family` with the new facets. The brush skills say so in their pitfalls. A fix in core would drop the copied `family` when it was the base's own and re-derive it.
+
+### [core/brushes] The Vector Host's `preview_brush` Refuses Brushes Vector Strokes Take
+
+- **Issue / Symptom**: With `VECTOR_PROFILE`, `create_brush` saves a gouache or watercolour brush and `check_brush` says `ok`, but `preview_brush` fails with "can't brush a canvas stroke: Canvas has no wet surface". The same goes for the Mixer Brush, smudge and blender.
+- **Root Cause**: The vector host registers the brush tools with `renderPreview: renderCanvasBrushPreview` (the demo's `VectorTab`, `BrushesTab`), and the canvas swatch renderer only paints dry dab brushes. Vector brushstrokes render wet and backdrop media with their own code (`renderWetBrushstroke`, `renderBackdropBrushstroke`), which no preview uses.
+- **Solution / Workaround**: Trust `check_brush` with `host: "vector"`, not the preview's refusal. The brush drafting eval draws such brushes with the paint engine instead (`strokePng` in `packages/evals/src/host.ts`). A fix would give vector its own preview renderer that uses the wet and backdrop brushstroke renderers.
+
 ### [swift/paint-ui] AppKit Resets a View's Root Layer `isGeometryFlipped` to Match `isFlipped` (#896)
 
 - **Issue / Symptom**: On macOS, `PaintCanvasView` drew content that spans several tile rows (a placed picture, long strokes) as horizontal 256 px bands, each showing another part of the painting. iOS was unaffected, and exports, `compositeTiles` and `PaintCanvasPresenter` were all correct.

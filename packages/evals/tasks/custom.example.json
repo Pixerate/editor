@@ -1,0 +1,19 @@
+[
+  {
+    "id": "rainy-window",
+    "type": "wet",
+    "host": "paint",
+    "brushId": "rain-streak",
+    "brief": "A watercolour brush for rain running down a window: thin grey-blue streaks that bleed a little at the edges.",
+    "checks": [
+      { "why": "watercolour on a wet surface", "expect": { "brush": { "variety": "watercolor", "behaviour": { "surface": "wet" } } } },
+      { "why": "a thin tip", "expect": { "brush": { "tip": { "size": { "$max": 20 } } } } }
+    ]
+  },
+  {
+    "id": "ref-oil-flat",
+    "type": "wet",
+    "host": "paint",
+    "reference": { "preset": "oil-flat" }
+  }
+]
