@@ -5,6 +5,7 @@ import { demoStyles } from "../houseStyles";
 import { BrushLibraryBrowser, BrushLibraryEditor, useBrushLibrary } from "@pixerate/editor-react/brushes";
 import { useAgentToolProvider } from "@pixerate/editor-react";
 import { renderCanvasBrushPreview } from "@pixerate/editor/canvas";
+import { renderVectorBrushPreview } from "@pixerate/editor/vector";
 import { paintBrushPreviewRenderer } from "@pixerate/editor/paint-editor";
 import { demoBrushLibrary } from "../demoBrushes";
 import { demoToolRegistry } from "../agentTools";
@@ -21,7 +22,7 @@ const HOSTS: Array<{ id: Host; label: string; hint: string }> = [
 
 /** Each host's preview: the paint engine for paint and image, the brushstroke renderer for canvas and vector strokes. */
 const paintPreview = paintBrushPreviewRenderer(undefined, { library: demoBrushLibrary });
-const PREVIEWS: Record<Host, BrushPreviewRenderer> = { paint: paintPreview, image: paintPreview, canvas: renderCanvasBrushPreview, vector: renderCanvasBrushPreview };
+const PREVIEWS: Record<Host, BrushPreviewRenderer> = { paint: paintPreview, image: paintPreview, canvas: renderCanvasBrushPreview, vector: renderVectorBrushPreview };
 
 /** What the transparent canvas / vector previews are shown on: the panel's colour (the paint engine brings its paper). */
 const TRANSPARENT_BEHIND = "#0f172a";
