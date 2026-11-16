@@ -27,7 +27,7 @@ public enum TextMechanicsCheck: String, CaseIterable, Codable, Sendable {
     case spelling
     /// Straight quotes and apostrophes become curly in prose. Off unless turned on.
     case curlyQuotes = "curly-quotes"
-    /// `--` becomes an en dash and `---` an em dash between words in prose. Off unless turned on.
+    /// Dashes in prose: a spaced `--` becomes an en dash, `--` between words and `---` an em dash. Off unless turned on.
     case dashes
     /// `...` becomes an ellipsis in prose. Off unless turned on.
     case ellipses
@@ -235,7 +235,7 @@ public enum TextMechanics {
                 let between = isAlphanumeric(before) && isAlphanumeric(after)
                 let alone = (i == tokenStart || before == 0x20) && (i + run == end || after == 0x20 || after == newline || after == nil)
                 if between || alone {
-                    out.append(TextMechanicsEdit(range: NSRange(location: i, length: run), replacement: run == 3 ? "—" : "–", checks: [.dashes]))
+                    out.append(TextMechanicsEdit(range: NSRange(location: i, length: run), replacement: run == 3 || between ? "—" : "–", checks: [.dashes]))
                 }
                 i += run
                 continue

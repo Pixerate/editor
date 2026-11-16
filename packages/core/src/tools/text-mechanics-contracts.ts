@@ -304,6 +304,7 @@ export const TEXT_MECHANICS_SCENARIOS: readonly TextMechanicsScenario[] = [
 	{ name: 'a contraction with a curly apostrophe', typed: 'dont stop ', enable: TYPOGRAPHY },
 	{ name: 'an en dash', typed: 'wait -- what ', enable: TYPOGRAPHY },
 	{ name: 'an em dash', typed: 'a long---winded day ', enable: TYPOGRAPHY },
+	{ name: 'an em dash between words', typed: 'it works--mostly ', enable: TYPOGRAPHY },
 	{ name: 'not a --flag', typed: 'use --verbose here ', enable: TYPOGRAPHY },
 	{ name: 'an ellipsis', typed: 'Wait... and then ', enable: TYPOGRAPHY },
 	{ name: 'single quotes and an apostrophe', typed: "it's 'quoted' text ", enable: TYPOGRAPHY },
