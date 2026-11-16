@@ -1,0 +1,168 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "transform-layer",
+  "description": "A placed picture moved, scaled, rotated and flipped, then painted over; a bad scale is refused.",
+  "setup": {
+    "width": 48,
+    "height": 32
+  },
+  "steps": [
+    {
+      "tool": "place_image",
+      "arguments": {
+        "png": "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAALElEQVR4AYXIMQ0AQAjAwH7yApDDiHRG5OAA2BgZLmn6KEoykNQRfHMm1j0a0MQS1MVdGwoAAAAASUVORK5CYII=",
+        "name": "Photo",
+        "fit": "contain"
+      },
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 8,
+            "y": 0
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Photo",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        }
+      }
+    },
+    {
+      "tool": "transform_layer",
+      "arguments": {
+        "translateX": 6,
+        "translateY": -3
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 32,
+            "width": 32,
+            "x": 14,
+            "y": -3
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Photo",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/transform-layer.2.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "fd8ecd04ed175250d66111b78ce5e530ac833a8ff60777e9c752b2e3d99f830a",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "transform_layer",
+      "arguments": {
+        "scaleX": 0.75,
+        "scaleY": 0.75,
+        "rotation": 30
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 34,
+            "width": 34,
+            "x": 13,
+            "y": -4
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Photo",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/transform-layer.3.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "c8a2ea2e1a5aaf050abccfd2206210dd6e7ef252c3dbbef69e8055f370cd7232",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "transform_layer",
+      "arguments": {
+        "scaleX": -1,
+        "originX": 24,
+        "originY": 16
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "active": true,
+          "blend": "normal",
+          "bounds": {
+            "height": 34,
+            "width": 34,
+            "x": 1,
+            "y": -4
+          },
+          "clipped": false,
+          "depth": 0,
+          "id": "@1",
+          "locks": {},
+          "name": "Photo",
+          "opacity": 1,
+          "parentId": null,
+          "type": "pixel",
+          "visible": true
+        },
+        "pixels": {
+          "file": "png/transform-layer.4.png",
+          "width": 48,
+          "height": 32,
+          "sha256": "740308499b771c10f358e3e03ec32655f5bb9bed82a7454f48a57e4132a35abf",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    },
+    {
+      "tool": "transform_layer",
+      "arguments": {
+        "scaleY": 0
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "scaleY 0 is out of range; use 0.01..64 (negative flips)."
+          }
+        },
+        "isError": true
+      }
+    }
+  ]
+}
