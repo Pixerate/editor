@@ -7933,6 +7933,84 @@ export class PaintEditorController {
   }
 
   /**
+   * Moves, scales and rotates a pixel layer's paint (a placed picture, a sketch) about `origin`
+   * (default the centre of its painted area): rotate `rotation` degrees clockwise, scale by
+   * `scaleX` / `scaleY`, then move by `translateX` / `translateY` (document pixels). The paint is
+   * resampled once (bilinear on premultiplied colour, so clear edges don't darken). One undo step.
+   * Plain paint only: a layer with wet paint is dried first, and one carrying relief, light, UV or
+   * thermochromic ink, ferrofluid or a culture is refused, since those can't be resampled yet.
+   */
+  transformLayer(options: { layerId?: string; translateX?: number; translateY?: number; scaleX?: number; scaleY?: number; rotation?: number; originX?: number; originY?: number } = {}): PaintLayerInfo {
+    this.requireIdle('transforming a layer');
+    const target = this.paintTarget(options.layerId, 'transform');
+    if (this.doc.stickers?.[target.id]?.length) throw new PaintEditorError(`Layer "${target.name}" is a sticker layer; move its stickers with update_sticker instead.`);
+    if (this.doc.liveStrokes?.[target.id]) throw new PaintEditorError(`Layer "${target.name}" is a stroke layer; move its strokes with edit_stroke_points, or rasterize it first (rasterize_stroke_layer).`);
+    const num = (v: number | undefined, name: string, dflt: number) => {
+      if (v === undefined) return dflt;
+      if (!Number.isFinite(v)) throw new PaintEditorError(`${name} must be a number.`);
+      return v;
+    };
+    const tx = num(options.translateX, 'translateX', 0), ty = num(options.translateY, 'translateY', 0);
+    const sx = num(options.scaleX, 'scaleX', 1), sy = num(options.scaleY, 'scaleY', 1);
+    const deg = num(options.rotation, 'rotation', 0);
+    for (const [k, v] of [['scaleX', sx], ['scaleY', sy]] as const) {
+      if (!(Math.abs(v) >= 0.01 && Math.abs(v) <= 64)) throw new PaintEditorError(`${k} ${v} is out of range; use 0.01..64 (negative flips).`);
+    }
+    this.dryLayersFirst([target.id]);
+    const l = this.paintTarget(target.id, 'transform');
+    const carried = ([['relief (thick paint)', this.doc.thick], ['light', this.doc.light], ['UV ink', this.doc.fluor], ['thermochromic ink', this.doc.thermo], ['ferrofluid', this.doc.ferro], ['a living culture', this.doc.cultures]] as const)
+      .filter(([, m]) => m?.[l.id] !== undefined)
+      .map(([what]) => what);
+    if (carried.length) throw new PaintEditorError(`Layer "${l.name}" carries ${carried.join(', ')}, which can't be transformed yet; transform a layer of plain paint (a placed picture or a dry sketch).`);
+    if (l.mask) throw new PaintEditorError(`Layer "${l.name}" has a mask, which can't be transformed with it yet; apply or remove the mask first.`);
+    const area = contentBounds(l.surface);
+    if (!area) throw new PaintEditorError(`Layer "${l.name}" is empty; there is nothing to transform.`);
+    const src = { x: area.x + l.offset.x, y: area.y + l.offset.y, width: area.width, height: area.height };
+    const ox = num(options.originX, 'originX', src.x + src.width / 2), oy = num(options.originY, 'originY', src.y + src.height / 2);
+    const rad = (deg * Math.PI) / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    // Forward: p' = origin + translate + R·S·(p − origin). Inverse for sampling.
+    const fwd = (x: number, y: number) => {
+      const ux = (x - ox) * sx, uy = (y - oy) * sy;
+      return { x: ox + tx + ux * cos - uy * sin, y: oy + ty + ux * sin + uy * cos };
+    };
+    const inv = (x: number, y: number) => {
+      const ux = x - ox - tx, uy = y - oy - ty;
+      return { x: ox + (ux * cos + uy * sin) / sx, y: oy + (-ux * sin + uy * cos) / sy };
+    };
+    const corners = [fwd(src.x, src.y), fwd(src.x + src.width, src.y), fwd(src.x, src.y + src.height), fwd(src.x + src.width, src.y + src.height)];
+    const { width: cw, height: ch } = this.doc.canvas;
+    // Paint may hang off the sheet, up to a sheet's width or height beyond each edge.
+    const x0 = Math.max(-cw, Math.floor(Math.min(...corners.map((c) => c.x)))), y0 = Math.max(-ch, Math.floor(Math.min(...corners.map((c) => c.y))));
+    const x1 = Math.min(2 * cw, Math.ceil(Math.max(...corners.map((c) => c.x)))), y1 = Math.min(2 * ch, Math.ceil(Math.max(...corners.map((c) => c.y))));
+    const dw = Math.max(0, x1 - x0), dh = Math.max(0, y1 - y0);
+    const pixels = readRegion(l.surface, area);
+    const out = new Uint8ClampedArray(dw * dh * 4);
+    const sw = area.width, shh = area.height;
+    const at = (x: number, y: number, c: number) => (x < 0 || y < 0 || x >= sw || y >= shh ? 0 : pixels[(y * sw + x) * 4 + c]);
+    for (let y = 0; y < dh; y++) {
+      for (let x = 0; x < dw; x++) {
+        const q = inv(x0 + x + 0.5, y0 + y + 0.5);
+        const fx = q.x - src.x - 0.5, fy = q.y - src.y - 0.5;
+        if (fx < -1 || fy < -1 || fx > sw || fy > shh) continue;
+        const ix = Math.floor(fx), iy = Math.floor(fy);
+        const ax = fx - ix, ay = fy - iy;
+        let r = 0, g = 0, b = 0, a = 0;
+        for (const [px, py, w] of [[ix, iy, (1 - ax) * (1 - ay)], [ix + 1, iy, ax * (1 - ay)], [ix, iy + 1, (1 - ax) * ay], [ix + 1, iy + 1, ax * ay]] as const) {
+          const al = at(px, py, 3) * w;
+          r += at(px, py, 0) * al; g += at(px, py, 1) * al; b += at(px, py, 2) * al; a += al;
+        }
+        if (a <= 0) continue;
+        const k = (y * dw + x) * 4;
+        out[k] = Math.round(r / a); out[k + 1] = Math.round(g / a); out[k + 2] = Math.round(b / a); out[k + 3] = Math.round(a);
+      }
+    }
+    const next: PaintPixelLayer = { ...l, surface: surfaceFromPixels({ width: dw, height: dh, data: out }, 4, x0, y0), offset: { x: 0, y: 0 } };
+    this.commit('Transform layer', { ...this.doc, layers: mapLayer(this.doc.layers, l.id, () => next) });
+    return this.describeLayer(next);
+  }
+
+  /**
    * Places an image (a photo to paint over, a scan, a reference) on a new pixel layer above the
    * active one (or `aboveId`), scaled to fit the canvas (`contain`, the default) or fill it
    * (`cover`), centred. Its pixels become ordinary paint on that layer. One undo step.

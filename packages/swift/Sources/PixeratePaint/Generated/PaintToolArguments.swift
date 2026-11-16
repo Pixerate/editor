@@ -413,6 +413,38 @@ public struct PlaceImageArguments: Sendable {
     }
 }
 
+/// Arguments of `transform_layer`.
+public struct TransformLayerArguments: Sendable {
+    /// Layer id from list_layers (default the active layer).
+    public var layerId: String?
+    /// Move right by this many document pixels (default 0).
+    public var translateX: Double?
+    /// Move down by this many document pixels (default 0).
+    public var translateY: Double?
+    /// Horizontal scale, 0.01..64 in size; negative flips (default 1).
+    public var scaleX: Double?
+    /// Vertical scale, 0.01..64 in size; negative flips (default 1).
+    public var scaleY: Double?
+    /// Rotation in degrees, clockwise (default 0).
+    public var rotation: Double?
+    /// Origin x in document pixels (default the centre of the painted area).
+    public var originX: Double?
+    /// Origin y in document pixels (default the centre of the painted area).
+    public var originY: Double?
+
+    /// Reads arguments the registry has already validated against the tool's `inputSchema`.
+    public init(_ args: JSONObject) throws {
+        layerId = try args.string("layerId")
+        translateX = try args.number("translateX")
+        translateY = try args.number("translateY")
+        scaleX = try args.number("scaleX")
+        scaleY = try args.number("scaleY")
+        rotation = try args.number("rotation")
+        originX = try args.number("originX")
+        originY = try args.number("originY")
+    }
+}
+
 /// Arguments of `fill_region`.
 public struct FillRegionArguments: Sendable {
     /// Blend mode (default normal; see list_blend_modes).
@@ -4137,6 +4169,7 @@ public func paintToolArguments(_ name: PaintToolName, _ args: JSONObject) throws
     case .mergeLayerDown: try MergeLayerDownArguments(args)
     case .fillLayer: try FillLayerArguments(args)
     case .placeImage: try PlaceImageArguments(args)
+    case .transformLayer: try TransformLayerArguments(args)
     case .fillRegion: try FillRegionArguments(args)
     case .findUnfilledRegions: try FindUnfilledRegionsArguments(args)
     case .clearLayer: try ClearLayerArguments(args)

@@ -478,6 +478,30 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   });
 
   add({
+    name: 'transform_layer',
+    title: 'Move, scale or rotate a layer',
+    description:
+      'Moves, scales and rotates a pixel layer\'s paint (a placed picture, a sketch) about an origin (default the centre of its painted area): rotate by rotation degrees clockwise, scale by scaleX / scaleY (negative flips), then move by translateX / translateY document pixels. The paint is resampled once, so transform in one call rather than many small steps. Wet paint is dried first; a layer carrying relief, light, UV or thermochromic ink, ferrofluid, a culture or a mask is refused. One undo step. Returns the layer with its new bounds.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        layerId: LAYER_ID,
+        translateX: { type: 'number', description: 'Move right by this many document pixels (default 0).' },
+        translateY: { type: 'number', description: 'Move down by this many document pixels (default 0).' },
+        scaleX: { type: 'number', description: 'Horizontal scale, 0.01..64 in size; negative flips (default 1).' },
+        scaleY: { type: 'number', description: 'Vertical scale, 0.01..64 in size; negative flips (default 1).' },
+        rotation: { type: 'number', description: 'Rotation in degrees, clockwise (default 0).' },
+        originX: { type: 'number', description: 'Origin x in document pixels (default the centre of the painted area).' },
+        originY: { type: 'number', description: 'Origin y in document pixels (default the centre of the painted area).' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { title: 'Move, scale or rotate a layer', ...WRITE },
+    coordinates: { out: ['bounds'] },
+    handler: (a) => c.transformLayer(a),
+  });
+
+  add({
     name: 'fill_region',
     title: 'Fill a region (bucket / flats)',
     description:
