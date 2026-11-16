@@ -8,11 +8,15 @@
  * Here rather than in `/chart` because diagram layout needs dagre (this entry's dependency).
  */
 import { DEFAULT_CHART_PALETTE } from '../chart/spec.js';
+import { contrastRatio } from '../color/contrast.js';
+import { formatHex } from '../color/format.js';
+import { parseColor } from '../color/parse.js';
 import { chartPaletteWithAccent, type ChartUiRenderOptions, type ChartUiThemeMode, type UiColorRole, type UiComponentContract, type UiDescriptor, type UiJsonValue, type UiPlatformTarget } from '../chart/ui-components.js';
 import { parseMermaid } from '../diagram/document.js';
 import { hashValue } from '../generation/hash.js';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema.js';
 import { mermaidToSvg } from './mermaid/export.js';
+import { TIMELINE_EVENT_WASH } from './mermaid/families/timeline.js';
 import { DIAGRAM_SCENE_DARK_THEME, DIAGRAM_SCENE_LIGHT_THEME, type DiagramSceneTheme } from './mermaid/scene-kit.js';
 
 export type DiagramUiComponentId = 'flow' | 'timeline' | 'mindmap';
@@ -55,7 +59,40 @@ export interface DiagramUiComponent {
 }
 
 /** Per-type render versions (as `CHART_UI_RENDER_VERSIONS`): bump when the drawing changes unseen. */
-export const DIAGRAM_UI_RENDER_VERSIONS: Readonly<Record<DiagramUiComponentId, number>> = { flow: 1, timeline: 1, mindmap: 1 };
+export const DIAGRAM_UI_RENDER_VERSIONS: Readonly<Record<DiagramUiComponentId, number>> = { flow: 1, timeline: 2, mindmap: 2 };
+
+/** WCAG AA for the labels drawn on palette colours. */
+const LABEL_CONTRAST = 4.5;
+
+/**
+ * `color`, or the nearest step from it towards white or black (whichever reads better with `text`)
+ * that keeps `text` at WCAG AA on it. Timeline periods and mind-map branches label their boxes in
+ * the scene's one palette text colour, so a brand accent near that colour (a near-black primary)
+ * is shifted until the label reads, keeping its hue. With `wash` (a colour and an amount), the label
+ * must also read on the colour with that wash over it, as timeline events draw their period's colour.
+ */
+export function diagramReadableFill(color: string, text: string, wash?: { color: string; amount: number }): string {
+	const c = parseColor(color);
+	const t = parseColor(text);
+	if (!c || !t) return color;
+	const w = wash ? parseColor(wash.color) : null;
+	const reads = (fill: { r: number; g: number; b: number }) => {
+		if (contrastRatio(t, { ...fill, a: 1 }) < LABEL_CONTRAST) return false;
+		if (!w || !wash) return true;
+		const k = wash.amount;
+		return contrastRatio(t, { r: fill.r + (w.r - fill.r) * k, g: fill.g + (w.g - fill.g) * k, b: fill.b + (w.b - fill.b) * k, a: 1 }) >= LABEL_CONTRAST;
+	};
+	if (reads(c)) return color;
+	const white = { r: 1, g: 1, b: 1, a: 1 };
+	const black = { r: 0, g: 0, b: 0, a: 1 };
+	const to = contrastRatio(t, white) >= contrastRatio(t, black) ? white : black;
+	for (let step = 1; step <= 20; step++) {
+		const k = step / 20;
+		const mixed = { r: c.r + (to.r - c.r) * k, g: c.g + (to.g - c.g) * k, b: c.b + (to.b - c.b) * k, a: 1 };
+		if (reads(mixed)) return formatHex(mixed);
+	}
+	return formatHex(to);
+}
 
 const LABEL: JsonSchema = { type: 'string', minLength: 1, maxLength: 80, description: 'A short label.' };
 
@@ -151,10 +188,10 @@ const DEFAULTS: Record<ChartUiThemeMode, Record<UiColorRole, string>> = {
 const ROLE_USE: Record<UiColorRole, string> = {
 	surface: 'Background.',
 	'surface-raised': 'Step boxes (flow).',
-	ink: 'Labels and titles.',
+	ink: 'Labels and titles, and the mind map\'s root.',
 	'ink-muted': 'Arrows, the timeline axis and secondary text.',
 	border: 'Step box outlines and group outlines.',
-	accent: 'The first period or branch; further ones take the next colours of the categorical palette.'
+	accent: 'The first period or branch; further ones take the next colours of the categorical palette. A colour too close to the label colour is lightened or darkened until its label reads (WCAG AA).'
 };
 
 function check(id: DiagramUiComponentId, data: unknown, schema: JsonSchema, options: ChartUiRenderOptions): void {
@@ -176,14 +213,16 @@ function draw(id: DiagramUiComponentId, source: string, label: string, options: 
 		background: c.surface,
 		edgeLabelBackground: c.surface,
 		nodeFill: c['surface-raised'],
-		nodeStroke: c.border,
+		// The mind map fills its root with nodeStroke: ink, so its label (the surface) always reads;
+		// elsewhere it outlines boxes, the border role's job.
+		nodeStroke: id === 'mindmap' ? c.ink : c.border,
 		groupStroke: c.border,
 		text: c.ink,
 		groupText: c['ink-muted'],
 		mutedText: c['ink-muted'],
 		edge: c['ink-muted'],
 		grid: c['ink-muted'],
-		palette: chartPaletteWithAccent(c.accent!, base.palette.length ? base.palette : DEFAULT_CHART_PALETTE)
+		palette: chartPaletteWithAccent(c.accent!, base.palette.length ? base.palette : DEFAULT_CHART_PALETTE).map((color) => diagramReadableFill(color, base.paletteText, { color: c.surface!, amount: TIMELINE_EVENT_WASH }))
 	};
 	const doc = parseMermaid(source);
 	const out = mermaidToSvg(doc, { theme, maxWidth: options.width, maxHeight: options.height, title: label, transparent: true });
