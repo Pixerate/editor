@@ -19137,7 +19137,7 @@
         {
           "name": "create_brush",
           "title": "Save a new brush",
-          "description": "Saves a new brush made of facets (to save an editor's current brush settings, pass the brush get_brush returns), optionally basedOn an existing brush (its facets are copied and the ones given here laid over them: objects merge, lists and values replace). Values are normalised (out-of-range numbers clamped, unused facets dropped, each reported in problems) and checked against this host (Paint editor): a brush it can't render is refused with the facet and fix, and nothing is saved. Returns the new id, the stored brush, the engine it resolves to, problems and warnings (settings this host paints without). Start from the nearest preset (list_brush_presets) rather than from nothing.",
+          "description": "Saves a new brush made of facets (to save an editor's current brush settings, pass the brush get_brush returns), optionally basedOn an existing brush (its facets are copied and the ones given here laid over them: objects merge, lists and values replace; without family, the base's family is derived again when the new facets give another). Values are normalised (out-of-range numbers clamped, unused facets dropped, each reported in problems) and checked against this host (Paint editor): a brush it can't render is refused with the facet and fix, and nothing is saved. Returns the new id, the stored brush, the engine it resolves to, problems and warnings (settings this host paints without). Start from the nearest preset (list_brush_presets) rather than from nothing.",
           "inputSchema": {
             "type": "object",
             "properties": {
@@ -21004,7 +21004,7 @@
         {
           "name": "update_brush",
           "title": "Update a brush",
-          "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.",
+          "description": "Changes a saved brush: the facets given are laid over its own (objects merge, lists and values replace; marks of another kind replace the marks), and unset removes whole facets back to their defaults. Built-in presets are refused (duplicate_brush first). Checked against this host like create_brush: a change that adds what this host can't render is refused and saves nothing, while facets the brush already had for other hosts (a paint brush's light, in canvas) are kept as they are. A family that only restated the old facets is derived again when the change gives another; one set on purpose stays. One change. Returns the brush, the leaf paths changed, problems, warnings and, when there are any, kept: the facets this host can't use that the brush keeps.",
           "inputSchema": {
             "type": "object",
             "properties": {

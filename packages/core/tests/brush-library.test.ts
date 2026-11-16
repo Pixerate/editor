@@ -21,7 +21,7 @@ import { createMemoryStorage } from '../src/persistence';
 import { renderBrushThumbnail } from '../src/paint-editor/thumbnails';
 import { DEFAULT_PAPER } from '../src/paint-editor/paper';
 import { bytesToBase64, decodePng, encodePng, base64ToBytes } from '../src/raster/png';
-import { resolveBrush } from '../src/brushes';
+import { resolveBrush, resolveFamily } from '../src/brushes';
 import { ToolRegistry } from '../src/tools';
 
 const ids = (brushes: readonly { id: string }[]) => brushes.map((b) => b.id);
@@ -230,6 +230,30 @@ describe('BrushLibrary', () => {
   });
 });
 
+describe('preset families', () => {
+  // Built-in presets keep the families they declare (nothing listed moves). Their facets give the
+  // same family, except the few presets that file themselves elsewhere on purpose; create_brush
+  // basedOn a preset derives the family again only when the new facets give another one.
+  const OWN: Record<string, [declared: string, facets: string]> = {
+    'sparkle-dust': ['glow', 'strands'],
+    'light-airbrush': ['spray', 'glow'],
+    'smoke-ribbon': ['strands', 'glow'],
+    highlighter: ['ink', 'glow'],
+  };
+
+  it('resolves every built-in preset to the family it declares, which its facets give', () => {
+    const own: Record<string, [string, string]> = {};
+    for (const b of BRUSH_PRESETS) {
+      if (b.kind === 'tool') continue;
+      expect(resolveFamily(b), b.id).toBe(b.family);
+      const { family, ...bare } = b;
+      const facets = resolveFamily(bare as Brush);
+      if (facets !== family) own[b.id] = [family!, facets!];
+    }
+    expect(own).toEqual(OWN);
+  });
+});
+
 describe('brush library tools', () => {
   const setup = (options: Parameters<typeof createBrushLibraryToolProvider>[1] = {}) => {
     const library = createBrushLibrary();
@@ -299,6 +323,56 @@ describe('brush library tools', () => {
     expect((await call('create_brush', { id: 'x', name: 'X', basedOn: 'nope' })).error).toMatch(/No brush "nope"/);
   });
 
+  it('derives the family of a brush made basedOn a preset from its own facets', async () => {
+    const { call } = setup();
+    const made = async (args: Record<string, unknown>) => {
+      const { result, error } = await call('create_brush', args);
+      expect(error).toBeNull();
+      const listed = (await call('list_brush_presets', { text: args.id as string, all: true })).result.brushes.find((b: { id: string }) => b.id === args.id);
+      const described = (await call('describe_brush', { id: args.id })).result;
+      expect(listed.family).toBe(described.family);
+      return { stored: result.brush.family, family: described.family as string };
+    };
+    expect(await made({ id: 'shiny', name: 'Shiny', basedOn: 'impasto-brush', behaviour: { thick: { metallic: 1 } } })).toEqual({ stored: undefined, family: 'metallic' });
+    expect(await made({ id: 'lit-pen', name: 'Lit pen', basedOn: 'ink-pen', light: { amount: 1 } })).toEqual({ stored: undefined, family: 'glow' });
+    expect(await made({ id: 'alive', name: 'Alive', basedOn: 'watercolor-round', livePatterns: { pattern: 'spots' } })).toEqual({ stored: undefined, family: 'living' });
+    // A preset that files itself elsewhere on purpose keeps its family until the facets change it.
+    expect(await made({ id: 'my-highlighter', name: 'Mine', basedOn: 'highlighter', tip: { size: 30 } })).toEqual({ stored: 'ink', family: 'ink' });
+    expect(await made({ id: 'live-highlighter', name: 'Live', basedOn: 'highlighter', behaviour: { surface: 'wet' }, livePatterns: { pattern: 'spots' } })).toEqual({ stored: undefined, family: 'living' });
+    // Facets that still give the base's family keep it as it was.
+    expect(await made({ id: 'big-pen', name: 'Big pen', basedOn: 'ink-pen', tip: { size: 12 } })).toEqual({ stored: 'ink', family: 'ink' });
+    expect((await call('list_brush_presets', { family: 'metallic', all: true })).result.brushes.map((b: { id: string }) => b.id)).toContain('shiny');
+    expect((await call('list_brush_presets', { family: 'thick', all: true })).result.brushes.map((b: { id: string }) => b.id)).not.toContain('shiny');
+  });
+
+  it('keeps a family the caller gives, and a saved brush\'s own family through updates', async () => {
+    const { call } = setup();
+    const r = await call('create_brush', { id: 'odd', name: 'Odd', basedOn: 'impasto-brush', family: 'ethereal', behaviour: { thick: { metallic: 1 } } });
+    expect(r.error).toBeNull();
+    expect(r.result.brush.family).toBe('ethereal');
+    expect((await call('describe_brush', { id: 'odd' })).result.family).toBe('ethereal');
+    // A family that differs from the facets' is the brush's own: changes keep it.
+    const u = await call('update_brush', { id: 'odd', light: { amount: 1 } });
+    expect(u.error).toBeNull();
+    expect(u.result.brush.family).toBe('ethereal');
+    expect(u.result.changed).not.toContain('family');
+    // A family passed with the change wins.
+    expect((await call('update_brush', { id: 'odd', family: 'thick' })).result.brush.family).toBe('thick');
+  });
+
+  it('re-derives a copied family when an update changes what the paint does', async () => {
+    const { call } = setup();
+    const copy = (await call('duplicate_brush', { id: 'impasto-brush', newId: 'my-impasto' })).result.brush;
+    expect(copy.family).toBe('thick');
+    const same = await call('update_brush', { id: 'my-impasto', tip: { size: 30 } });
+    expect(same.result.brush.family).toBe('thick');
+    expect(same.result.changed).toEqual(['tip.size']);
+    const shiny = await call('update_brush', { id: 'my-impasto', behaviour: { thick: { metallic: 1 } } });
+    expect(shiny.error).toBeNull();
+    expect(shiny.result.brush.family).toBeUndefined();
+    expect((await call('describe_brush', { id: 'my-impasto' })).result.family).toBe('metallic');
+  });
+
   it('updates a saved brush, merging facets and unsetting whole ones', async () => {
     const { call } = setup();
     await call('create_brush', { id: 'glow', name: 'Glow', basedOn: 'neon-marker' });
@@ -306,7 +380,8 @@ describe('brush library tools', () => {
     expect(error).toBeNull();
     expect(result.brush.light).toBeUndefined();
     expect(result.brush.tip).toMatchObject({ shape: 'round', size: 20, hardness: 0.9 });
-    expect(result.changed.sort()).toEqual(['light', 'name', 'tip.size']);
+    // Without its light the marker no longer glows, so the copied family goes with it.
+    expect(result.changed.sort()).toEqual(['family', 'light', 'name', 'tip.size']);
     expect((await call('update_brush', { id: 'marker', tip: { size: 1 } })).error).toMatch(/built-in brush and can't be changed; duplicate_brush/);
     expect((await call('update_brush', { id: 'nope' })).error).toMatch(/No brush "nope"/);
   });
