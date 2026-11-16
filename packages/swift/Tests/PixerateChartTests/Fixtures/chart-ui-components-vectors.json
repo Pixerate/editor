@@ -1,0 +1,1016 @@
+{
+  "renders": [
+    {
+      "name": "sparkline example light",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          12,
+          15,
+          14,
+          18,
+          22,
+          21,
+          26,
+          24,
+          29,
+          33
+        ],
+        "label": "Weekly sign-ups"
+      },
+      "options": {
+        "width": 120,
+        "height": 24,
+        "theme": "light"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"24\" viewBox=\"0 0 120 24\" role=\"img\" aria-label=\"Weekly sign-ups\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Weekly sign-ups</title><desc id=\"chart-desc\">Weekly sign-ups: a line chart showing 1 series over 10 categories (1 to 10). Weekly sign-ups ranges from 12 (1) to 33 (10), rising, up 175% from first to last.</desc><path d=\"M2,22L14.89,19.14L27.78,20.1L40.67,16.29L53.56,12.48L66.44,13.43L79.33,8.67L92.22,10.57L105.11,5.81L118,2\" fill=\"none\" stroke=\"#4269d0\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "sparkline example dark",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          12,
+          15,
+          14,
+          18,
+          22,
+          21,
+          26,
+          24,
+          29,
+          33
+        ],
+        "label": "Weekly sign-ups"
+      },
+      "options": {
+        "width": 120,
+        "height": 24,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"24\" viewBox=\"0 0 120 24\" role=\"img\" aria-label=\"Weekly sign-ups\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Weekly sign-ups</title><desc id=\"chart-desc\">Weekly sign-ups: a line chart showing 1 series over 10 categories (1 to 10). Weekly sign-ups ranges from 12 (1) to 33 (10), rising, up 175% from first to last.</desc><path d=\"M2,22L14.89,19.14L27.78,20.1L40.67,16.29L53.56,12.48L66.44,13.43L79.33,8.67L92.22,10.57L105.11,5.81L118,2\" fill=\"none\" stroke=\"#97bbf5\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "sparkline example brand colours",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          12,
+          15,
+          14,
+          18,
+          22,
+          21,
+          26,
+          24,
+          29,
+          33
+        ],
+        "label": "Weekly sign-ups"
+      },
+      "options": {
+        "width": 120,
+        "height": 24,
+        "colors": {
+          "surface": "#fafaf9",
+          "ink": "#1c1917",
+          "ink-muted": "#78716c",
+          "border": "#e7e5e4",
+          "accent": "#0f766e"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"24\" viewBox=\"0 0 120 24\" role=\"img\" aria-label=\"Weekly sign-ups\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Weekly sign-ups</title><desc id=\"chart-desc\">Weekly sign-ups: a line chart showing 1 series over 10 categories (1 to 10). Weekly sign-ups ranges from 12 (1) to 33 (10), rising, up 175% from first to last.</desc><path d=\"M2,22L14.89,19.14L27.78,20.1L40.67,16.29L53.56,12.48L66.44,13.43L79.33,8.67L92.22,10.57L105.11,5.81L118,2\" fill=\"none\" stroke=\"#0f766e\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "sparkline example dark, accent only",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          12,
+          15,
+          14,
+          18,
+          22,
+          21,
+          26,
+          24,
+          29,
+          33
+        ],
+        "label": "Weekly sign-ups"
+      },
+      "options": {
+        "width": 120,
+        "height": 24,
+        "theme": "dark",
+        "colors": {
+          "accent": " #f43f5e ",
+          "unknown": "#000"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"120\" height=\"24\" viewBox=\"0 0 120 24\" role=\"img\" aria-label=\"Weekly sign-ups\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Weekly sign-ups</title><desc id=\"chart-desc\">Weekly sign-ups: a line chart showing 1 series over 10 categories (1 to 10). Weekly sign-ups ranges from 12 (1) to 33 (10), rising, up 175% from first to last.</desc><path d=\"M2,22L14.89,19.14L27.78,20.1L40.67,16.29L53.56,12.48L66.44,13.43L79.33,8.67L92.22,10.57L105.11,5.81L118,2\" fill=\"none\" stroke=\"#f43f5e\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "bar-chart example light",
+      "id": "bar-chart",
+      "data": {
+        "title": "Quarterly revenue",
+        "unit": "k",
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "2025",
+            "values": [
+              120,
+              135,
+              128,
+              160
+            ]
+          },
+          {
+            "name": "2026",
+            "values": [
+              140,
+              152,
+              149,
+              181
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "light"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Quarterly revenue\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Quarterly revenue</title><desc id=\"chart-desc\">Quarterly revenue: a bar chart showing 2 series over 4 categories (Q1 to Q4). 2025 ranges from 120k (Q1) to 160k (Q4), rising, up 33% from first to last. 2026 ranges from 140k (Q1) to 181k (Q4), rising, up 29% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#ffffff\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"title\">Quarterly revenue</text><rect x=\"192.36\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#4269d0\" data-role=\"legend-swatch\"/><text x=\"208.36\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">2025</text><rect x=\"247\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"263\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">2026</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"36.64\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0k</text><text x=\"36.64\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">50k</text><text x=\"36.64\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">100k</text><text x=\"36.64\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">150k</text><text x=\"36.64\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">200k</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#64748b\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"96.56\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Q1</text><text x=\"200.39999999999998\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Q2</text><text x=\"304.24\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Q3</text><text x=\"408.08\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Q4</text><rect x=\"59.177600000000005\" y=\"125.73000000000002\" width=\"35.26641509433962\" height=\"119.97\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"163.0176\" y=\"110.73374999999999\" width=\"35.26641509433962\" height=\"134.96625000000003\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"266.8576\" y=\"117.732\" width=\"35.26641509433962\" height=\"127.96800000000002\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"370.69759999999997\" y=\"85.73999999999998\" width=\"35.26641509433962\" height=\"159.96000000000004\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"98.67598490566039\" y=\"105.73500000000001\" width=\"35.26641509433962\" height=\"139.965\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"202.51598490566036\" y=\"93.738\" width=\"35.26641509433962\" height=\"151.96200000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"306.35598490566036\" y=\"96.73725000000002\" width=\"35.26641509433962\" height=\"148.96275\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"410.19598490566034\" y=\"64.74525\" width=\"35.26641509433962\" height=\"180.95475000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "bar-chart example dark",
+      "id": "bar-chart",
+      "data": {
+        "title": "Quarterly revenue",
+        "unit": "k",
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "2025",
+            "values": [
+              120,
+              135,
+              128,
+              160
+            ]
+          },
+          {
+            "name": "2026",
+            "values": [
+              140,
+              152,
+              149,
+              181
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Quarterly revenue\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Quarterly revenue</title><desc id=\"chart-desc\">Quarterly revenue: a bar chart showing 2 series over 4 categories (Q1 to Q4). 2025 ranges from 120k (Q1) to 160k (Q4), rising, up 33% from first to last. 2026 ranges from 140k (Q1) to 181k (Q4), rising, up 29% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Quarterly revenue</text><rect x=\"192.36\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#97bbf5\" data-role=\"legend-swatch\"/><text x=\"208.36\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">2025</text><rect x=\"247\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"263\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">2026</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"36.64\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">0k</text><text x=\"36.64\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">50k</text><text x=\"36.64\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">100k</text><text x=\"36.64\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">150k</text><text x=\"36.64\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">200k</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"96.56\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q1</text><text x=\"200.39999999999998\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q2</text><text x=\"304.24\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q3</text><text x=\"408.08\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q4</text><rect x=\"59.177600000000005\" y=\"125.73000000000002\" width=\"35.26641509433962\" height=\"119.97\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"163.0176\" y=\"110.73374999999999\" width=\"35.26641509433962\" height=\"134.96625000000003\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"266.8576\" y=\"117.732\" width=\"35.26641509433962\" height=\"127.96800000000002\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"370.69759999999997\" y=\"85.73999999999998\" width=\"35.26641509433962\" height=\"159.96000000000004\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"98.67598490566039\" y=\"105.73500000000001\" width=\"35.26641509433962\" height=\"139.965\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"202.51598490566036\" y=\"93.738\" width=\"35.26641509433962\" height=\"151.96200000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"306.35598490566036\" y=\"96.73725000000002\" width=\"35.26641509433962\" height=\"148.96275\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"410.19598490566034\" y=\"64.74525\" width=\"35.26641509433962\" height=\"180.95475000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "bar-chart example brand colours",
+      "id": "bar-chart",
+      "data": {
+        "title": "Quarterly revenue",
+        "unit": "k",
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "2025",
+            "values": [
+              120,
+              135,
+              128,
+              160
+            ]
+          },
+          {
+            "name": "2026",
+            "values": [
+              140,
+              152,
+              149,
+              181
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "colors": {
+          "surface": "#fafaf9",
+          "ink": "#1c1917",
+          "ink-muted": "#78716c",
+          "border": "#e7e5e4",
+          "accent": "#0f766e"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Quarterly revenue\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Quarterly revenue</title><desc id=\"chart-desc\">Quarterly revenue: a bar chart showing 2 series over 4 categories (Q1 to Q4). 2025 ranges from 120k (Q1) to 160k (Q4), rising, up 33% from first to last. 2026 ranges from 140k (Q1) to 181k (Q4), rising, up 29% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#fafaf9\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"title\">Quarterly revenue</text><rect x=\"192.36\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#0f766e\" data-role=\"legend-swatch\"/><text x=\"208.36\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">2025</text><rect x=\"247\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"263\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">2026</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"36.64\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">0k</text><text x=\"36.64\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">50k</text><text x=\"36.64\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">100k</text><text x=\"36.64\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">150k</text><text x=\"36.64\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">200k</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#78716c\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"96.56\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Q1</text><text x=\"200.39999999999998\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Q2</text><text x=\"304.24\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Q3</text><text x=\"408.08\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Q4</text><rect x=\"59.177600000000005\" y=\"125.73000000000002\" width=\"35.26641509433962\" height=\"119.97\" rx=\"2\" fill=\"#0f766e\" data-role=\"bar\"/><rect x=\"163.0176\" y=\"110.73374999999999\" width=\"35.26641509433962\" height=\"134.96625000000003\" rx=\"2\" fill=\"#0f766e\" data-role=\"bar\"/><rect x=\"266.8576\" y=\"117.732\" width=\"35.26641509433962\" height=\"127.96800000000002\" rx=\"2\" fill=\"#0f766e\" data-role=\"bar\"/><rect x=\"370.69759999999997\" y=\"85.73999999999998\" width=\"35.26641509433962\" height=\"159.96000000000004\" rx=\"2\" fill=\"#0f766e\" data-role=\"bar\"/><rect x=\"98.67598490566039\" y=\"105.73500000000001\" width=\"35.26641509433962\" height=\"139.965\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"202.51598490566036\" y=\"93.738\" width=\"35.26641509433962\" height=\"151.96200000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"306.35598490566036\" y=\"96.73725000000002\" width=\"35.26641509433962\" height=\"148.96275\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"410.19598490566034\" y=\"64.74525\" width=\"35.26641509433962\" height=\"180.95475000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "bar-chart example dark, accent only",
+      "id": "bar-chart",
+      "data": {
+        "title": "Quarterly revenue",
+        "unit": "k",
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "2025",
+            "values": [
+              120,
+              135,
+              128,
+              160
+            ]
+          },
+          {
+            "name": "2026",
+            "values": [
+              140,
+              152,
+              149,
+              181
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "dark",
+        "colors": {
+          "accent": " #f43f5e ",
+          "unknown": "#000"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Quarterly revenue\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Quarterly revenue</title><desc id=\"chart-desc\">Quarterly revenue: a bar chart showing 2 series over 4 categories (Q1 to Q4). 2025 ranges from 120k (Q1) to 160k (Q4), rising, up 33% from first to last. 2026 ranges from 140k (Q1) to 181k (Q4), rising, up 29% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Quarterly revenue</text><rect x=\"192.36\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#f43f5e\" data-role=\"legend-swatch\"/><text x=\"208.36\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">2025</text><rect x=\"247\" y=\"273.65000000000003\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"263\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">2026</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"44.64\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"36.64\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">0k</text><text x=\"36.64\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">50k</text><text x=\"36.64\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">100k</text><text x=\"36.64\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">150k</text><text x=\"36.64\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">200k</text><line x1=\"44.64\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"96.56\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q1</text><text x=\"200.39999999999998\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q2</text><text x=\"304.24\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q3</text><text x=\"408.08\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Q4</text><rect x=\"59.177600000000005\" y=\"125.73000000000002\" width=\"35.26641509433962\" height=\"119.97\" rx=\"2\" fill=\"#f43f5e\" data-role=\"bar\"/><rect x=\"163.0176\" y=\"110.73374999999999\" width=\"35.26641509433962\" height=\"134.96625000000003\" rx=\"2\" fill=\"#f43f5e\" data-role=\"bar\"/><rect x=\"266.8576\" y=\"117.732\" width=\"35.26641509433962\" height=\"127.96800000000002\" rx=\"2\" fill=\"#f43f5e\" data-role=\"bar\"/><rect x=\"370.69759999999997\" y=\"85.73999999999998\" width=\"35.26641509433962\" height=\"159.96000000000004\" rx=\"2\" fill=\"#f43f5e\" data-role=\"bar\"/><rect x=\"98.67598490566039\" y=\"105.73500000000001\" width=\"35.26641509433962\" height=\"139.965\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"202.51598490566036\" y=\"93.738\" width=\"35.26641509433962\" height=\"151.96200000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"306.35598490566036\" y=\"96.73725000000002\" width=\"35.26641509433962\" height=\"148.96275\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"410.19598490566034\" y=\"64.74525\" width=\"35.26641509433962\" height=\"180.95475000000002\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "line-chart example light",
+      "id": "line-chart",
+      "data": {
+        "title": "Active users",
+        "unit": "k",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "series": [
+          {
+            "name": "Web",
+            "values": [
+              42,
+              45,
+              51,
+              49,
+              58,
+              63
+            ]
+          },
+          {
+            "name": "Mobile",
+            "values": [
+              30,
+              34,
+              33,
+              41,
+              46,
+              52
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "light"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Active users\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Active users</title><desc id=\"chart-desc\">Active users: a line chart showing 2 series over 6 categories (Jan to Jun). Web ranges from 42k (Jan) to 63k (Jun), rising, up 50% from first to last. Mobile ranges from 30k (Jan) to 52k (Jun), rising, up 73% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#ffffff\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"title\">Active users</text><line x1=\"189.28\" y1=\"278.65000000000003\" x2=\"199.28\" y2=\"278.65000000000003\" stroke=\"#4269d0\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"205.28\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Web</text><line x1=\"237.76\" y1=\"278.65000000000003\" x2=\"247.76\" y2=\"278.65000000000003\" stroke=\"#efb118\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"253.76\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Mobile</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">30k</text><text x=\"30.480000000000004\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">40k</text><text x=\"30.480000000000004\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">50k</text><text x=\"30.480000000000004\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">60k</text><text x=\"30.480000000000004\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">70k</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#64748b\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"73.60666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Jan</text><text x=\"143.86\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Feb</text><text x=\"214.11333333333334\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Mar</text><text x=\"284.3666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Apr</text><text x=\"354.62\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">May</text><text x=\"424.87333333333333\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">Jun</text><path d=\"M73.61,185.72L143.86,170.72L214.11,140.73L284.37,150.72L354.62,105.74L424.87,80.74\" fill=\"none\" stroke=\"#4269d0\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"185.71500000000003\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"170.71875\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"140.72625\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"150.72375\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"105.73500000000001\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"80.74125000000001\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M73.61,245.7L143.86,225.71L214.11,230.7L284.37,190.71L354.62,165.72L424.87,135.73\" fill=\"none\" stroke=\"#efb118\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"245.70000000000002\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"225.705\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"230.70375\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"190.71375\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"165.72\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"135.7275\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "line-chart example dark",
+      "id": "line-chart",
+      "data": {
+        "title": "Active users",
+        "unit": "k",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "series": [
+          {
+            "name": "Web",
+            "values": [
+              42,
+              45,
+              51,
+              49,
+              58,
+              63
+            ]
+          },
+          {
+            "name": "Mobile",
+            "values": [
+              30,
+              34,
+              33,
+              41,
+              46,
+              52
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Active users\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Active users</title><desc id=\"chart-desc\">Active users: a line chart showing 2 series over 6 categories (Jan to Jun). Web ranges from 42k (Jan) to 63k (Jun), rising, up 50% from first to last. Mobile ranges from 30k (Jan) to 52k (Jun), rising, up 73% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Active users</text><line x1=\"189.28\" y1=\"278.65000000000003\" x2=\"199.28\" y2=\"278.65000000000003\" stroke=\"#97bbf5\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"205.28\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Web</text><line x1=\"237.76\" y1=\"278.65000000000003\" x2=\"247.76\" y2=\"278.65000000000003\" stroke=\"#efb118\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"253.76\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Mobile</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">30k</text><text x=\"30.480000000000004\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">40k</text><text x=\"30.480000000000004\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">50k</text><text x=\"30.480000000000004\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">60k</text><text x=\"30.480000000000004\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">70k</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"73.60666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Jan</text><text x=\"143.86\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Feb</text><text x=\"214.11333333333334\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Mar</text><text x=\"284.3666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Apr</text><text x=\"354.62\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">May</text><text x=\"424.87333333333333\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Jun</text><path d=\"M73.61,185.72L143.86,170.72L214.11,140.73L284.37,150.72L354.62,105.74L424.87,80.74\" fill=\"none\" stroke=\"#97bbf5\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"185.71500000000003\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"170.71875\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"140.72625\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"150.72375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"105.73500000000001\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"80.74125000000001\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#97bbf5\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M73.61,245.7L143.86,225.71L214.11,230.7L284.37,190.71L354.62,165.72L424.87,135.73\" fill=\"none\" stroke=\"#efb118\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"245.70000000000002\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"225.705\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"230.70375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"190.71375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"165.72\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"135.7275\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "line-chart example brand colours",
+      "id": "line-chart",
+      "data": {
+        "title": "Active users",
+        "unit": "k",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "series": [
+          {
+            "name": "Web",
+            "values": [
+              42,
+              45,
+              51,
+              49,
+              58,
+              63
+            ]
+          },
+          {
+            "name": "Mobile",
+            "values": [
+              30,
+              34,
+              33,
+              41,
+              46,
+              52
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "colors": {
+          "surface": "#fafaf9",
+          "ink": "#1c1917",
+          "ink-muted": "#78716c",
+          "border": "#e7e5e4",
+          "accent": "#0f766e"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Active users\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Active users</title><desc id=\"chart-desc\">Active users: a line chart showing 2 series over 6 categories (Jan to Jun). Web ranges from 42k (Jan) to 63k (Jun), rising, up 50% from first to last. Mobile ranges from 30k (Jan) to 52k (Jun), rising, up 73% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#fafaf9\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"title\">Active users</text><line x1=\"189.28\" y1=\"278.65000000000003\" x2=\"199.28\" y2=\"278.65000000000003\" stroke=\"#0f766e\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"205.28\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Web</text><line x1=\"237.76\" y1=\"278.65000000000003\" x2=\"247.76\" y2=\"278.65000000000003\" stroke=\"#efb118\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"253.76\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Mobile</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">30k</text><text x=\"30.480000000000004\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">40k</text><text x=\"30.480000000000004\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">50k</text><text x=\"30.480000000000004\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">60k</text><text x=\"30.480000000000004\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">70k</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#78716c\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"73.60666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Jan</text><text x=\"143.86\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Feb</text><text x=\"214.11333333333334\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Mar</text><text x=\"284.3666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Apr</text><text x=\"354.62\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">May</text><text x=\"424.87333333333333\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Jun</text><path d=\"M73.61,185.72L143.86,170.72L214.11,140.73L284.37,150.72L354.62,105.74L424.87,80.74\" fill=\"none\" stroke=\"#0f766e\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"185.71500000000003\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"170.71875\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"140.72625\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"150.72375\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"105.73500000000001\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"80.74125000000001\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M73.61,245.7L143.86,225.71L214.11,230.7L284.37,190.71L354.62,165.72L424.87,135.73\" fill=\"none\" stroke=\"#efb118\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"245.70000000000002\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"225.705\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"230.70375\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"190.71375\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"165.72\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"135.7275\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "line-chart example dark, accent only",
+      "id": "line-chart",
+      "data": {
+        "title": "Active users",
+        "unit": "k",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "series": [
+          {
+            "name": "Web",
+            "values": [
+              42,
+              45,
+              51,
+              49,
+              58,
+              63
+            ]
+          },
+          {
+            "name": "Mobile",
+            "values": [
+              30,
+              34,
+              33,
+              41,
+              46,
+              52
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 480,
+        "height": 300,
+        "theme": "dark",
+        "colors": {
+          "accent": " #f43f5e ",
+          "unknown": "#000"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"480\" height=\"300\" viewBox=\"0 0 480 300\" role=\"img\" aria-label=\"Active users\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Active users</title><desc id=\"chart-desc\">Active users: a line chart showing 2 series over 6 categories (Jan to Jun). Web ranges from 42k (Jan) to 63k (Jun), rising, up 50% from first to last. Mobile ranges from 30k (Jan) to 52k (Jun), rising, up 73% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"480\" height=\"300\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"240\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Active users</text><line x1=\"189.28\" y1=\"278.65000000000003\" x2=\"199.28\" y2=\"278.65000000000003\" stroke=\"#f43f5e\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"205.28\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Web</text><line x1=\"237.76\" y1=\"278.65000000000003\" x2=\"247.76\" y2=\"278.65000000000003\" stroke=\"#efb118\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"253.76\" y=\"278.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Mobile</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"195.7125\" x2=\"460\" y2=\"195.7125\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"145.72500000000002\" x2=\"460\" y2=\"145.72500000000002\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"95.73750000000001\" x2=\"460\" y2=\"95.73750000000001\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"45.75\" x2=\"460\" y2=\"45.75\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"245.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">30k</text><text x=\"30.480000000000004\" y=\"195.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">40k</text><text x=\"30.480000000000004\" y=\"145.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">50k</text><text x=\"30.480000000000004\" y=\"95.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">60k</text><text x=\"30.480000000000004\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">70k</text><line x1=\"38.480000000000004\" y1=\"245.70000000000002\" x2=\"460\" y2=\"245.70000000000002\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"73.60666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Jan</text><text x=\"143.86\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Feb</text><text x=\"214.11333333333334\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Mar</text><text x=\"284.3666666666667\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Apr</text><text x=\"354.62\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">May</text><text x=\"424.87333333333333\" y=\"251.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">Jun</text><path d=\"M73.61,185.72L143.86,170.72L214.11,140.73L284.37,150.72L354.62,105.74L424.87,80.74\" fill=\"none\" stroke=\"#f43f5e\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"185.71500000000003\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"170.71875\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"140.72625\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"150.72375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"105.73500000000001\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"80.74125000000001\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#f43f5e\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M73.61,245.7L143.86,225.71L214.11,230.7L284.37,190.71L354.62,165.72L424.87,135.73\" fill=\"none\" stroke=\"#efb118\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"73.60666666666667\" cy=\"245.70000000000002\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"143.86\" cy=\"225.705\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"214.11333333333334\" cy=\"230.70375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"284.3666666666667\" cy=\"190.71375\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"354.62\" cy=\"165.72\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"424.87333333333333\" cy=\"135.7275\" r=\"3.5\" fill=\"#0f172a\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "donut-chart example light",
+      "id": "donut-chart",
+      "data": {
+        "title": "Traffic by channel",
+        "unit": "%",
+        "slices": [
+          {
+            "label": "Search",
+            "value": 46
+          },
+          {
+            "label": "Direct",
+            "value": 27
+          },
+          {
+            "label": "Social",
+            "value": 17
+          },
+          {
+            "label": "Email",
+            "value": 10
+          }
+        ]
+      },
+      "options": {
+        "width": 360,
+        "height": 260,
+        "theme": "light"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"260\" viewBox=\"0 0 360 260\" role=\"img\" aria-label=\"Traffic by channel\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Traffic by channel</title><desc id=\"chart-desc\">Traffic by channel: a donut chart of Traffic by channel across 4 categories, totalling 100%. The largest is Search at 46% (46%); the smallest is Email at 10% (10%).</desc><rect x=\"0\" y=\"0\" width=\"360\" height=\"260\" fill=\"#ffffff\" data-role=\"background\"/><text x=\"180\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"title\">Traffic by channel</text><rect x=\"281.03999999999996\" y=\"110.07499999999999\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#4269d0\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"115.07499999999999\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Search</text><rect x=\"281.03999999999996\" y=\"128.775\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"133.775\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Direct</text><rect x=\"281.03999999999996\" y=\"147.475\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#ff725c\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"152.475\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Social</text><rect x=\"281.03999999999996\" y=\"166.17499999999998\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"171.17499999999998\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Email</text><path d=\"M142.52,42.25A100.88,100.88 0 0 1 167.61,240.83L156.32,196.86A55.48,55.48 0 0 0 142.52,87.64Z\" fill=\"#4269d0\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M167.61,240.83A100.88,100.88 0 0 1 42.44,155.77L87.48,150.08A55.48,55.48 0 0 0 156.32,196.86Z\" fill=\"#efb118\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M42.44,155.77A100.88,100.88 0 0 1 83.23,61.52L109.91,98.24A55.48,55.48 0 0 0 87.48,150.08Z\" fill=\"#ff725c\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M83.23,61.52A100.88,100.88 0 0 1 142.52,42.25L142.52,87.64A55.48,55.48 0 0 0 109.91,98.24Z\" fill=\"#6cc5b0\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"142.51999999999998\" y=\"143.125\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"data-label\">100%</text></svg>"
+    },
+    {
+      "name": "donut-chart example dark",
+      "id": "donut-chart",
+      "data": {
+        "title": "Traffic by channel",
+        "unit": "%",
+        "slices": [
+          {
+            "label": "Search",
+            "value": 46
+          },
+          {
+            "label": "Direct",
+            "value": 27
+          },
+          {
+            "label": "Social",
+            "value": 17
+          },
+          {
+            "label": "Email",
+            "value": 10
+          }
+        ]
+      },
+      "options": {
+        "width": 360,
+        "height": 260,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"260\" viewBox=\"0 0 360 260\" role=\"img\" aria-label=\"Traffic by channel\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Traffic by channel</title><desc id=\"chart-desc\">Traffic by channel: a donut chart of Traffic by channel across 4 categories, totalling 100%. The largest is Search at 46% (46%); the smallest is Email at 10% (10%).</desc><rect x=\"0\" y=\"0\" width=\"360\" height=\"260\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"180\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Traffic by channel</text><rect x=\"281.03999999999996\" y=\"110.07499999999999\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#97bbf5\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"115.07499999999999\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Search</text><rect x=\"281.03999999999996\" y=\"128.775\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"133.775\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Direct</text><rect x=\"281.03999999999996\" y=\"147.475\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#ff725c\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"152.475\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Social</text><rect x=\"281.03999999999996\" y=\"166.17499999999998\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"171.17499999999998\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Email</text><path d=\"M142.52,42.25A100.88,100.88 0 0 1 167.61,240.83L156.32,196.86A55.48,55.48 0 0 0 142.52,87.64Z\" fill=\"#97bbf5\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M167.61,240.83A100.88,100.88 0 0 1 42.44,155.77L87.48,150.08A55.48,55.48 0 0 0 156.32,196.86Z\" fill=\"#efb118\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M42.44,155.77A100.88,100.88 0 0 1 83.23,61.52L109.91,98.24A55.48,55.48 0 0 0 87.48,150.08Z\" fill=\"#ff725c\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M83.23,61.52A100.88,100.88 0 0 1 142.52,42.25L142.52,87.64A55.48,55.48 0 0 0 109.91,98.24Z\" fill=\"#6cc5b0\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"142.51999999999998\" y=\"143.125\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"data-label\">100%</text></svg>"
+    },
+    {
+      "name": "donut-chart example brand colours",
+      "id": "donut-chart",
+      "data": {
+        "title": "Traffic by channel",
+        "unit": "%",
+        "slices": [
+          {
+            "label": "Search",
+            "value": 46
+          },
+          {
+            "label": "Direct",
+            "value": 27
+          },
+          {
+            "label": "Social",
+            "value": 17
+          },
+          {
+            "label": "Email",
+            "value": 10
+          }
+        ]
+      },
+      "options": {
+        "width": 360,
+        "height": 260,
+        "colors": {
+          "surface": "#fafaf9",
+          "ink": "#1c1917",
+          "ink-muted": "#78716c",
+          "border": "#e7e5e4",
+          "accent": "#0f766e"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"260\" viewBox=\"0 0 360 260\" role=\"img\" aria-label=\"Traffic by channel\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Traffic by channel</title><desc id=\"chart-desc\">Traffic by channel: a donut chart of Traffic by channel across 4 categories, totalling 100%. The largest is Search at 46% (46%); the smallest is Email at 10% (10%).</desc><rect x=\"0\" y=\"0\" width=\"360\" height=\"260\" fill=\"#fafaf9\" data-role=\"background\"/><text x=\"180\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"title\">Traffic by channel</text><rect x=\"281.03999999999996\" y=\"110.07499999999999\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#0f766e\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"115.07499999999999\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Search</text><rect x=\"281.03999999999996\" y=\"128.775\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"133.775\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Direct</text><rect x=\"281.03999999999996\" y=\"147.475\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#ff725c\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"152.475\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Social</text><rect x=\"281.03999999999996\" y=\"166.17499999999998\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"171.17499999999998\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">Email</text><path d=\"M142.52,42.25A100.88,100.88 0 0 1 167.61,240.83L156.32,196.86A55.48,55.48 0 0 0 142.52,87.64Z\" fill=\"#0f766e\" stroke=\"#fafaf9\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M167.61,240.83A100.88,100.88 0 0 1 42.44,155.77L87.48,150.08A55.48,55.48 0 0 0 156.32,196.86Z\" fill=\"#efb118\" stroke=\"#fafaf9\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M42.44,155.77A100.88,100.88 0 0 1 83.23,61.52L109.91,98.24A55.48,55.48 0 0 0 87.48,150.08Z\" fill=\"#ff725c\" stroke=\"#fafaf9\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M83.23,61.52A100.88,100.88 0 0 1 142.52,42.25L142.52,87.64A55.48,55.48 0 0 0 109.91,98.24Z\" fill=\"#6cc5b0\" stroke=\"#fafaf9\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"142.51999999999998\" y=\"143.125\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"data-label\">100%</text></svg>"
+    },
+    {
+      "name": "donut-chart example dark, accent only",
+      "id": "donut-chart",
+      "data": {
+        "title": "Traffic by channel",
+        "unit": "%",
+        "slices": [
+          {
+            "label": "Search",
+            "value": 46
+          },
+          {
+            "label": "Direct",
+            "value": 27
+          },
+          {
+            "label": "Social",
+            "value": 17
+          },
+          {
+            "label": "Email",
+            "value": 10
+          }
+        ]
+      },
+      "options": {
+        "width": 360,
+        "height": 260,
+        "theme": "dark",
+        "colors": {
+          "accent": " #f43f5e ",
+          "unknown": "#000"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"360\" height=\"260\" viewBox=\"0 0 360 260\" role=\"img\" aria-label=\"Traffic by channel\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Traffic by channel</title><desc id=\"chart-desc\">Traffic by channel: a donut chart of Traffic by channel across 4 categories, totalling 100%. The largest is Search at 46% (46%); the smallest is Email at 10% (10%).</desc><rect x=\"0\" y=\"0\" width=\"360\" height=\"260\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"180\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Traffic by channel</text><rect x=\"281.03999999999996\" y=\"110.07499999999999\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#f43f5e\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"115.07499999999999\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Search</text><rect x=\"281.03999999999996\" y=\"128.775\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"133.775\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Direct</text><rect x=\"281.03999999999996\" y=\"147.475\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"152.475\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Social</text><rect x=\"281.03999999999996\" y=\"166.17499999999998\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#3ca951\" data-role=\"legend-swatch\"/><text x=\"297.03999999999996\" y=\"171.17499999999998\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">Email</text><path d=\"M142.52,42.25A100.88,100.88 0 0 1 167.61,240.83L156.32,196.86A55.48,55.48 0 0 0 142.52,87.64Z\" fill=\"#f43f5e\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M167.61,240.83A100.88,100.88 0 0 1 42.44,155.77L87.48,150.08A55.48,55.48 0 0 0 156.32,196.86Z\" fill=\"#efb118\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M42.44,155.77A100.88,100.88 0 0 1 83.23,61.52L109.91,98.24A55.48,55.48 0 0 0 87.48,150.08Z\" fill=\"#6cc5b0\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M83.23,61.52A100.88,100.88 0 0 1 142.52,42.25L142.52,87.64A55.48,55.48 0 0 0 109.91,98.24Z\" fill=\"#3ca951\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"142.51999999999998\" y=\"143.125\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"data-label\">100%</text></svg>"
+    },
+    {
+      "name": "sparkline no label, negatives",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          3,
+          -2,
+          5,
+          0,
+          -4,
+          6,
+          1
+        ]
+      },
+      "options": {
+        "width": 96,
+        "height": 20
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"96\" height=\"20\" viewBox=\"0 0 96 20\" role=\"img\" aria-label=\"A line chart showing 1 series over 7 categories (1 to 7). Values ranges from -4 (5) to 6 (6), roughly flat.\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">A line chart showing 1 series over 7 categories (1 to 7). Values ranges from -4 (5) to 6 (6), roughly flat.</title><desc id=\"chart-desc\">A line chart showing 1 series over 7 categories (1 to 7). Values ranges from -4 (5) to 6 (6), roughly flat.</desc><path d=\"M2,6.8L17.33,14.8L32.67,3.6L48,11.6L63.33,18L78.67,2L94,10\" fill=\"none\" stroke=\"#4269d0\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "sparkline flat run, wide",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          7,
+          7,
+          7,
+          7
+        ],
+        "label": "Flat & \"steady\""
+      },
+      "options": {
+        "width": 300,
+        "height": 40,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"300\" height=\"40\" viewBox=\"0 0 300 40\" role=\"img\" aria-label=\"Flat &amp; &quot;steady&quot;\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Flat &amp; &quot;steady&quot;</title><desc id=\"chart-desc\">Flat &amp; &quot;steady&quot;: a line chart showing 1 series over 4 categories (1 to 4). Flat &amp; &quot;steady&quot; ranges from 7 (1) to 7 (1), roughly flat.</desc><path d=\"M2,20L100.67,20L199.33,20L298,20\" fill=\"none\" stroke=\"#97bbf5\" stroke-width=\"1.25\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/></svg>"
+    },
+    {
+      "name": "bar-chart one series, no unit or title",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "North",
+          "South",
+          "East"
+        ],
+        "series": [
+          {
+            "name": "Units",
+            "values": [
+              12,
+              30,
+              21
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 320,
+        "height": 200
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" height=\"200\" viewBox=\"0 0 320 200\" role=\"img\" aria-label=\"A bar chart showing 1 series over 3 categories (North to East). Units ranges from 12 (North) to 30 (South), rising, up 75% from first to last.\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">A bar chart showing 1 series over 3 categories (North to East). Units ranges from 12 (North) to 30 (South), rising, up 75% from first to last.</title><desc id=\"chart-desc\">A bar chart showing 1 series over 3 categories (North to East). Units ranges from 12 (North) to 30 (South), rising, up 75% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"320\" height=\"200\" fill=\"#ffffff\" data-role=\"background\"/><line x1=\"32.32\" y1=\"170.4\" x2=\"300\" y2=\"170.4\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"32.32\" y1=\"120.10000000000001\" x2=\"300\" y2=\"120.10000000000001\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"32.32\" y1=\"69.80000000000001\" x2=\"300\" y2=\"69.80000000000001\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"32.32\" y1=\"19.5\" x2=\"300\" y2=\"19.5\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"24.32\" y=\"170.4\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0</text><text x=\"24.32\" y=\"120.10000000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">10</text><text x=\"24.32\" y=\"69.80000000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">20</text><text x=\"24.32\" y=\"19.5\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">30</text><line x1=\"32.32\" y1=\"170.4\" x2=\"300\" y2=\"170.4\" stroke=\"#64748b\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"76.93333333333334\" y=\"176.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">North</text><text x=\"166.16\" y=\"176.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">South</text><text x=\"255.38666666666668\" y=\"176.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">East</text><rect x=\"44.811733333333336\" y=\"110.03999999999999\" width=\"64.2432\" height=\"60.360000000000014\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"134.0384\" y=\"19.5\" width=\"64.2432\" height=\"150.9\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/><rect x=\"223.26506666666668\" y=\"64.77000000000001\" width=\"64.2432\" height=\"105.63\" rx=\"2\" fill=\"#4269d0\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "bar-chart four series, small",
+      "id": "bar-chart",
+      "data": {
+        "title": "Mix",
+        "unit": "%",
+        "categories": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "S1",
+            "values": [
+              5,
+              7
+            ]
+          },
+          {
+            "name": "S2",
+            "values": [
+              10,
+              14
+            ]
+          },
+          {
+            "name": "S3",
+            "values": [
+              15,
+              21
+            ]
+          },
+          {
+            "name": "S4",
+            "values": [
+              20,
+              28
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 200,
+        "height": 150,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"150\" viewBox=\"0 0 200 150\" role=\"img\" aria-label=\"Mix\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Mix</title><desc id=\"chart-desc\">Mix: a bar chart showing 4 series over 2 categories (A to B). S1 ranges from 5% (A) to 7% (B), rising, up 40% from first to last. S2 ranges from 10% (A) to 14% (B), rising, up 40% from first to last. S3 ranges from 15% (A) to 21% (B), rising, up 40% from first to last. S4 ranges from 20% (A) to 28% (B), rising, up 40% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"200\" height=\"150\" fill=\"#0f172a\" data-role=\"background\"/><text x=\"100\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"title\">Mix</text><rect x=\"22.36\" y=\"123.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#97bbf5\" data-role=\"legend-swatch\"/><text x=\"38.36\" y=\"128.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">S1</text><rect x=\"64.68\" y=\"123.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"80.68\" y=\"128.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">S2</text><rect x=\"107\" y=\"123.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#ff725c\" data-role=\"legend-swatch\"/><text x=\"123\" y=\"128.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">S3</text><rect x=\"149.32\" y=\"123.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"legend-swatch\"/><text x=\"165.32\" y=\"128.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">S4</text><line x1=\"38.480000000000004\" y1=\"95.69999999999999\" x2=\"180\" y2=\"95.69999999999999\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"70.725\" x2=\"180\" y2=\"70.725\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"45.75\" x2=\"180\" y2=\"45.75\" stroke=\"#334155\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"95.69999999999999\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">0%</text><text x=\"30.480000000000004\" y=\"70.725\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">20%</text><text x=\"30.480000000000004\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">40%</text><line x1=\"38.480000000000004\" y1=\"95.69999999999999\" x2=\"180\" y2=\"95.69999999999999\" stroke=\"#94a3b8\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"73.86000000000001\" y=\"101.69999999999999\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">A</text><text x=\"144.62\" y=\"101.69999999999999\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#94a3b8\" data-role=\"tick-label\">B</text><rect x=\"48.38640000000001\" y=\"89.45624999999998\" width=\"11.685137614678899\" height=\"6.243750000000006\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"119.1464\" y=\"86.95875\" width=\"11.685137614678899\" height=\"8.741249999999994\" rx=\"2\" fill=\"#97bbf5\" data-role=\"bar\"/><rect x=\"61.473754128440376\" y=\"83.21249999999999\" width=\"11.685137614678899\" height=\"12.487499999999997\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"132.23375412844038\" y=\"78.2175\" width=\"11.685137614678899\" height=\"17.482499999999987\" rx=\"2\" fill=\"#efb118\" data-role=\"bar\"/><rect x=\"74.56110825688074\" y=\"76.96875\" width=\"11.685137614678899\" height=\"18.73124999999999\" rx=\"2\" fill=\"#ff725c\" data-role=\"bar\"/><rect x=\"145.32110825688073\" y=\"69.47625\" width=\"11.685137614678899\" height=\"26.223749999999995\" rx=\"2\" fill=\"#ff725c\" data-role=\"bar\"/><rect x=\"87.64846238532111\" y=\"70.725\" width=\"11.685137614678899\" height=\"24.974999999999994\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"bar\"/><rect x=\"158.40846238532112\" y=\"60.735\" width=\"11.685137614678899\" height=\"34.96499999999999\" rx=\"2\" fill=\"#6cc5b0\" data-role=\"bar\"/></svg>"
+    },
+    {
+      "name": "line-chart three series",
+      "id": "line-chart",
+      "data": {
+        "title": "Latency",
+        "unit": " ms",
+        "categories": [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri"
+        ],
+        "series": [
+          {
+            "name": "p50",
+            "values": [
+              120,
+              118,
+              131,
+              125,
+              119
+            ]
+          },
+          {
+            "name": "p90",
+            "values": [
+              210,
+              205,
+              240,
+              228,
+              214
+            ]
+          },
+          {
+            "name": "p99",
+            "values": [
+              480,
+              455,
+              610,
+              520,
+              498
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 560,
+        "height": 280,
+        "colors": {
+          "surface": "#fafaf9",
+          "ink": "#1c1917",
+          "ink-muted": "#78716c",
+          "border": "#e7e5e4",
+          "accent": "#0f766e"
+        }
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"560\" height=\"280\" viewBox=\"0 0 560 280\" role=\"img\" aria-label=\"Latency\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Latency</title><desc id=\"chart-desc\">Latency: a line chart showing 3 series over 5 categories (Mon to Fri). p50 ranges from 118 ms (Tue) to 131 ms (Wed), rising, down 1% from first to last. p90 ranges from 205 ms (Tue) to 240 ms (Wed), rising, up 2% from first to last. p99 ranges from 455 ms (Tue) to 610 ms (Wed), rising, up 4% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"560\" height=\"280\" fill=\"#fafaf9\" data-role=\"background\"/><text x=\"280\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"title\">Latency</text><line x1=\"214.28\" y1=\"258.65000000000003\" x2=\"224.28\" y2=\"258.65000000000003\" stroke=\"#0f766e\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"230.28\" y=\"258.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">p50</text><line x1=\"262.76\" y1=\"258.65000000000003\" x2=\"272.76\" y2=\"258.65000000000003\" stroke=\"#efb118\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"278.76\" y=\"258.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">p90</text><line x1=\"311.24\" y1=\"258.65000000000003\" x2=\"321.24\" y2=\"258.65000000000003\" stroke=\"#ff725c\" stroke-width=\"2.5\" data-role=\"legend-swatch\"/><text x=\"327.24\" y=\"258.65000000000003\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#1c1917\" data-role=\"legend-label\">p99</text><line x1=\"56.96\" y1=\"225.70000000000002\" x2=\"540\" y2=\"225.70000000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"56.96\" y1=\"180.7125\" x2=\"540\" y2=\"180.7125\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"56.96\" y1=\"135.72500000000002\" x2=\"540\" y2=\"135.72500000000002\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"56.96\" y1=\"90.73750000000001\" x2=\"540\" y2=\"90.73750000000001\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"56.96\" y1=\"45.75\" x2=\"540\" y2=\"45.75\" stroke=\"#e7e5e4\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"48.96\" y=\"225.70000000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">0 ms</text><text x=\"48.96\" y=\"180.7125\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">200 ms</text><text x=\"48.96\" y=\"135.72500000000002\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">400 ms</text><text x=\"48.96\" y=\"90.73750000000001\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">600 ms</text><text x=\"48.96\" y=\"45.75\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">800 ms</text><line x1=\"56.96\" y1=\"225.70000000000002\" x2=\"540\" y2=\"225.70000000000002\" stroke=\"#78716c\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"105.26400000000001\" y=\"231.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Mon</text><text x=\"201.872\" y=\"231.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Tue</text><text x=\"298.48\" y=\"231.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Wed</text><text x=\"395.088\" y=\"231.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Thu</text><text x=\"491.69599999999997\" y=\"231.70000000000002\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#78716c\" data-role=\"tick-label\">Fri</text><path d=\"M105.26,198.71L201.87,199.16L298.48,196.23L395.09,197.58L491.7,198.93\" fill=\"none\" stroke=\"#0f766e\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"105.26400000000001\" cy=\"198.7075\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"201.872\" cy=\"199.157375\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"298.48\" cy=\"196.2331875\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"395.088\" cy=\"197.58281250000002\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"491.69599999999997\" cy=\"198.93243750000002\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#0f766e\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M105.26,178.46L201.87,179.59L298.48,171.72L395.09,174.41L491.7,177.56\" fill=\"none\" stroke=\"#efb118\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"105.26400000000001\" cy=\"178.46312500000002\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"201.872\" cy=\"179.5878125\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"298.48\" cy=\"171.715\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"395.088\" cy=\"174.41425\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"491.69599999999997\" cy=\"177.563375\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#efb118\" stroke-width=\"2\" data-role=\"point\"/><path d=\"M105.26,117.73L201.87,123.35L298.48,88.49L395.09,108.73L491.7,113.68\" fill=\"none\" stroke=\"#ff725c\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"105.26400000000001\" cy=\"117.73\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#ff725c\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"201.872\" cy=\"123.35343750000001\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#ff725c\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"298.48\" cy=\"88.48812500000003\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#ff725c\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"395.088\" cy=\"108.7325\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#ff725c\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"491.69599999999997\" cy=\"113.681125\" r=\"3.5\" fill=\"#fafaf9\" stroke=\"#ff725c\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "line-chart one series, no title",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "1",
+          "2",
+          "3"
+        ],
+        "series": [
+          {
+            "name": "Only",
+            "values": [
+              0.5,
+              0.25,
+              0.75
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 240,
+        "height": 140
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"240\" height=\"140\" viewBox=\"0 0 240 140\" role=\"img\" aria-label=\"A line chart showing 1 series over 3 categories (1 to 3). Only ranges from 0.25 (2) to 0.75 (3), rising, up 50% from first to last.\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">A line chart showing 1 series over 3 categories (1 to 3). Only ranges from 0.25 (2) to 0.75 (3), rising, up 50% from first to last.</title><desc id=\"chart-desc\">A line chart showing 1 series over 3 categories (1 to 3). Only ranges from 0.25 (2) to 0.75 (3), rising, up 50% from first to last.</desc><rect x=\"0\" y=\"0\" width=\"240\" height=\"140\" fill=\"#ffffff\" data-role=\"background\"/><line x1=\"38.480000000000004\" y1=\"110.4\" x2=\"220\" y2=\"110.4\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"64.95\" x2=\"220\" y2=\"64.95\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><line x1=\"38.480000000000004\" y1=\"19.5\" x2=\"220\" y2=\"19.5\" stroke=\"#e2e8f0\" stroke-width=\"1\" data-role=\"grid\"/><text x=\"30.480000000000004\" y=\"110.4\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0.0</text><text x=\"30.480000000000004\" y=\"64.95\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">0.5</text><text x=\"30.480000000000004\" y=\"19.5\" text-anchor=\"end\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">1.0</text><line x1=\"38.480000000000004\" y1=\"110.4\" x2=\"220\" y2=\"110.4\" stroke=\"#64748b\" stroke-width=\"1\" data-role=\"axis\"/><text x=\"68.73333333333333\" y=\"116.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">1</text><text x=\"129.24\" y=\"116.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">2</text><text x=\"189.74666666666667\" y=\"116.4\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#64748b\" data-role=\"tick-label\">3</text><path d=\"M68.73,64.95L129.24,87.68L189.75,42.22\" fill=\"none\" stroke=\"#4269d0\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"line\"/><circle cx=\"68.73333333333333\" cy=\"64.95\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"129.24\" cy=\"87.67500000000001\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/><circle cx=\"189.74666666666667\" cy=\"42.224999999999994\" r=\"3.5\" fill=\"#ffffff\" stroke=\"#4269d0\" stroke-width=\"2\" data-role=\"point\"/></svg>"
+    },
+    {
+      "name": "donut-chart narrow, legend below",
+      "id": "donut-chart",
+      "data": {
+        "title": "Plan mix",
+        "slices": [
+          {
+            "label": "Free",
+            "value": 60
+          },
+          {
+            "label": "Pro",
+            "value": 30
+          },
+          {
+            "label": "Team",
+            "value": 10
+          }
+        ]
+      },
+      "options": {
+        "width": 200,
+        "height": 260
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"260\" viewBox=\"0 0 200 260\" role=\"img\" aria-label=\"Plan mix\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">Plan mix</title><desc id=\"chart-desc\">Plan mix: a donut chart of Plan mix across 3 categories, totalling 100. The largest is Free at 60 (60%); the smallest is Team at 10 (10%).</desc><rect x=\"0\" y=\"0\" width=\"200\" height=\"260\" fill=\"#ffffff\" data-role=\"background\"/><text x=\"100\" y=\"12\" text-anchor=\"middle\" dominant-baseline=\"hanging\" font-size=\"15\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"title\">Plan mix</text><rect x=\"28.120000000000005\" y=\"233.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#4269d0\" data-role=\"legend-swatch\"/><text x=\"44.120000000000005\" y=\"238.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Free</text><rect x=\"82.76\" y=\"233.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#efb118\" data-role=\"legend-swatch\"/><text x=\"98.76\" y=\"238.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Pro</text><rect x=\"131.24\" y=\"233.65\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#ff725c\" data-role=\"legend-swatch\"/><text x=\"147.24\" y=\"238.65\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"legend-label\">Team</text><path d=\"M100,46.78A84,84 0 1 1 50.63,198.73L72.84,168.15A46.2,46.2 0 1 0 100,84.58Z\" fill=\"#4269d0\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M50.63,198.73A84,84 0 0 1 50.63,62.82L72.84,93.4A46.2,46.2 0 0 0 72.84,168.15Z\" fill=\"#efb118\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><path d=\"M50.63,62.82A84,84 0 0 1 100,46.78L100,84.58A46.2,46.2 0 0 0 72.84,93.4Z\" fill=\"#ff725c\" stroke=\"#ffffff\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"100\" y=\"130.775\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#0f172a\" data-role=\"data-label\">100</text></svg>"
+    },
+    {
+      "name": "donut-chart one slice, no title",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "All",
+            "value": 1
+          }
+        ]
+      },
+      "options": {
+        "width": 280,
+        "height": 200,
+        "theme": "dark"
+      },
+      "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"280\" height=\"200\" viewBox=\"0 0 280 200\" role=\"img\" aria-label=\"A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).</title><desc id=\"chart-desc\">A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).</desc><rect x=\"0\" y=\"0\" width=\"280\" height=\"200\" fill=\"#0f172a\" data-role=\"background\"/><rect x=\"219.51999999999998\" y=\"95\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#97bbf5\" data-role=\"legend-swatch\"/><text x=\"235.51999999999998\" y=\"100\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">All</text><path d=\"M111.76,16A84,84 0 1 1 111.75,16L111.76,53.8A46.2,46.2 0 1 0 111.76,53.8Z\" fill=\"#97bbf5\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"111.75999999999999\" y=\"100\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"data-label\">1</text></svg>"
+    }
+  ],
+  "errors": [
+    {
+      "name": "sparkline missing values",
+      "id": "sparkline",
+      "data": {
+        "label": "x"
+      },
+      "options": {
+        "width": 100,
+        "height": 20
+      },
+      "error": "sparkline: invalid data: /values Missing required property \"values\"."
+    },
+    {
+      "name": "sparkline extra property",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          1,
+          2
+        ],
+        "colour": "red"
+      },
+      "options": {
+        "width": 100,
+        "height": 20
+      },
+      "error": "sparkline: invalid data: /colour Unknown property \"colour\". Allowed: values, label."
+    },
+    {
+      "name": "bar-chart value count",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 300,
+        "height": 200
+      },
+      "error": "bar-chart: series \"S\" has 1 values for 2 categories; give one value per category."
+    },
+    {
+      "name": "line-chart value count",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "A",
+          "B",
+          "C"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 300,
+        "height": 200
+      },
+      "error": "line-chart: series \"S\" has 4 values for 3 categories; give one value per category."
+    },
+    {
+      "name": "line-chart one category",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "A"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 300,
+        "height": 200
+      },
+      "error": "line-chart: invalid data: /categories Must have at least 2 items."
+    },
+    {
+      "name": "donut-chart negative slice",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "A",
+            "value": -1
+          }
+        ]
+      },
+      "options": {
+        "width": 300,
+        "height": 200
+      },
+      "error": "donut-chart: invalid data: /slices/0/value Must be >= 0."
+    },
+    {
+      "name": "donut-chart width 0",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "A",
+            "value": 1
+          }
+        ]
+      },
+      "options": {
+        "width": 0,
+        "height": 200
+      },
+      "error": "donut-chart: width must be a number of CSS px from 1 to 4096 (got 0)."
+    },
+    {
+      "name": "bar-chart height too large",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "A"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "options": {
+        "width": 300,
+        "height": 5000
+      },
+      "error": "bar-chart: height must be a number of CSS px from 1 to 4096 (got 5000)."
+    }
+  ]
+}

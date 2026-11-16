@@ -53,6 +53,7 @@ import {
 } from './spec.js';
 import { chartStyleDomain, createChartStyleToolProvider, type ChartStyleProfile } from './style.js';
 import { createChartToolProvider } from './tools.js';
+import { CHART_UI_SWIFT_READY, chartUiExampleSize, uiComponents } from './ui-components.js';
 import type { ChartScene, ChartSpec } from './types.js';
 
 /** Bumped when a contract file changes shape (not when its data changes). */
@@ -460,7 +461,14 @@ export function chartContracts(): Record<string, unknown> {
 			readOnly: !!s.readOnly,
 			...(s.hidden ? { hidden: true } : {})
 		})),
-		'ui.json': uiTables()
+		'ui.json': uiTables(),
+		// The chart types offered as UI components that Swift draws too (#819): what PixerateChart's
+		// chartUiComponents() lists, with the descriptor (data schema, roles, contentHash) to match.
+		'ui-components.json': {
+			components: uiComponents()
+				.filter((c) => CHART_UI_SWIFT_READY.includes(c.id))
+				.map((c) => ({ id: c.id, title: c.title, description: c.description, descriptor: c.descriptor, colorRoleUse: c.colorRoleUse, defaultColors: c.defaultColors, exampleSize: chartUiExampleSize(c.id) }))
+		}
 	};
 	files['manifest.json'] = {
 		domain: 'chart',

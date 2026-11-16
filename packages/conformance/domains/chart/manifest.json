@@ -14,6 +14,7 @@
     "commands.json",
     "document.schema.json",
     "tools.json",
+    "ui-components.json",
     "ui.json"
   ]
 }

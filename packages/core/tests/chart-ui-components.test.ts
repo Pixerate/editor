@@ -26,7 +26,10 @@ describe('uiComponents', () => {
 		for (const c of list) {
 			expect(c.descriptor.implements).toBe(c.id);
 			expect(c.descriptor.group).toBe('data-visual');
-			expect(c.descriptor.platforms).toEqual(['html-page']);
+			// Swift draws the chart types too (PixerateChart chartUiComponents); the data visuals are web only.
+			const swift = ['sparkline', 'bar-chart', 'line-chart', 'donut-chart'].includes(c.id);
+			expect(c.descriptor.platforms).toEqual(swift ? ['html-page', 'swiftui'] : ['html-page']);
+			expect(c.descriptor.swiftReady).toBe(swift);
 			expect(c.title).toBeTruthy();
 			expect(c.description).toBeTruthy();
 		}
@@ -139,12 +142,12 @@ describe('uiComponents', () => {
 		// does on purpose, update these (and bump CHART_UI_RENDER_VERSIONS if only the drawing moved).
 		expect(Object.fromEntries(uiComponents().map((c) => [c.id, c.descriptor.contentHash]))).toMatchInlineSnapshot(`
 			{
-			  "bar-chart": "h1-bc3ada602d46f641",
+			  "bar-chart": "h1-76ee0998eaac0913",
 			  "braid": "h1-32ab36e8632bd353",
-			  "donut-chart": "h1-0e889e53ac068f38",
-			  "line-chart": "h1-996e92fc381f9c29",
+			  "donut-chart": "h1-50feaa770e686a53",
+			  "line-chart": "h1-7a9211007a63771b",
 			  "lineage": "h1-80fbdcdee156c4aa",
-			  "sparkline": "h1-30ef47f4426f81fe",
+			  "sparkline": "h1-f5415ff4a27028bf",
 			  "weave": "h1-6a819cc804a71672",
 			}
 		`);
