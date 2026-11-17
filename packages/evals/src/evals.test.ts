@@ -145,6 +145,24 @@ describe("colour hints", () => {
   });
 });
 
+describe("blank strokes", () => {
+  it("are not confused with paint pulled to the picture's edges", () => {
+    // Two bands, as previews of brushes that move paint are drawn over, with bare paper pulled
+    // into the top and bottom rows (a vortex can): not blank.
+    const width = 512, height = 160;
+    const data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const hole = (y < 40 && x >= 150 && x < 215) || (y >= 110 && x >= 280 && x < 350);
+        const c = hole ? [240, 236, 228] : y < 80 ? [29, 78, 216] : [232, 196, 64];
+        data.set([...c, 255], (y * width + x) * 4);
+      }
+    expect(isBlank({ width, height, data })).toBe(false);
+    const flat = new Uint8ClampedArray(width * height * 4).fill(255);
+    expect(isBlank({ width, height, data: flat })).toBe(true);
+  });
+});
+
 describe("stroke similarity", () => {
   it("is 1 for the same stroke and lower for a different brush", async () => {
     const s = createBrushSession("paint");
