@@ -51,7 +51,8 @@ public enum FormatManifest {
             surfaces: [.bubble, .menu],
             enabledWhen: [],
             shortcut: FormatShortcut(key: "k", modifiers: [.command], chord: "Mod+K"),
-            variants: []
+            variants: [],
+            params: "{\"type\":\"object\",\"properties\":{\"url\":{\"type\":[\"string\",\"null\"]}}}"
         ),
         FormatCommandDefinition(
             id: "format.heading",
@@ -64,7 +65,8 @@ public enum FormatManifest {
                 FormatCommandVariant(params: ["level": .int(1)], label: "Heading 1", shortcut: FormatShortcut(key: "1", modifiers: [.command, .option], chord: "Mod+Alt+1")),
                 FormatCommandVariant(params: ["level": .int(2)], label: "Heading 2", shortcut: FormatShortcut(key: "2", modifiers: [.command, .option], chord: "Mod+Alt+2")),
                 FormatCommandVariant(params: ["level": .int(3)], label: "Heading 3", shortcut: FormatShortcut(key: "3", modifiers: [.command, .option], chord: "Mod+Alt+3")),
-            ]
+            ],
+            params: "{\"type\":\"object\",\"properties\":{\"level\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":6}},\"required\":[\"level\"]}"
         ),
         FormatCommandDefinition(
             id: "format.paragraph",
@@ -118,7 +120,8 @@ public enum FormatManifest {
             surfaces: [.bubble, .menu],
             enabledWhen: [],
             shortcut: FormatShortcut(key: "c", modifiers: [.command, .option], chord: "Mod+Alt+C"),
-            variants: []
+            variants: [],
+            params: "{\"type\":\"object\",\"properties\":{\"language\":{\"type\":[\"string\",\"null\"]}}}"
         ),
         FormatCommandDefinition(
             id: "format.table",

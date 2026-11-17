@@ -18,6 +18,7 @@ let package = Package(
         .library(name: "PixerateConformance", targets: ["PixerateConformance"]),
         .library(name: "PixeratePaintUI", targets: ["PixeratePaintUI"]),
         .library(name: "PixerateMarkdown", targets: ["PixerateMarkdown"]),
+        .library(name: "PixerateMarkdownTools", targets: ["PixerateMarkdownTools"]),
         .library(name: "PixerateGeometry", targets: ["PixerateGeometry"]),
         .library(name: "PixerateVector", targets: ["PixerateVector"]),
         .library(name: "PixerateVectorUI", targets: ["PixerateVectorUI"]),
@@ -54,6 +55,10 @@ let package = Package(
         // HTML → Markdown converter, code highlighter, and the AST formatting and editing commands.
         // Foundation only, with no dependency on the other targets, so apps can take it on its own.
         .target(name: "PixerateMarkdown", path: "packages/swift/Sources/PixerateMarkdown", swiftSettings: settings),
+        // Agent tools for a Markdown text (#609), with the web Markdown tools' names, schemas and
+        // results: the rich-text tools, the format commands through `createCommandToolProvider`, and
+        // text mechanics. A separate target, so the engine keeps no dependency on PixerateCore.
+        .target(name: "PixerateMarkdownTools", dependencies: ["PixerateMarkdown", "PixerateCore"], path: "packages/swift/Sources/PixerateMarkdownTools", swiftSettings: settings),
         // The vector editor's path operations (`canvas/pathops`, `curveFit`, `shapeGeometry` and
         // `polygonBoolean` in the TS core): Bézier maths, curve booleans, stroke outlines, the planar
         // map, Pathfinder and curve fitting, bit-exact with the TS. Foundation only.
@@ -108,6 +113,12 @@ let package = Package(
             dependencies: ["PixerateMarkdown", "PixerateContracts"],
             path: "packages/swift/Tests/PixerateMarkdownTests",
             resources: [.copy("Fixtures")],
+            swiftSettings: settings
+        ),
+        .testTarget(
+            name: "PixerateMarkdownToolsTests",
+            dependencies: ["PixerateMarkdownTools", "PixerateMarkdown", "PixerateCore"],
+            path: "packages/swift/Tests/PixerateMarkdownToolsTests",
             swiftSettings: settings
         ),
         .testTarget(

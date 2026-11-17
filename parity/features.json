@@ -157,7 +157,7 @@
           "core": "`createFormatCommands`, `formatCommandsFor`",
           "react": "Via core (`formatCommandsFor`)",
           "svelte": "Via core (`formatCommandsFor`)",
-          "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools planned (#546)"
+          "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools with the web names in PixerateMarkdownTools: `createMarkdownCommandToolProvider` (`list_commands` / `run_command` over `createMarkdownFormatCommands`), `createMarkdownToolProvider` (`get_text`, `find_text`, `replace_range`, `format_text`, `set_block_type`…) and `createMarkdownTextMechanicsToolProvider` (#609)"
         },
         {
           "feature": "Rich Text Preset (Headings, Lists, Task Lists, Links)",
@@ -2621,7 +2621,7 @@
           "core": "`textMechanicsEditsAt`, `textMechanicsFindings`, `textMechanicsCheckedRange` over `markdownProseMap` & `createTextMechanicsToolProvider` (`/tools`)",
           "react": "Via core",
           "svelte": "Via core",
-          "swift": "Ported (#892) in PixerateMarkdown: `TextMechanics.edits(at:in:document:options:)`, `findings`, `checkedRange` over `MarkdownDocument`, with `naturalLanguageTagger` (Apple's NaturalLanguage tagger); reproduces every scenario in `domains/text-mechanics`. Agent tools planned (#609)"
+          "swift": "Ported (#892) in PixerateMarkdown: `TextMechanics.edits(at:in:document:options:)`, `findings`, `checkedRange` over `MarkdownDocument`, with `naturalLanguageTagger` (Apple's NaturalLanguage tagger); reproduces every scenario in `domains/text-mechanics`. `check_text_mechanics` / `fix_text_mechanics` from `createMarkdownTextMechanicsToolProvider` in PixerateMarkdownTools (#609)"
         },
         {
           "feature": "Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot)",

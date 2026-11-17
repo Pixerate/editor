@@ -104,7 +104,8 @@ const commandLines = manifest.commands.map((command) => {
     `            surfaces: [${command.surfaces.map((s) => '.' + s).join(', ')}],`,
     `            enabledWhen: [${(command.enabledWhen ?? []).map((c) => '.' + c).join(', ')}],`,
     `            shortcut: ${command.shortcut ? shortcut(command.shortcut, where) : 'nil'},`,
-    variants.length ? `            variants: [\n${variants.join('\n')}\n            ]` : '            variants: []',
+    (variants.length ? `            variants: [\n${variants.join('\n')}\n            ]` : '            variants: []') + (command.params ? ',' : ''),
+    ...(command.params ? [`            params: ${swiftString(JSON.stringify(command.params))}`] : []),
     '        ),',
   ].join('\n');
 });

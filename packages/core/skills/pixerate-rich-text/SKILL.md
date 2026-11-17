@@ -5,7 +5,7 @@ description: How to read and edit Pixerate rich text documents and prompt editor
 
 # Editing rich text documents and prompts
 
-There are two text surfaces, each with its own tools:
+There are three text surfaces:
 
 - **Rich text documents** (a TipTap / ProseMirror editor) use `get_text`, `find_text` and the
   document write tools. Positions are **ProseMirror document positions**, not character
@@ -13,6 +13,15 @@ There are two text surfaces, each with its own tools:
   first block). Never compute positions from `get_text` content; get them from
   `find_text` matches or from `get_text {blocks: true}` (each paragraph, heading or table cell
   as `{type, from, to, text}`). Charts in a document have ids (from `list_document_charts`).
+- **Markdown source editors** (Swash and other native editors on `PixerateMarkdown`) have the
+  same tools under the same names: `get_text`, `find_text`, `insert_text`, `replace_range`,
+  `replace_text`, `replace_selection`, `set_selection`, `format_text` (`bold`, `italic`,
+  `strike`, `code`, `link`) and `set_block_type`, the `format.*` commands through `run_command`,
+  and `check_text_mechanics` / `fix_text_mechanics`. Positions are **UTF-16 offsets into the
+  Markdown source**, markers included (`**`, `# `, `- `). `get_text` returns the source for
+  `text` and `markdown`; `format_text` and `set_block_type` write Markdown syntax for you, so
+  don't type `**` or `#` yourself to format. Still take positions from `find_text` or
+  `get_text {blocks: true}`; they shift after every edit, so find again rather than adding up.
 - **Prompt editors** (a prompt with a variables map, often beside a canvas) use
   `get_editor_state` and the `prompt_*` tools. Positions are host-defined; read them from
   `get_editor_state` (`document.selection`, `document.text`).
