@@ -160,3 +160,4 @@ When adding or modifying SwiftUI `View`s, include Xcode dynamic previews per [Pr
 - Use the `#Preview` macro (not legacy `PreviewProvider`).
 - Use `@Previewable` with `@State` / `@Bindable` for interactive bindings instead of `.constant(...)` or custom wrapper structs.
 - Use `PreviewModifier` for shared preview environments/dependencies, and `#Preview(traits:)` or `#Preview(arguments:)` to cover key states and layout variants.
+- The Swift packages target macOS 14 / iOS 17, but `PreviewModifier` (and `.modifier(...)` traits) needs macOS 15 / iOS 18 and `#Preview(arguments:)` needs macOS 27 / iOS 26: mark such previews `@available(macOS 15, iOS 18, *)` (or `@available(macOS 27, iOS 26, *)`) so the package still builds for its deployment targets.
