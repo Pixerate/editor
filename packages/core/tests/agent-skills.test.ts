@@ -27,6 +27,9 @@ import {
 } from '../src/agent';
 import { createRichTextStyleToolProvider, richTextStyleDomain } from '../src/richTextStyle';
 import { createTextMechanicsToolProvider } from '../src/tools/text-mechanics-tools';
+import { createMarkdownStyleToolProvider } from '../src/tools/markdown-style';
+import { createTextProposalToolProvider } from '../src/tools/text-proposal-tools';
+import { createTextProposals } from '../src/tools/text-proposals';
 import { createSpreadsheetStyleToolProvider, spreadsheetStyleDomain } from '../src/spreadsheet/style';
 import { createDiagramStyleToolProvider, diagramStyleDomain } from '../src/diagram/style';
 import { canvasStyleDomain, createCanvasStyleToolProvider } from '../src/canvas/style';
@@ -140,7 +143,9 @@ function expectedBySkill(): Record<string, string[]> {
 			...commandIds(createTableCommands(doc)),
 			...toolNames(createDocumentToolProvider(createRichTextEditorDocument(doc), { store: documentStore() })),
 			...toolNames(createRichTextStyleToolProvider(doc, styles)),
-			...toolNames(createTextMechanicsToolProvider({ getText: () => '', applyEdits: () => {} }))
+			...toolNames(createTextMechanicsToolProvider({ getText: () => '', applyEdits: () => {} })),
+			...toolNames(createMarkdownStyleToolProvider({ getText: () => '', applyEdits: () => {} }, styles)),
+			...toolNames(createTextProposalToolProvider(createTextProposals({ getText: () => '', applyEdit: () => {} })))
 		],
 		'pixerate-spreadsheet': [
 			...toolNames(createSpreadsheetToolProvider(sheet, { id: 'sheet' })),
@@ -308,6 +313,8 @@ const FACTORIES: Record<string, string> = {
 	createChartStyleToolProvider: 'pixerate-chart',
 	createRichTextStyleToolProvider: 'pixerate-rich-text',
 	createTextMechanicsToolProvider: 'pixerate-rich-text',
+	createMarkdownStyleToolProvider: 'pixerate-rich-text',
+	createTextProposalToolProvider: 'pixerate-rich-text',
 	createTokensStyleToolProvider: 'pixerate-tokens',
 	createStyleToolProvider: 'pixerate-agent-tools',
 	createDiagramToolProvider: 'pixerate-diagram',

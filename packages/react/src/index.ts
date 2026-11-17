@@ -11,6 +11,7 @@ export * from "./hooks/useFileImport";
 export * from "./hooks/useDocxExport";
 export * from "./components/ExportDocxButton";
 export * from "./hooks/useAgentToolProvider";
+export * from "./hooks/useTextProposals";
 export * from "./hooks/useRichTextEditorDocument";
 export * from "./playback";
 export * from "./hooks/useToolBridge";

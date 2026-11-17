@@ -129,17 +129,21 @@ export function richTextStyleState(doc: DocNode): RichTextStyleState {
 	return { blocks, runs };
 }
 
-/** The document position of character `offset` of a block. */
-export function richTextBlockPos(block: RichTextStyleBlock, offset: number): number {
+/**
+ * The document position of character `offset` of a block. Where two segments meet, a range's
+ * start (`end` false) maps to the start of the later segment and its end (`end` true) to the end
+ * of the earlier one, so a range never takes in what lies between them (Markdown syntax).
+ */
+export function richTextBlockPos(block: RichTextStyleBlock, offset: number, end = false): number {
 	let seg = block.segments[0];
-	for (const s of block.segments) if (s.offset <= offset) seg = s;
+	for (const s of block.segments) if (end && offset > 0 ? s.offset < offset : s.offset <= offset) seg = s;
 	return seg ? seg.pos + (offset - seg.offset) : block.from;
 }
 
 const profileOf = (p: Readonly<Record<string, unknown>>) => p as RichTextStyleProfile;
 const targetOf = (block: RichTextStyleBlock, start: number, end: number, replacement?: string): RichTextStyleTarget => ({
 	from: richTextBlockPos(block, start),
-	to: richTextBlockPos(block, end),
+	to: richTextBlockPos(block, end, end > start),
 	...(replacement !== undefined ? { replacement } : {})
 });
 const prose = (state: RichTextStyleState) => state.blocks.filter((b) => b.kind !== 'code');

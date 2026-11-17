@@ -67,6 +67,7 @@ This skill is the method. `pixerate-rich-text` has the full tool reference.
 | A point only the author can decide | `add_comment` on the passage, saying what you suggest |
 | Formatting only | `format_text` on the range; leave the words |
 | The host has a house style for documents | `check_rich_text_style`, then `fix_rich_text_style` (or `replace_range` per finding's `target`) |
+| The person is still writing and did not ask for fixes | `check_rich_text_style` or `check_text_mechanics`, then `propose_text_edit` per certain finding (its `target` and `check`), so they accept or dismiss each one |
 
 ## Recipes
 
@@ -101,3 +102,5 @@ blocks[0].to, text }` with one sentence.
 - `set_track_changes`, `list_changes`: suggest fixes as tracked changes and list them
 - `add_comment`: flag what the author should decide
 - `check_rich_text_style`, `fix_rich_text_style`: find and fix what breaks the house style
+- `check_text_mechanics`: punctuation, casing and spelling fixes in Markdown text
+- `propose_text_edit`, `list_text_proposals`: suggest a fix the person accepts or dismisses, and see what is pending

@@ -54,6 +54,10 @@ the pitfalls, and uses the tools below.
    (heading case, list endings, quotes, terms, numbers, dates) as one undo step; fix what it
    leaves (`left`: skipped heading levels, ambiguous dates, terms with no replacement) yourself
    with `replace_range` or `set_block_type`, then check again.
+8. **Suggest, don't impose.** For an edit the person did not ask for (a house-style fix while
+   they write, a clearer phrase), use `propose_text_edit` where the host offers it: they see
+   the suggestion and take it or leave it. Pass the range and the text you read there as
+   `expected`; leave `accept_text_proposal` to them unless they ask you to apply it.
 
 ## Best practices
 
@@ -111,9 +115,13 @@ the pitfalls, and uses the tools below.
 | --- | --- |
 | `replace_range` | Replace the content between `from` and `to` with literal `text` (newlines start new paragraphs). `from === to` inserts; empty `text` deletes. Returns the new `range` and document `size`. The default tool for minimal-diff edits. |
 | `check_rich_text_style` | Check the document against the house style: heading case and levels, list endings, quotation marks, preferred terms, number and date formats, and the brand's text colours and fonts. Returns findings with a `target` `{from, to}` for `replace_range` (with `replacement` when the fix is certain), `fixable`, the checks that `ran` and those `skipped` with the reason. Run after writing and again after fixing. |
-| `fix_rich_text_style` | Apply every certain house-style fix as one undo step (pass `checks` to limit it). Returns `fixed` and the findings `left` for you. Hidden on a read-only document. Run `check_rich_text_style` after. |
+| `fix_rich_text_style` | Apply every certain house-style fix as one undo step (pass `checks` to limit it). Returns `fixed` and the findings `left` for you. Hidden on a read-only document. Run `check_rich_text_style` after. On Markdown text it also returns the `edits` it made. |
 | `check_text_mechanics` | Check Markdown text (Swash and other Markdown editors) for the small, certain fixes: capital I, missing apostrophes (`its`, `id` and `ill` only where they're contractions), capitals at the start of sentences, a full stop or question mark at the end of a finished line, `OK`, a comma before a "but" that starts a clause, and spelling when the host has a spell checker. Never touches code, math, HTML, tables, links' addresses or URLs. Returns each finding's `check`, `text`, `replacement`, `{from, to}` and a sentence. Not house style: use `check_rich_text_style` for terms, formats and tone. |
 | `fix_text_mechanics` | Apply every `check_text_mechanics` fix as one undo step (pass `checks` to limit it). Returns `fixed` and the count `byCheck`. Hidden on a read-only text. |
+| `propose_text_edit` | Suggest replacing `from`..`to` of a text with `replacement` without changing it: the person accepts or dismisses it. Pass `expected` (the text you read there; refused if it changed), a short `title`, a one-sentence `rationale` and the `check` id when it comes from a check. Returns `proposalId`, the range, the `original` text and the title. The proposal moves as the person writes and is dropped if they edit its text. Use it for edits nobody asked for; take positions from `check_rich_text_style`, `check_text_mechanics` or `find_text`. |
+| `list_text_proposals` | List pending text proposals with their current ranges, text, replacement, title, rationale, check and proposer, and `readOnly` (why accepting is refused, or null). Call before accepting or rejecting. |
+| `accept_text_proposal` | Apply a pending proposal by `proposalId` as one undo step made by its proposer. Refuses on a read-only text, or when its text changed (it is dropped). Returns the replacement's new `{from, to}`, `text` and the undo step name. Only when the person asked for it. |
+| `reject_text_proposal` | Dismiss a pending proposal by `proposalId`; the text is unchanged. Use it to withdraw a suggestion that no longer fits. |
 | `replace_text` | Find and replace a phrase in one undo step, keeping the found text's formatting. Replaces all matches unless `occurrence` (1-based) is given. Same `matchCase` / `wholeWord` / `regex` flags as `find_text`. Fails when nothing matches. Returns `{replaced, total, ranges}`. |
 | `insert_text` | Insert literal `text` at `at` (a document position) or at the cursor. Returns the inserted `range`. Use for new sentences or paragraphs; position from `get_text {blocks: true}` (a block's `to` appends to it). |
 | `replace_selection` | Replace the current selection with literal text (empty string deletes). Use after `set_selection`, or when the user asks to change what they selected. |
@@ -210,6 +218,13 @@ Run with `run_command` / `run_commands` when the host registers them. Check
   code block drops all marks.
 - **Range limits.** `from` after `to`, or a position beyond the document `size`, is a tool
   error; nothing is applied.
+- **Markdown text has offsets, not positions.** On a Markdown text (Swash and other Markdown
+  editors), `check_rich_text_style`, `check_text_mechanics` and the text proposal tools take and
+  return UTF-16 offsets into the source. The house-style checks read only the prose: code,
+  math, HTML, tables, front matter, link addresses and syntax markers are never checked or
+  changed, and a certain fix is narrowed to the words it changes so `**` and links stay intact.
+  Markdown has no fonts or colours, so the brand's `palette-only`, `min-contrast` and
+  `fonts-allowed` are always `skipped`.
 - **Read-only documents** expose only `get_text`, `find_text` and `list_document_charts` (no
   formatting tools). If
   the write tools are missing, the document is read-only; tell the user rather than working
