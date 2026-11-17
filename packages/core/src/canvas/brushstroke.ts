@@ -229,6 +229,21 @@ export async function getBrushedShapeSvg(shape: ShapeDescription, size: ShapeSiz
 	return (await loadCanvasBrushstrokeRenderer()).brushedShapeSvgNow(shape, size, options.scale ?? 2, options);
 }
 
+/** The longest step, in pixels, between the brush preview S's samples. */
+const PREVIEW_STEP = 2;
+
+/**
+ * The brush previews' sample stroke (the canvas swatch's and the vector host's `preview_brush`): a
+ * gentle S across a `width` × `height` image, inset by half the tip `size` plus 2 px. It is sampled
+ * every `PREVIEW_STEP` pixels or less, so successive segments turn by under a degree and a thin hard
+ * tip draws a smooth curve at every preview size (a few straight facets show as corners).
+ */
+export function brushPreviewPoints(width: number, height: number, size: number): { x: number; y: number }[] {
+	const pad = size / 2 + 2;
+	const n = Math.max(33, Math.ceil((width - 2 * pad) / PREVIEW_STEP) + 1);
+	return Array.from({ length: n }, (_, i) => ({ x: pad + ((width - 2 * pad) * i) / (n - 1), y: height / 2 + Math.sin((i / (n - 1)) * Math.PI * 2) * (height / 2 - pad) * 0.6 }));
+}
+
 export interface CanvasBrushSwatchOptions {
 	/** Swatch size in pixels (default 96 × 24). */
 	width?: number;

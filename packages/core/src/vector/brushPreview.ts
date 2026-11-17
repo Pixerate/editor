@@ -12,7 +12,7 @@ import type { BrushPreviewRenderer } from '../brushes/tools.js';
 import type { Brush } from '../brushes/types.js';
 import { checkBrush, VECTOR_PROFILE } from '../brushes/profiles.js';
 import { resolveBrush } from '../brushes/resolve.js';
-import { renderCanvasBrushPreview } from '../canvas/brushstroke.js';
+import { brushPreviewPoints, renderCanvasBrushPreview } from '../canvas/brushstroke.js';
 import type { BrushstrokeImage, BrushstrokeProfilePath } from '../paint/brushstroke.js';
 import type { PaintBrush } from '../paint-editor/brushes.js';
 import { bytesToBase64, encodePng } from '../raster/png.js';
@@ -34,10 +34,7 @@ function rgba(hex: string): [number, number, number, number] {
 
 /** The canvas swatch's S across the preview, swelling in the middle, for a tip of `size`. */
 function previewStroke(width: number, height: number, size: number): BrushstrokeProfilePath {
-	const pad = size / 2 + 2;
-	const n = 33;
-	const points = Array.from({ length: n }, (_, i) => ({ x: pad + ((width - 2 * pad) * i) / (n - 1), y: height / 2 + Math.sin((i / (n - 1)) * Math.PI * 2) * (height / 2 - pad) * 0.6 }));
-	return { points, pressure: [0.35, 1, 0.5] };
+	return { points: brushPreviewPoints(width, height, size), pressure: [0.35, 1, 0.5] };
 }
 
 /** Whether a backdrop brush is shown over two bands (it moves or picks up paint), as the paint thumbnails do. */
