@@ -13,31 +13,48 @@ export function readPng(png: Buffer | Uint8Array): Picture {
   return { width: d.width, height: d.height, data: d.data };
 }
 
-/** The pixels of a 4 px band along the top and bottom edges, where the sample stroke never reaches. */
-function border(p: Picture): [number, number, number][] {
-  const px: [number, number, number][] = [];
-  const band = Math.min(4, Math.floor(p.height / 8));
+/** How wide the left and right margins are that the sample stroke never reaches. */
+const MARGIN = 24;
+
+/** Each row's margin pixels: the backdrop there (paper, or the bands a smudge preview paints over). */
+function marginRows(p: Picture): [number, number, number][][] {
+  const m = Math.min(MARGIN, Math.floor(p.width / 8));
+  const rows: [number, number, number][][] = [];
   for (let y = 0; y < p.height; y++) {
-    if (y >= band && y < p.height - band) continue;
-    for (let x = 0; x < p.width; x++) px.push(rgbOver(p, (y * p.width + x) * 4));
+    const row: [number, number, number][] = [];
+    for (let x = 0; x < m; x++) row.push(rgbOver(p, (y * p.width + x) * 4), rgbOver(p, (y * p.width + p.width - 1 - x) * 4));
+    rows.push(row);
   }
-  return px;
+  return rows;
 }
 
 const median = (xs: number[]) => xs.sort((a, b) => a - b)[Math.floor(xs.length / 2)]!;
+const medianColour = (px: readonly [number, number, number][]): [number, number, number] => [median(px.map((c) => c[0])), median(px.map((c) => c[1])), median(px.map((c) => c[2]))];
 
-/** The colour behind the stroke: the median of the top and bottom edges (alpha composited over white). */
-export function paperOf(p: Picture): [number, number, number] {
-  const px = border(p);
-  return [median(px.map((c) => c[0])), median(px.map((c) => c[1])), median(px.map((c) => c[2]))];
+/**
+ * What the picture is drawn over, row by row: the median of each row's margins. Previews are
+ * paper (textured, the same on every row) or, for brushes that move paint, horizontal bands of
+ * colour, so a row's margins say what lies under the stroke on that row.
+ */
+function backdrop(p: Picture): { rows: [number, number, number][]; noise: number } {
+  const rows = marginRows(p).map(medianColour);
+  // How far the paper strays from its colour (its grain): the 99th percentile over the top and
+  // bottom 4 rows, which no preview's stroke reaches. (The margins can hold a stroke's ends.)
+  const band = Math.min(4, Math.floor(p.height / 8));
+  const d: number[] = [];
+  for (let y = 0; y < p.height; y++) {
+    if (y >= band && y < p.height - band) continue;
+    const row = Array.from({ length: p.width }, (_, x) => rgbOver(p, (y * p.width + x) * 4));
+    const c = medianColour(row);
+    for (const px of row) d.push(dist(px, c));
+  }
+  d.sort((a, b) => a - b);
+  return { rows, noise: d[Math.floor(d.length * 0.99)] ?? 0 };
 }
 
-/** How far textured paper strays from its median colour: the 99th percentile on the edges. */
-function paperNoise(p: Picture, paper: readonly number[]): number {
-  const d = border(p)
-    .map((c) => dist(c, paper))
-    .sort((a, b) => a - b);
-  return d[Math.floor(d.length * 0.99)] ?? 0;
+/** The colour behind the stroke: the median of every row's margins (alpha composited over white). */
+export function paperOf(p: Picture): [number, number, number] {
+  return medianColour(marginRows(p).flat());
 }
 
 /** A pixel's colour composited over white (canvas previews are transparent around the stroke). */
@@ -48,12 +65,12 @@ function rgbOver(p: Picture, i: number): [number, number, number] {
 
 const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - b[0]!, a[1]! - b[1]!, a[2]! - b[2]!);
 
-/** Pixels that differ from the paper by more than its own grain does (and at least 16 of 441 in RGB): the marks. */
+/** Pixels that differ from what lies under them by more than the paper's grain does (and at least 16 of 441 in RGB): the marks. */
 export function inkMask(p: Picture): Uint8Array {
-  const paper = paperOf(p);
-  const threshold = Math.max(16, paperNoise(p, paper) * 1.25);
+  const { rows, noise } = backdrop(p);
+  const threshold = Math.max(16, noise * 1.25);
   const mask = new Uint8Array(p.width * p.height);
-  for (let i = 0; i < mask.length; i++) mask[i] = dist(rgbOver(p, i * 4), paper) > threshold ? 1 : 0;
+  for (let i = 0; i < mask.length; i++) mask[i] = dist(rgbOver(p, i * 4), rows[Math.floor(i / p.width)]!) > threshold ? 1 : 0;
   return mask;
 }
 

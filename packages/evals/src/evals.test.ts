@@ -91,12 +91,19 @@ describe("the brush session", () => {
     expect(() => createBrushSession("paint", "no-such-brush")).toThrow(/no built-in brush/);
   });
 
-  it("draws a vector host's wet brush with the paint engine when its preview refuses it", async () => {
+  it("draws every brush the vector host takes with its own preview, wet paint and smudge included", async () => {
     const s = createBrushSession("vector");
-    const drawn = await strokePng(s, "gouache");
-    expect(drawn.fallback).toMatch(/wet/);
-    expect(isBlank(readPng(drawn.png))).toBe(false);
-    expect((await strokePng(s, "pencil-hb")).fallback).toBeUndefined();
+    for (const id of ["gouache", "watercolor-wash", "smudge", "pencil-hb"]) {
+      const drawn = await strokePng(s, id);
+      expect(drawn.fallback, id).toBeUndefined();
+      expect(isBlank(readPng(drawn.png)), id).toBe(false);
+    }
+  }, 60_000);
+
+  it("files a brush based on a preset under the family its own facets make it", async () => {
+    const s = createBrushSession("paint");
+    await s.call("create_brush", { id: "gold", name: "Gold", basedOn: "impasto-brush", behaviour: { thick: { metallic: 1 } } });
+    expect(((await s.call("describe_brush", { id: "gold" })).structuredContent as { family: string }).family).toBe("metallic");
   });
 });
 
@@ -112,14 +119,15 @@ describe("stroke similarity", () => {
 
 describe("grading", () => {
   it("scores the oracle 100 on scratch and reference tasks", async () => {
-    const tasks = [task("wet-cerulean-bloom"), task("ref-chalk-canvas"), task("ref-gouache-vector")];
+    // A white paint on cream paper, tools that move the bands they preview over, and wet paint in vector strokes.
+    const tasks = [task("wet-cerulean-bloom"), task("ref-chalk-canvas"), task("ref-gouache-vector"), task("thick-titanium-impasto"), task("ref-smudge"), task("volatile-tight-whirl")];
     const oracle = createModel("oracle", tasks);
     for (const t of tasks) {
       const r = await runSample(t, 1, { model: oracle, out });
       expect(r.overall, `${t.id}: ${JSON.stringify(r.checks.filter((c) => !c.pass))} ${r.error ?? ""}`).toBe(100);
       expect(r.firstTry).toBe(true);
     }
-  });
+  }, 120_000);
 
   it("scores a brush from the wrong preset lower on a reference task", async () => {
     const r = await runSample(task("ref-watercolor-wash"), 1, { model: scripted([{ name: "create_brush", input: { id: "my-brush", name: "Mine", basedOn: "pencil-hb" } }]), out });

@@ -77,7 +77,7 @@ node src/cli.ts --model replay:results/opus/answers --judge "command:node src/ad
 
 *First try* is the share of samples that saved the brush without any write tool being refused on the way.
 
-Strokes are drawn by the host's own `preview_brush` renderer. The vector host's renderer draws a canvas stroke, which refuses wet paint, the Mixer Brush, smudge and blender though vector strokes take them; for those the paint engine draws the graded stroke, and `stroke-note.txt` says so. The model still sees the vector host's refusal, as an agent would.
+Strokes are drawn by the host's own `preview_brush` renderer, as apps register it (`renderCanvasBrushPreview` for canvas, `renderVectorBrushPreview` for vector, the paint engine otherwise). If it ever refuses a brush, the paint engine draws the graded stroke and `stroke-note.txt` says so.
 
 Stroke similarity is rough: it rewards the right width, colour and spread, not the right texture, and two soft wide brushes (an airbrush and a wash) look alike to it. Use a judge for anything you will act on; `--model oracle` scores 100 on every task, which shows the graders' ceiling.
 
