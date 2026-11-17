@@ -241,7 +241,7 @@
     {
       "name": "preview_brush",
       "title": "Preview a brush",
-      "description": "Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Returns the image plus id, width and height. Changes nothing.",
+      "description": "Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Without color it draws in the brush's own default colour (a light / dark pair takes the side for the paper it is drawn on), else a colour for its medium, made darker or lighter until it reads on that paper, as the brush panel shows it. Returns the image plus id, width, height and color: the #rrggbb it drew in. Changes nothing.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -265,7 +265,7 @@
           "color": {
             "type": "string",
             "pattern": "^#[0-9a-fA-F]{6}$",
-            "description": "Paint colour #rrggbb (default the brush's own default colour, else #1f2937)."
+            "description": "Paint colour #rrggbb, drawn as given (default: the brush's own default colour resolved for the paper, else a colour for its medium, kept readable on the paper)."
           }
         },
         "required": [

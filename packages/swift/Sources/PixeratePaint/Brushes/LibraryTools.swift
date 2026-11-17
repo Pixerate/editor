@@ -330,7 +330,7 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
     return h
 }
 
-/// The brush library's `preview_brush` (an image and its size).
+/// The brush library's `preview_brush` (an image, its size and the colour it drew in).
 func brushLibraryContentHandlers(_ c: PaintEditorController) -> [String: (JSONObject) async throws -> ToolOutput] {
     var h: [String: (JSONObject) async throws -> ToolOutput] = [:]
     h["preview_brush"] = { a in
@@ -338,16 +338,15 @@ func brushLibraryContentHandlers(_ c: PaintEditorController) -> [String: (JSONOb
         guard let e = c.brushLibrary.get(id) else {
             throw BrushLibraryError(.unknownBrush, "No brush \"\(id)\". \(closestIds(id, c.brushLibrary.list().compactMap { $0.brush["id"]?.stringValue }))list_brush_presets lists them.")
         }
-        var own: String? = nil
-        if let d = e.brush.path("colour.default")?.stringValue, d.range(of: "^#[0-9a-fA-F]{6}", options: .regularExpression) != nil { own = String(d.prefix(7)) }
         let w = a["width"]?.numberValue.map { Int($0) } ?? 256
         let h = a["height"]?.numberValue.map { Int($0) } ?? 96
-        let color = (a["color"]?.stringValue ?? own ?? "#1f2937").lowercased()
+        // As the brush panel previews it: the brush's colour for the paper, readable on it.
+        let color = (a["color"]?.stringValue ?? brushPreviewColours(e.brush, paper: c.doc.paper.color, profile: PAINT_PROFILE).color).lowercased()
         // Image tips and grain are drawn from the library's sources.
         let sources = BrushSourceArtCache()
         sources.set(brushSourceIds(e.brush).compactMap { c.brushLibrary.getSource($0) })
         let img = try renderBrushThumbnail(resolveBrush(e.brush), paper: c.doc.paper, width: w, height: h, color: color, stampArt: sources.get)
-        return .result(McpToolResult(content: [.image(data: bytesToBase64(encodePng(img.width, img.height, img.data)), mimeType: "image/png")], structuredContent: ["id": .string(id), "width": .number(Double(w)), "height": .number(Double(h))]))
+        return .result(McpToolResult(content: [.image(data: bytesToBase64(encodePng(img.width, img.height, img.data)), mimeType: "image/png")], structuredContent: ["id": .string(id), "width": .number(Double(w)), "height": .number(Double(h)), "color": .string(color)]))
     }
     return h
 }

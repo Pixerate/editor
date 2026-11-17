@@ -20,6 +20,8 @@ import { vectorBrushstrokeBrushes } from '../src/vector/brushstroke';
 import { createMemoryStorage } from '../src/persistence';
 import { renderBrushThumbnail } from '../src/paint-editor/thumbnails';
 import { DEFAULT_PAPER } from '../src/paint-editor/paper';
+import { paintBrushPreviewRenderer } from '../src/paint-editor/brush-library-tools';
+import { BRUSH_PREVIEW_FALLBACKS } from '../src/brushes/preview';
 import { bytesToBase64, decodePng, encodePng, base64ToBytes } from '../src/raster/png';
 import { resolveBrush, resolveFamily } from '../src/brushes';
 import { ToolRegistry } from '../src/tools';
@@ -445,8 +447,66 @@ describe('brush library tools', () => {
     const { call } = setup({ renderPreview: render });
     const r = await call('preview_brush', { id: 'highlighter', width: 128 });
     expect(r.content).toEqual([{ type: 'image', data: 'AAAA', mimeType: 'image/png' }]);
-    expect(r.result).toEqual({ id: 'highlighter', width: 128, height: 96 });
+    expect(r.result).toEqual({ id: 'highlighter', width: 128, height: 96, color: '#fff200' });
     expect(render).toHaveBeenCalledWith(expect.objectContaining({ id: 'highlighter' }), { width: 128, height: 96, color: '#fff200' });
     expect((await call('preview_brush', { id: 'x', width: 10 })).error).toMatch(/width/);
+  });
+
+  describe('preview colour', () => {
+    // The paint engine's renderer (paper DEFAULT_PAPER), with the colour each call drew in.
+    const paintSetup = () => {
+      const real = paintBrushPreviewRenderer();
+      const render = Object.assign(vi.fn((brush: Brush, o: { width: number; height: number; color: string }) => real(brush, o)), { paper: real.paper });
+      return { ...setup({ renderPreview: render }), render };
+    };
+    // How many pixels are clearly red (a rust stroke on cream paper).
+    const reddish = (data: string) => {
+      const png = decodePng(base64ToBytes(data));
+      let n = 0;
+      for (let i = 0; i < png.data.length; i += 4) if (png.data[i]! - png.data[i + 2]! > 50 && png.data[i]! - png.data[i + 1]! > 30) n++;
+      return n;
+    };
+
+    it('draws a plain hex default as it is', async () => {
+      const { call, render } = paintSetup();
+      expect((await call('create_brush', { id: 'rust-pen', name: 'Rust pen', basedOn: 'ink-pen', colour: { default: '#A0402A' } })).error).toBeNull();
+      const r = await call('preview_brush', { id: 'rust-pen', width: 96, height: 32 });
+      expect(r.error).toBeNull();
+      expect(r.result).toEqual({ id: 'rust-pen', width: 96, height: 32, color: '#a0402a' });
+      expect(render).toHaveBeenCalledWith(expect.objectContaining({ id: 'rust-pen' }), { width: 96, height: 32, color: '#a0402a' });
+      expect(reddish((r.content![0] as { data: string }).data)).toBeGreaterThan(20);
+    });
+
+    it('takes the light side of a light / dark pair on the paint engine\'s light paper', async () => {
+      const { call, render } = paintSetup();
+      await call('create_brush', { id: 'rust-conte', name: 'Rust Conté', basedOn: 'ink-pen', colour: { default: { light: '#a0402a', dark: '#c8603f' } } });
+      const r = await call('preview_brush', { id: 'rust-conte', width: 96, height: 32 });
+      expect(r.error).toBeNull();
+      expect(r.result.color).toBe('#a0402a');
+      expect(render).toHaveBeenCalledWith(expect.anything(), { width: 96, height: 32, color: '#a0402a' });
+      // Not the old fallback slate.
+      expect(reddish((r.content![0] as { data: string }).data)).toBeGreaterThan(20);
+    });
+
+    it('takes the dark side for a light brush, which previews on dark paper', async () => {
+      const { call } = paintSetup();
+      await call('create_brush', { id: 'violet-neon', name: 'Violet neon', basedOn: 'neon-marker', colour: { default: { light: '#6d28d9', dark: '#e9d5ff' } } });
+      const r = await call('preview_brush', { id: 'violet-neon', width: 96, height: 32 });
+      expect(r.error).toBeNull();
+      expect(r.result.color).toBe('#e9d5ff');
+      // Drawn on the dark paper the paint engine shows light brushes on, where the pale violet reads.
+      const png = decodePng(base64ToBytes((r.content![0] as { data: string }).data));
+      expect(Math.max(...png.data.subarray(0, 3))).toBeLessThan(40);
+      let lightest = 0;
+      for (let i = 0; i < png.data.length; i += 4) lightest = Math.max(lightest, png.data[i + 2]!);
+      expect(lightest).toBeGreaterThan(150);
+    });
+
+    it('uses a colour for the medium without a solid default, and a given color as it is', async () => {
+      const { call } = paintSetup();
+      expect((await call('preview_brush', { id: 'neon-marker', width: 64, height: 24 })).result.color).toBe(BRUSH_PREVIEW_FALLBACKS.ink!.dark);
+      expect((await call('preview_brush', { id: 'rust-none', width: 64 })).error).toMatch(/No brush "rust-none"/);
+      expect((await call('preview_brush', { id: 'ink-pen', width: 64, color: '#00FF00' })).result.color).toBe('#00ff00');
+    });
   });
 });
