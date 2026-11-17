@@ -198,10 +198,11 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         return BrushCheck(ok: !issues.contains { $0.severity == "error" }, issues: issues)
     }
     /// With `original` (an update), what it already had that this host can't use is kept, not refused.
-    func store(_ raw: JSONObject, _ overwrite: Bool, original: Brush? = nil) throws -> (brush: Brush, problems: [String], check: BrushCheck, kept: [BrushIssue]) {
+    func store(_ raw: JSONObject, _ overwrite: Bool, original: Brush? = nil, family: BrushFamilySource? = nil) throws -> (brush: Brush, problems: [String], check: BrushCheck, kept: [BrushIssue]) {
         var problems: [String] = []
-        let brush: Brush
+        var brush: Brush
         do { brush = try normalizeBrushSpec(.object(raw), &problems) } catch { throw BrushLibraryError(.invalid, error.localizedDescription) }
+        if let family { brush = refreshBrushFamily(brush, family) }
         let had = Set((original.map { checkFor($0, profile).issues } ?? []).filter { $0.severity == "error" }.map(\.facet))
         let all = checkFor(brush, profile)
         let kept = all.issues.filter { $0.severity == "error" && had.contains($0.facet) }
@@ -254,7 +255,7 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         if library.get(id) != nil { throw BrushLibraryError(.exists, "A brush \"\(id)\" exists already; pick another id, or change it with update_brush.") }
         let base = try a["basedOn"]?.stringValue.map { try entry($0).brush }
         let raw = base.map { mergeBrushPatch($0, spec) } ?? spec
-        let saved = try store(raw, false)
+        let saved = try store(raw, false, family: base.map { BrushFamilySource(from: $0, given: spec, keepOwn: false) })
         return ["id": saved.brush["id"] ?? .null, "brush": .object(saved.brush), "engine": .string(resolveEngine(saved.brush)), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
     }
     h["update_brush"] = { a in
@@ -265,7 +266,7 @@ func brushLibraryHandlers(_ c: PaintEditorController) -> [String: PaintToolHandl
         for k in a["unset"]?.arrayValue?.compactMap(\.stringValue) ?? [] { base[k] = nil }
         var patch = a.without("id", "unset")
         patch["id"] = .string(id)
-        let saved = try store(mergeBrushPatch(base, patch), true, original: e.brush)
+        let saved = try store(mergeBrushPatch(base, patch), true, original: e.brush, family: BrushFamilySource(from: e.brush, given: a.without("id", "unset"), keepOwn: true))
         var result: JSONObject = ["id": .string(id), "brush": .object(saved.brush), "changed": .array(changedBrushPaths(.object(e.brush), .object(saved.brush)).map { .string($0) }), "problems": .array(saved.problems.map { .string($0) }), "warnings": warnings(saved.check)]
         if !saved.kept.isEmpty { result["kept"] = .array(saved.kept.map(\.json)) }
         return .object(result)
@@ -349,4 +350,40 @@ func brushLibraryContentHandlers(_ c: PaintEditorController) -> [String: (JSONOb
         return .result(McpToolResult(content: [.image(data: bytesToBase64(encodePng(img.width, img.height, img.data)), mimeType: "image/png")], structuredContent: ["id": .string(id), "width": .number(Double(w)), "height": .number(Double(h))]))
     }
     return h
+}
+
+/** Where a saved brush's facets came from, so its copied `family` can follow them (`refreshBrushFamily`). */
+struct BrushFamilySource {
+    /** The brush whose facets (and family) were copied. */
+    let from: Brush
+    /** The facets the caller gave. */
+    let given: JSONObject
+    /**
+     * True for a saved brush's change: a family that differs from the brush's facets' was given on
+     * purpose and stays. False for a new brush basedOn another: it was the base's choice, so it goes
+     * too when the facets change what the paint does.
+     */
+    let keepOwn: Bool
+}
+
+/** The family a brush's facets give, ignoring its own `family`. */
+private func facetFamily(_ brush: Brush) -> String? {
+    var bare = brush
+    bare["family"] = nil
+    return resolveFamily(bare)
+}
+
+/**
+ * `brush` (normalised) without the `family` copied from `from` when the caller gave none and its
+ * facets give another family than `from`'s did, so `resolveFamily` derives it again (as
+ * `refreshFamily` in the TypeScript core's `brushes/tools.ts`).
+ */
+func refreshBrushFamily(_ brush: Brush, _ source: BrushFamilySource) -> Brush {
+    if source.given["family"] != nil || source.from["family"] == nil || brush["family"] == nil { return brush }
+    let before = facetFamily(source.from)
+    if source.keepOwn && before != source.from["family"]?.stringValue { return brush }
+    if facetFamily(brush) == before { return brush }
+    var rest = brush
+    rest["family"] = nil
+    return rest
 }

@@ -78,7 +78,10 @@ drawn.
 2. **Read it.** `describe_brush` for the full spec, the engine it resolves to and its check.
 3. **Make a brush.** `create_brush` with a new `id`, a `name`, `basedOn` the nearest preset and
    only the facets that change (objects merge; lists replace). Read `problems` (values clamped or
-   dropped) and `warnings`. A brush the host can't render is refused and nothing is saved.
+   dropped) and `warnings`. A brush the host can't render is refused and nothing is saved. Its
+   `family` follows its facets: when they change what the paint does (metallic on a thick base,
+   light on a pen, live patterns on watercolour), the base's family is dropped and derived again,
+   so there is no need to pass `family` unless the brush belongs somewhere its facets don't say.
 4. **Look at it.** `preview_brush` when the host has a renderer; otherwise paint a test stroke
    in the editor (`set_brush` with the new id, then `paint_stroke`).
 5. **Tune it.** `update_brush` with the facets to change, or `unset` to drop whole facets. It
@@ -177,8 +180,8 @@ drawn.
 | `check_brush_style` | Check brushes against the house style: the brushes and media allowed, licences on the image sources they use, and the brand's colours on their default and palette. Default: the user's saved brushes; `ids` checks any (built-ins included). Returns findings with a `target` (`{ brush, colour? }` or `{ source }`), the checks that `ran` and were `skipped`, and the ids `checked`. Read-only. |
 | `list_brush_presets` | Find brushes this host renders: `kind`, `medium`, `family`, `variety`, `tool`, `tag`, `text`, `source` (all, builtin, user), `all`, `offset`, `limit`. Returns `brushes` (id, name, builtin, kind, medium, variety or tool, category, family, engine, tip, size, marks, surface, light) and `total`. Call first. |
 | `describe_brush` | One brush by `id`: its full facet `brush` (with its `colour`: default, palette, own), `builtin`, `engine`, `category`, `family` (marks) and `check` for this host (stamp stickers included). Unknown ids are refused with the closest ones. |
-| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
-| `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes that add what the host can't render; keeps what the brush already had for other hosts. Returns `brush`, `changed` paths, `problems`, `warnings` and, when there are any, `kept` (facets this host can't use, left as they were). |
+| `create_brush` | Save a new brush: `id`, `name`, optional `basedOn`, and the facets, `colour` included (to keep an editor's current brush, pass the `brush` its `get_brush` returns). Normalised and checked for this host (and its sticker library, for stamp tips); refused brushes save nothing. Without `family`, the base's family is derived again when the new facets give another one. Returns `id`, `brush`, `engine`, `problems`, `warnings`. |
+| `update_brush` | Change a saved brush: facets to merge in, `unset` facets to drop. Refuses built-ins (duplicate first) and changes that add what the host can't render; keeps what the brush already had for other hosts. A family that only restated the old facets is derived again when the change gives another; one that differs from the facets (set on purpose) stays. Returns `brush`, `changed` paths, `problems`, `warnings` and, when there are any, `kept` (facets this host can't use, left as they were). |
 | `duplicate_brush` | Copy any brush, built-ins included, to a saved brush (`newId` default `<id>-copy`, `name`). Returns the new `id` and `brush`; then `update_brush` it. |
 | `remove_brush` | Delete a saved brush for good (export it first to keep a copy). Built-ins are refused. Returns `removed`. |
 | `check_brush` | Check a brush (`id`, or an unsaved `brush` spec) for a `host` (paint, image, canvas, vector). Returns `ok`, `issues` (facet, severity, reason, fix) and, when refused, `degraded`. |

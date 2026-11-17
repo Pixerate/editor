@@ -391,6 +391,221 @@
       }
     },
     {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "shiny",
+        "name": "Shiny",
+        "basedOn": "impasto-brush",
+        "behaviour": {
+          "thick": {
+            "metallic": 1
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "behaviour": {
+              "exchange": {
+                "pickup": 0.4
+              },
+              "surface": "thick",
+              "thick": {
+                "gloss": 0.45,
+                "load": 0.92,
+                "metallic": 1
+              }
+            },
+            "dynamics": {
+              "minSize": 0.55,
+              "rotation": "stroke",
+              "smoothing": 0.25
+            },
+            "id": "shiny",
+            "kind": "mark",
+            "medium": "paint",
+            "name": "Shiny",
+            "tip": {
+              "angle": 90,
+              "hardness": 0.8,
+              "roundness": 0.55,
+              "shape": "flat",
+              "size": 36,
+              "spacing": 0.06
+            },
+            "variety": "oil"
+          },
+          "engine": "impasto",
+          "id": "shiny",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "duplicate_brush",
+      "arguments": {
+        "id": "ink-pen",
+        "newId": "glow-pen"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "family": "ink",
+            "id": "glow-pen",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "Ink pen copy",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "id": "glow-pen"
+        }
+      }
+    },
+    {
+      "tool": "update_brush",
+      "arguments": {
+        "id": "glow-pen",
+        "light": {
+          "amount": 1
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "glow-pen",
+            "kind": "mark",
+            "light": {
+              "amount": 1
+            },
+            "medium": "ink",
+            "name": "Ink pen copy",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "changed": [
+            "family",
+            "light"
+          ],
+          "id": "glow-pen",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "list_brush_presets",
+      "arguments": {
+        "source": "user",
+        "family": "metallic"
+      },
+      "expect": {
+        "result": {
+          "brushes": [
+            {
+              "builtin": false,
+              "category": "impasto",
+              "engine": "impasto",
+              "family": "metallic",
+              "id": "shiny",
+              "kind": "mark",
+              "marks": "continuous",
+              "medium": "paint",
+              "name": "Shiny",
+              "size": 36,
+              "surface": "thick",
+              "tip": "flat",
+              "variety": "oil"
+            }
+          ],
+          "host": "paint",
+          "total": 1
+        }
+      }
+    },
+    {
+      "tool": "describe_brush",
+      "arguments": {
+        "id": "glow-pen"
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "id": "glow-pen",
+            "kind": "mark",
+            "light": {
+              "amount": 1
+            },
+            "medium": "ink",
+            "name": "Ink pen copy",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "builtin": false,
+          "category": "light",
+          "check": {
+            "issues": [],
+            "ok": true
+          },
+          "engine": "dab",
+          "family": "glow"
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "glow-pen"
+      },
+      "expect": {
+        "result": {
+          "removed": "glow-pen"
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "shiny"
+      },
+      "expect": {
+        "result": {
+          "removed": "shiny"
+        }
+      }
+    },
+    {
       "tool": "list_brush_presets",
       "arguments": {
         "source": "user"
@@ -473,7 +688,7 @@
           "strokeId": "s1"
         },
         "pixels": {
-          "file": "png/brush-library.12.png",
+          "file": "png/brush-library.19.png",
           "width": 48,
           "height": 32,
           "sha256": "0f61aeb875b68014c6a686332fe0260b6299ffad8691396b95bdbde8f898672f",
@@ -690,7 +905,7 @@
           "kind": "paint"
         },
         "pixels": {
-          "file": "png/brush-library.14.png",
+          "file": "png/brush-library.21.png",
           "width": 48,
           "height": 32,
           "sha256": "0f61aeb875b68014c6a686332fe0260b6299ffad8691396b95bdbde8f898672f",
