@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { geminiContents } from "./adapters/gemini.ts";
-import { createBrushSession, strokeColour, strokePng, WITHHELD_TOOLS } from "./host.ts";
+import { createBrushSession, strokePng, WITHHELD_TOOLS } from "./host.ts";
 import { inkColour, readPng, strokeSimilarity, isBlank } from "./image.ts";
 import { judgeScore, parseJudge } from "./judge.ts";
 import { commandResponse, createModel, oracleCalls, wireRequest } from "./models.ts";
@@ -108,11 +108,9 @@ describe("the brush session", () => {
 });
 
 describe("stroke colour", () => {
-  it("draws a light / dark default in the side for its paper, as the brush UI does", async () => {
+  it("draws a light / dark default in the side for its paper, as preview_brush and the brush UI do", async () => {
     const s = createBrushSession("paint");
     await s.call("create_brush", { id: "rust", name: "Rust", basedOn: "crayon", colour: { default: { light: "#a0402a", dark: "#c8603f" } } });
-    const brush = (await s.library.get("rust"))!.brush;
-    expect(strokeColour(brush)).toBe("#a0402a");
     const [r, g, b] = inkColour(readPng((await strokePng(s, "rust")).png));
     expect(r).toBeGreaterThan(g + 20);
     expect(r).toBeGreaterThan(b + 20);

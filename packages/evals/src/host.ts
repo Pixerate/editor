@@ -1,4 +1,4 @@
-import { BRUSH_HOST_PROFILES, BRUSH_PRESETS, brushPreviewsOnDark, createBrushLibrary, createBrushLibraryToolProvider, type Brush, type BrushLibrary } from "@pixerate/editor/brushes";
+import { BRUSH_HOST_PROFILES, BRUSH_PRESETS, brushPreviewColours, createBrushLibrary, createBrushLibraryToolProvider, type BrushLibrary } from "@pixerate/editor/brushes";
 import { renderCanvasBrushPreview } from "@pixerate/editor/canvas";
 import { paintBrushPreviewRenderer } from "@pixerate/editor/paint-editor";
 import { ToolRegistry } from "@pixerate/editor/tools";
@@ -48,35 +48,23 @@ export function createBrushSession(host: BrushHost, holdOut?: string): BrushSess
 export const SHEET = { width: 512, height: 160 } as const;
 
 /**
- * The colour a brush's sample stroke is drawn in: its own default, with a light / dark pair
- * resolved for what the preview is drawn on (the dark side for light brushes, which preview on dark
- * paper), as the brush UI does; else the tool's default. `preview_brush` itself only takes a plain
- * hex default and draws a pair in its fallback colour, which would grade a rust-red pair as slate.
- */
-export function strokeColour(brush: Brush): string | undefined {
-  const own = brush.kind === "mark" ? brush.colour?.default : undefined;
-  const hex = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{6}/i.test(v) ? v.slice(0, 7) : undefined);
-  if (typeof own === "string") return hex(own);
-  if (own && typeof own === "object" && "light" in own && "dark" in own) return hex(brushPreviewsOnDark(brush) ? own.dark : own.light);
-  return undefined;
-}
-
-/**
- * Draws `id`'s sample stroke in its own colour (see {@link strokeColour}) with the session's
- * renderer, as PNG bytes. Should the host's renderer refuse a brush, the paint engine draws it
- * instead and `fallback` says why: the grade should not punish the model for the renderer.
+ * Draws `id`'s sample stroke with the session's `preview_brush`, in the colour it picks (the
+ * brush's own, a light / dark pair resolved for the paper, as `brushPreviewColours` does), so the
+ * graded stroke is the one the model saw. Should the host's renderer refuse a brush, the paint
+ * engine draws it instead and `fallback` says why: the grade should not punish the model for the
+ * renderer.
  */
 export async function strokePng(session: BrushSession, id: string): Promise<{ png: Buffer; fallback?: string }> {
-  const entry = await session.library.get(id);
-  const colour = entry ? strokeColour(entry.brush) : undefined;
-  const r = await session.call("preview_brush", { id, ...SHEET, ...(colour && { color: colour }) });
+  const r = await session.call("preview_brush", { id, ...SHEET });
   if (!r.isError) {
     const image = r.content.find((c) => c.type === "image") as { data: string } | undefined;
     if (!image) throw new Error(`preview_brush ${id} returned no image.`);
     return { png: Buffer.from(image.data, "base64") };
   }
   const why = (r.content[0] as { text?: string })?.text ?? "failed";
+  const entry = await session.library.get(id);
   if (!entry) throw new Error(`preview_brush ${id}: ${why}`);
-  const image = await paintBrushPreviewRenderer()(entry.brush, { ...SHEET, color: colour ?? "#1f2937" });
+  const render = paintBrushPreviewRenderer();
+  const image = await render(entry.brush, { ...SHEET, color: brushPreviewColours(entry.brush, { paper: render.paper }).color });
   return { png: Buffer.from(image.data, "base64"), fallback: why };
 }

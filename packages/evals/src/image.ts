@@ -38,8 +38,9 @@ const medianColour = (px: readonly [number, number, number][]): [number, number,
  */
 function backdrop(p: Picture): { rows: [number, number, number][]; noise: number } {
   const rows = marginRows(p).map(medianColour);
-  // How far the paper strays from its colour (its grain): the 99th percentile over the top and
-  // bottom 4 rows, which no preview's stroke reaches. (The margins can hold a stroke's ends.)
+  // How far the paper strays from its colour (its grain), over the top and bottom 4 rows: twice
+  // the 90th percentile, which reads like the 99th of paper grain but is not moved by a thin
+  // stroke whose curve crosses those rows (a vector preview's S runs almost edge to edge).
   const band = Math.min(4, Math.floor(p.height / 8));
   const d: number[] = [];
   for (let y = 0; y < p.height; y++) {
@@ -49,7 +50,7 @@ function backdrop(p: Picture): { rows: [number, number, number][]; noise: number
     for (const px of row) d.push(dist(px, c));
   }
   d.sort((a, b) => a - b);
-  return { rows, noise: d[Math.floor(d.length * 0.99)] ?? 0 };
+  return { rows, noise: 2 * (d[Math.floor(d.length * 0.9)] ?? 0) };
 }
 
 /** The colour behind the stroke: the median of every row's margins (alpha composited over white). */
@@ -68,7 +69,7 @@ const dist = (a: readonly number[], b: readonly number[]) => Math.hypot(a[0]! - 
 /** Pixels that differ from what lies under them by more than the paper's grain does (and at least 16 of 441 in RGB): the marks. */
 export function inkMask(p: Picture): Uint8Array {
   const { rows, noise } = backdrop(p);
-  const threshold = Math.max(16, noise * 1.25);
+  const threshold = Math.max(16, noise);
   const mask = new Uint8Array(p.width * p.height);
   for (let i = 0; i < mask.length; i++) mask[i] = dist(rgbOver(p, i * 4), rows[Math.floor(i / p.width)]!) > threshold ? 1 : 0;
   return mask;
