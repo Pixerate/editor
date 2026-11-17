@@ -1,5 +1,4 @@
 ---
-"@pixerate/editor": patch
 ---
 
-Add conditional CI SwiftUI preview screenshot rendering (`PreviewSnapshotTests` + `.github/workflows/preview-screenshots.yml`).
+CI renders the `PixerateChartUI` SwiftUI previews into `docs/previews/` (`PreviewSnapshotTests` + `.github/workflows/preview-screenshots.yml`).
