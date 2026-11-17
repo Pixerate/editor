@@ -1,0 +1,419 @@
+[
+  {
+    "name": "issue example: a banned term, a title-case heading and a slash date",
+    "source": "# Our New Release Plan\n\nWe utilize the tool from 3/4/2026 onwards.\n",
+    "profile": {
+      "headingCase": "sentence",
+      "terms": [
+        {
+          "avoid": "utilize",
+          "use": "use"
+        }
+      ],
+      "dateFormat": "day-month-year",
+      "checks": [
+        "heading-case",
+        "terms",
+        "date-format"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "text": "Our New Release Plan",
+          "from": 2,
+          "to": 22
+        },
+        {
+          "kind": "paragraph",
+          "text": "We utilize the tool from 3/4/2026 onwards.",
+          "from": 24,
+          "to": 66
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Our New Release Plan\" is not in sentence case; write \"Our new release plan\".",
+          "from": 6,
+          "to": 22,
+          "replacement": "new release plan"
+        },
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"utilize\"; write \"use\".",
+          "from": 27,
+          "to": 34,
+          "replacement": "use"
+        },
+        {
+          "check": "date-format",
+          "severity": "warning",
+          "message": "3/4/2026 can be read as two different dates; write it as 12 November YYYY-style.",
+          "from": 49,
+          "to": 57
+        }
+      ],
+      "fixed": "# Our new release plan\n\nWe use the tool from 3/4/2026 onwards.\n"
+    }
+  },
+  {
+    "name": "emphasis and links keep their syntax",
+    "source": "## The **Big** Launch\n\nRead [the Utilize guide](https://example.com/utilize) to *utilize* it.\n",
+    "profile": {
+      "headingCase": "sentence",
+      "terms": [
+        {
+          "avoid": "utilize",
+          "use": "use"
+        }
+      ],
+      "checks": [
+        "heading-case",
+        "terms"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 2,
+          "text": "The Big Launch",
+          "from": 3,
+          "to": 21
+        },
+        {
+          "kind": "paragraph",
+          "text": "Read the Utilize guide to utilize it.",
+          "from": 23,
+          "to": 93
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"The Big Launch\" is not in sentence case; write \"The big launch\".",
+          "from": 9,
+          "to": 21,
+          "replacement": "big** launch"
+        },
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"Utilize\"; write \"Use\".",
+          "from": 33,
+          "to": 40,
+          "replacement": "Use"
+        },
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"utilize\"; write \"use\".",
+          "from": 81,
+          "to": 88,
+          "replacement": "use"
+        }
+      ],
+      "fixed": "## The **big** launch\n\nRead [the Use guide](https://example.com/utilize) to *use* it.\n"
+    }
+  },
+  {
+    "name": "code, math, HTML, tables and front matter are not prose",
+    "source": "---\ntitle: \"Utilize\"\n---\n\nUse `utilize()` and $x = \"y\"$ here, not utilize.\n\n```\nutilize \"quoted\"\n```\n\n| a | utilize |\n|---|---|\n| \"b\" | c |\n\n<div>utilize \"x\"</div>\n",
+    "profile": {
+      "quotes": "curly",
+      "terms": [
+        {
+          "avoid": "utilize",
+          "use": "use"
+        }
+      ],
+      "checks": [
+        "quotes",
+        "terms"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Use ￼ and ￼ here, not utilize.",
+          "from": 26,
+          "to": 74
+        }
+      ],
+      "findings": [
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"utilize\"; write \"use\".",
+          "from": 66,
+          "to": 73,
+          "replacement": "use"
+        }
+      ],
+      "fixed": "---\ntitle: \"Utilize\"\n---\n\nUse `utilize()` and $x = \"y\"$ here, not use.\n\n```\nutilize \"quoted\"\n```\n\n| a | utilize |\n|---|---|\n| \"b\" | c |\n\n<div>utilize \"x\"</div>\n"
+    }
+  },
+  {
+    "name": "list endings, quotes in a block quote, setext headings and levels",
+    "source": "Setext Heading Here\n===================\n\n#### Too Deep\n\n- First item.\n- Second item\n  continues here.\n- [ ] A task\n\n> She said \"hello\" to me\n",
+    "profile": {
+      "headingCase": "sentence",
+      "maxHeadingLevel": 3,
+      "listItemEnd": "none",
+      "quotes": "curly",
+      "checks": [
+        "heading-case",
+        "heading-levels",
+        "list-punctuation",
+        "quotes"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "text": "Setext Heading Here￼",
+          "from": 0,
+          "to": 39
+        },
+        {
+          "kind": "heading",
+          "level": 4,
+          "text": "Too Deep",
+          "from": 46,
+          "to": 54
+        },
+        {
+          "kind": "listItem",
+          "text": "First item.",
+          "from": 58,
+          "to": 69
+        },
+        {
+          "kind": "listItem",
+          "text": "Second item continues here.",
+          "from": 72,
+          "to": 101
+        },
+        {
+          "kind": "listItem",
+          "text": "A task",
+          "from": 108,
+          "to": 114
+        },
+        {
+          "kind": "quote",
+          "text": "She said \"hello\" to me",
+          "from": 118,
+          "to": 140
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Setext Heading Here￼\" is not in sentence case; write \"Setext heading here￼\".",
+          "from": 7,
+          "to": 19,
+          "replacement": "heading here￼"
+        },
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Too Deep\" is not in sentence case; write \"Too deep\".",
+          "from": 50,
+          "to": 54,
+          "replacement": "deep"
+        },
+        {
+          "check": "heading-levels",
+          "severity": "warning",
+          "message": "Heading \"Too Deep\" is level 4; the house style goes to level 3. Promote it or make it bold text.",
+          "from": 46,
+          "to": 54
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"First item.\" ends with a full stop; house list items have none.",
+          "from": 68,
+          "to": 69,
+          "replacement": ""
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"Second item continues here.\" ends with a full stop; house list items have none.",
+          "from": 100,
+          "to": 101,
+          "replacement": ""
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"She said \"hello\" to me\".",
+          "from": 127,
+          "to": 128,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"She said \"hello\" to me\".",
+          "from": 133,
+          "to": 134,
+          "replacement": "”"
+        }
+      ],
+      "fixed": "Setext heading here￼\n===================\n\n#### Too deep\n\n- First item\n- Second item\n  continues here\n- [ ] A task\n\n> She said “hello” to me\n"
+    }
+  },
+  {
+    "name": "numbers and dates",
+    "source": "We sold 12345 units on 2026-11-12 and 1,234,567 more by November 3, 2026.\n",
+    "profile": {
+      "thousandsSeparator": "thin",
+      "dateFormat": "day-month-year",
+      "checks": [
+        "number-format",
+        "date-format"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "We sold 12345 units on 2026-11-12 and 1,234,567 more by November 3, 2026.",
+          "from": 0,
+          "to": 73
+        }
+      ],
+      "findings": [
+        {
+          "check": "number-format",
+          "severity": "info",
+          "message": "Write 12345 as 12 345 (thin spaces).",
+          "from": 8,
+          "to": 13,
+          "replacement": "12 345"
+        },
+        {
+          "check": "number-format",
+          "severity": "info",
+          "message": "Write 1,234,567 as 1 234 567 (thin spaces).",
+          "from": 39,
+          "to": 44,
+          "replacement": " 234 "
+        },
+        {
+          "check": "date-format",
+          "severity": "info",
+          "message": "Write 2026-11-12 as 12 November 2026.",
+          "from": 23,
+          "to": 33,
+          "replacement": "12 November 2026"
+        },
+        {
+          "check": "date-format",
+          "severity": "info",
+          "message": "Write November 3, 2026 as 3 November 2026.",
+          "from": 56,
+          "to": 67,
+          "replacement": "3 November"
+        }
+      ],
+      "fixed": "We sold 12 345 units on 12 November 2026 and 1 234 567 more by 3 November 2026.\n"
+    }
+  },
+  {
+    "name": "a case change across emphasis keeps the markers",
+    "source": "# Planning **For** Q3 _Next_ Steps\n",
+    "profile": {
+      "headingCase": "sentence",
+      "checks": [
+        "heading-case"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "text": "Planning For Q3 Next Steps",
+          "from": 2,
+          "to": 34
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Planning For Q3 Next Steps\" is not in sentence case; write \"Planning for Q3 next steps\".",
+          "from": 13,
+          "to": 34,
+          "replacement": "for** Q3 _next_ steps"
+        }
+      ],
+      "fixed": "# Planning **for** Q3 _next_ steps\n"
+    }
+  },
+  {
+    "name": "periods appended before closing emphasis, UTF-16 offsets after emoji",
+    "source": "😀 Intro\n\n* Ship it **now**\n* 🚀 Launch [the plan](#plan)\n",
+    "profile": {
+      "listItemEnd": "period",
+      "checks": [
+        "list-punctuation"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "😀 Intro",
+          "from": 0,
+          "to": 8
+        },
+        {
+          "kind": "listItem",
+          "text": "Ship it now",
+          "from": 12,
+          "to": 27
+        },
+        {
+          "kind": "listItem",
+          "text": "🚀 Launch the plan",
+          "from": 30,
+          "to": 57
+        }
+      ],
+      "findings": [
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"Ship it now\" has no full stop; house list items end with one.",
+          "from": 27,
+          "to": 27,
+          "replacement": "."
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"🚀 Launch the plan\" has no full stop; house list items end with one.",
+          "from": 57,
+          "to": 57,
+          "replacement": "."
+        }
+      ],
+      "fixed": "😀 Intro\n\n* Ship it **now**.\n* 🚀 Launch [the plan](#plan).\n"
+    }
+  }
+]

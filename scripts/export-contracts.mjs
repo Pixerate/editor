@@ -10,6 +10,7 @@
 //   chart    `chartContracts()` from `@pixerate/editor/chart` → packages/conformance/domains/chart/
 //   agent-text  `agentTextContracts()` from `@pixerate/editor/tools` (how an agent's text edit is played out) → packages/conformance/domains/agent-text/
 //   text-mechanics  `textMechanicsContracts()` from `@pixerate/editor/tools` (punctuation, casing and spelling checks as typing scenarios) → packages/conformance/domains/text-mechanics/
+//   markdown-style  `markdownStyleContracts()` from `@pixerate/editor/tools` (house style on Markdown source) → packages/conformance/domains/markdown-style/
 //
 // Usage: node scripts/export-contracts.mjs [--check]   (--check writes nothing and exits 1 when a file is out of date)
 
@@ -37,7 +38,7 @@ const { paintContracts } = await core("paint-editor/index.js");
 const { vectorContracts } = await core("vector/index.js");
 const { chartContracts } = await core("chart/index.js");
 const { createFakeEffectProvider } = await core("effects/index.js");
-const { agentTextContracts, textMechanicsContracts } = await core("tools/index.js");
+const { agentTextContracts, textMechanicsContracts, markdownStyleContracts } = await core("tools/index.js");
 
 const domains = {
   brushes: brushContracts(),
@@ -46,6 +47,7 @@ const domains = {
   chart: chartContracts(),
   "agent-text": agentTextContracts(),
   "text-mechanics": textMechanicsContracts(),
+  "markdown-style": markdownStyleContracts(),
 };
 let stale = 0;
 for (const [domain, files] of Object.entries(domains)) {

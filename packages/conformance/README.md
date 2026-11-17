@@ -108,6 +108,19 @@ controller's state with the default options (id prefix `ve-`, no viewport cullin
 part of the contract, and lays out text with the metric shaper (`createMetricTextShaper`).
 Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
 
+### `domains/markdown-style`
+
+House style on Markdown source (#890), from `markdownStyleContracts()` in `@pixerate/editor/tools`:
+the document (`rich-text`) checks run on the prose of a Markdown text, with positions as UTF-16
+offsets of the source. Not yet ported to Swift.
+
+- `manifest.json`: the domain, `formatVersion` and the checks it covers.
+- `cases.json`: each case's Markdown `source` and resolved `rich-text.json` `profile` (its `checks`
+  say which run, in order), and what it must produce: the `blocks` the reader finds (kind, heading
+  level, plain text with syntax left out, inline atoms as U+FFFC and soft breaks as spaces, source
+  `from` / `to`), the `findings` (check, severity, message, source range and, when certain, the
+  replacement narrowed to the words it changes) and the `fixed` text after every certain fix.
+
 ## Format
 
 Every file is JSON, written with two-space indents and a final newline, so a change shows up as
