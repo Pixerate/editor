@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.337.3
+
+### Patch Changes
+
+- 85a243c: The brush skills no longer warn that `basedOn` keeps the base preset's `family` or that the vector host can't preview wet paint: both are fixed.
+
 ## 0.337.2
 
 ### Patch Changes
