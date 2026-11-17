@@ -154,3 +154,9 @@ swift test
 
 # 7. Record any newly discovered pitfalls or workarounds in GOTCHAS.md
 ```
+
+## SwiftUI Dynamic Previews
+When adding or modifying SwiftUI `View`s, include Xcode dynamic previews per [Previews in Xcode](https://developer.apple.com/documentation/swiftui/previews-in-xcode):
+- Use the `#Preview` macro (not legacy `PreviewProvider`).
+- Use `@Previewable` with `@State` / `@Bindable` for interactive bindings instead of `.constant(...)` or custom wrapper structs.
+- Use `PreviewModifier` for shared preview environments/dependencies, and `#Preview(traits:)` or `#Preview(arguments:)` to cover key states and layout variants.
