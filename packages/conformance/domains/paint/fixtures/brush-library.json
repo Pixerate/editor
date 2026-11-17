@@ -346,9 +346,183 @@
       },
       "expect": {
         "result": {
+          "color": "#1e293b",
           "height": 24,
           "id": "my-pen",
           "width": 64
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "rust-conte",
+        "name": "Rust Conté",
+        "basedOn": "ink-pen",
+        "colour": {
+          "default": {
+            "light": "#a0402a",
+            "dark": "#c8603f"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": {
+                "dark": "#c8603f",
+                "light": "#a0402a"
+              }
+            },
+            "dynamics": {
+              "minSize": 0.25,
+              "pressureSmoothing": 0.4,
+              "smoothing": 0.5,
+              "velocitySize": -0.45
+            },
+            "family": "ink",
+            "id": "rust-conte",
+            "kind": "mark",
+            "medium": "ink",
+            "name": "Rust Conté",
+            "tip": {
+              "shape": "round",
+              "size": 4,
+              "spacing": 0.05
+            },
+            "variety": "pen"
+          },
+          "engine": "dab",
+          "id": "rust-conte",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "preview_brush",
+      "arguments": {
+        "id": "rust-conte",
+        "width": 64,
+        "height": 24
+      },
+      "expect": {
+        "result": {
+          "color": "#a0402a",
+          "height": 24,
+          "id": "rust-conte",
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "create_brush",
+      "arguments": {
+        "id": "violet-neon",
+        "name": "Violet neon",
+        "basedOn": "neon-marker",
+        "colour": {
+          "default": {
+            "light": "#6d28d9",
+            "dark": "#e9d5ff"
+          }
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "colour": {
+              "default": {
+                "dark": "#e9d5ff",
+                "light": "#6d28d9"
+              },
+              "palette": [
+                "#f0abfc",
+                "#22d3ee",
+                "#a3e635",
+                "#fb7185",
+                "#fde047"
+              ]
+            },
+            "dynamics": {
+              "pressureSize": false,
+              "smoothing": 0.45
+            },
+            "family": "glow",
+            "id": "violet-neon",
+            "kind": "mark",
+            "light": {
+              "amount": 1
+            },
+            "medium": "ink",
+            "name": "Violet neon",
+            "tip": {
+              "hardness": 0.9,
+              "shape": "round",
+              "size": 10,
+              "spacing": 0.04
+            },
+            "variety": "neon"
+          },
+          "engine": "dab",
+          "id": "violet-neon",
+          "problems": [],
+          "warnings": []
+        }
+      }
+    },
+    {
+      "tool": "preview_brush",
+      "arguments": {
+        "id": "violet-neon",
+        "width": 64,
+        "height": 24
+      },
+      "expect": {
+        "result": {
+          "color": "#e9d5ff",
+          "height": 24,
+          "id": "violet-neon",
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "preview_brush",
+      "arguments": {
+        "id": "neon-marker",
+        "width": 64,
+        "height": 24
+      },
+      "expect": {
+        "result": {
+          "color": "#e2e8f0",
+          "height": 24,
+          "id": "neon-marker",
+          "width": 64
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "rust-conte"
+      },
+      "expect": {
+        "result": {
+          "removed": "rust-conte"
+        }
+      }
+    },
+    {
+      "tool": "remove_brush",
+      "arguments": {
+        "id": "violet-neon"
+      },
+      "expect": {
+        "result": {
+          "removed": "violet-neon"
         }
       }
     },
@@ -688,7 +862,7 @@
           "strokeId": "s1"
         },
         "pixels": {
-          "file": "png/brush-library.19.png",
+          "file": "png/brush-library.26.png",
           "width": 48,
           "height": 32,
           "sha256": "0f61aeb875b68014c6a686332fe0260b6299ffad8691396b95bdbde8f898672f",
@@ -905,7 +1079,7 @@
           "kind": "paint"
         },
         "pixels": {
-          "file": "png/brush-library.21.png",
+          "file": "png/brush-library.28.png",
           "width": 48,
           "height": 32,
           "sha256": "0f61aeb875b68014c6a686332fe0260b6299ffad8691396b95bdbde8f898672f",

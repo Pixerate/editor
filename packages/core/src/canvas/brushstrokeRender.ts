@@ -18,7 +18,7 @@ import { isDualColor } from '../color/dual.js';
 import { parseCssColor } from '../image-editor/layers/css-color.js';
 import { resolveCanvasGradient } from './gradient.js';
 import { formatNumber, getShapeSvg, type ShapeSize } from './shapeGeometry.js';
-import { pathDataToPolyline, type BrushedPathShape, type CanvasBrushSwatchOptions, type CanvasBrush, type CanvasBrushPaint, type CanvasBrushPreset, type CanvasBrushSpec, type CanvasBrushstrokeImage } from './brushstroke.js';
+import { brushPreviewPoints, pathDataToPolyline, type BrushedPathShape, type CanvasBrushSwatchOptions, type CanvasBrush, type CanvasBrushPaint, type CanvasBrushPreset, type CanvasBrushSpec, type CanvasBrushstrokeImage } from './brushstroke.js';
 
 // What the canvas profile admits (dry dab brushes; no light, which needs the paint editor's light
 // channel), as the engine brushes the presets resolve to.
@@ -188,10 +188,8 @@ export function brushSwatchNow(brush: CanvasBrush, options: CanvasBrushSwatchOpt
 	const own = typeof brush === 'string' ? resolveCanvasBrush(brush, undefined, spec) : resolveCanvasBrush(brush, brush.size);
 	const tip = 'tip' in own && own.tip ? own.tip.size ?? 3 : (own as { size?: number }).size ?? 3;
 	const size = Math.max(1.5, Math.min(tip, h * 0.55));
-	const pad = size / 2 + 2;
 	// A gentle S across the swatch, swelling in the middle.
-	const pts = Array.from({ length: 9 }, (_, i) => [pad + ((w - 2 * pad) * i) / 8, h / 2 + Math.sin((i / 8) * Math.PI * 2) * (h / 2 - pad) * 0.6] as const);
-	const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
+	const d = brushPreviewPoints(w, h, size).map(({ x, y }, i) => `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`).join(' ');
 	const image = renderShapeBrushstrokeNow(
 		{ kind: 'path', d, stroke: options.color ?? swatchColour(brush, options.background, spec), strokeWidth: size, brush: { brush, ...(spec ? { spec } : {}), seed: 7, size, pressure: [0.35, 1, 0.5] } },
 		options.scale && options.scale > 0 ? options.scale : 2

@@ -3588,7 +3588,7 @@ public struct PreviewBrushArguments: Sendable {
     public var width: Int?
     /// Image height in px (default 96).
     public var height: Int?
-    /// Paint colour #rrggbb (default the brush's own default colour, else #1f2937).
+    /// Paint colour #rrggbb, drawn as given (default: the brush's own default colour resolved for the paper, else a colour for its medium, kept readable on the paper).
     public var color: String?
 
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
