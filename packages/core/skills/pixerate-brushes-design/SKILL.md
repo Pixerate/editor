@@ -96,13 +96,6 @@ channel: "darkness" }` → `create_brush` `{ id: "scan-charcoal", name: "Scan ch
   also takes `wet`) or start from a dry preset.
 - **Lists replace.** Giving `colour.palette` or `tip.stamps` replaces the whole list; include
   every entry you want.
-- **The base's family sticks.** `basedOn` copies the base's `family`, so a brush whose new facets
-  make it another kind of paint keeps the old one: `impasto-brush` with `behaviour.thick.metallic`
-  1 still files under `thick`, `ink-pen` with `light` under `ink`. Base on a preset of the family
-  you want (`list_brush_presets` with `family`), or set `family` too; `describe_brush` shows it.
-- **Previews on the vector host.** `preview_brush` there draws a canvas stroke, which refuses
-  wet paint, the Mixer Brush, smudge and blender, though vector strokes take them. Trust
-  `check_brush` with `host: "vector"` for those, not the preview's refusal.
 - **Changing a built-in.** `update_brush` refuses built-ins; duplicate first.
 
 ## Tools used
