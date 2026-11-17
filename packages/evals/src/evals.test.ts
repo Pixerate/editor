@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { geminiContents } from "./adapters/gemini.ts";
-import { createBrushSession, strokePng, WITHHELD_TOOLS } from "./host.ts";
-import { readPng, strokeSimilarity, isBlank } from "./image.ts";
+import { createBrushSession, strokeColour, strokePng, WITHHELD_TOOLS } from "./host.ts";
+import { inkColour, readPng, strokeSimilarity, isBlank } from "./image.ts";
 import { judgeScore, parseJudge } from "./judge.ts";
 import { commandResponse, createModel, oracleCalls, wireRequest } from "./models.ts";
 import { systemPrompt, SKILLS, readSkill } from "./prompt.ts";
@@ -107,6 +107,24 @@ describe("the brush session", () => {
   });
 });
 
+describe("stroke colour", () => {
+  it("draws a light / dark default in the side for its paper, as the brush UI does", async () => {
+    const s = createBrushSession("paint");
+    await s.call("create_brush", { id: "rust", name: "Rust", basedOn: "crayon", colour: { default: { light: "#a0402a", dark: "#c8603f" } } });
+    const brush = (await s.library.get("rust"))!.brush;
+    expect(strokeColour(brush)).toBe("#a0402a");
+    const [r, g, b] = inkColour(readPng((await strokePng(s, "rust")).png));
+    expect(r).toBeGreaterThan(g + 20);
+    expect(r).toBeGreaterThan(b + 20);
+  });
+
+  it("passes a colour check on the light side of a pair", async () => {
+    const t = task("dry-conte-canvas");
+    const d = { brush: { colour: { default: { light: "#a0402a", dark: "#f1e6d6" } } } };
+    expect(facetChecks(t.checks!.filter((c) => c.why === "rust red"), d)[0]!.pass).toBe(true);
+  });
+});
+
 describe("stroke similarity", () => {
   it("is 1 for the same stroke and lower for a different brush", async () => {
     const s = createBrushSession("paint");
@@ -114,6 +132,17 @@ describe("stroke similarity", () => {
     const pencil = readPng((await strokePng(s, "pencil-hb")).png);
     expect(strokeSimilarity(wash, wash).overall).toBeCloseTo(1, 5);
     expect(strokeSimilarity(pencil, wash).overall).toBeLessThan(0.6);
+  });
+
+  it("compares strokes of different sizes, as canvas and vector previews of different brushes are", async () => {
+    const s = createBrushSession("canvas");
+    await s.call("create_brush", { id: "fat-chalk", name: "Fat chalk", basedOn: "chalk", tip: { size: 40 } });
+    const chalk = readPng((await strokePng(s, "chalk")).png);
+    const fat = readPng((await strokePng(s, "fat-chalk")).png);
+    expect([fat.width, fat.height]).not.toEqual([chalk.width, chalk.height]);
+    const sim = strokeSimilarity(fat, chalk);
+    expect(sim.overall).toBeGreaterThan(0.4);
+    expect(sim.overall).toBeLessThan(1);
   });
 });
 

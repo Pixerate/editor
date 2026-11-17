@@ -2,9 +2,12 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { BRUSH_HOSTS, BRUSH_TYPES, type BrushHost, type BrushType, type EvalTask, type FacetCheck, type TaskMode } from "./types.ts";
 
-/** A colour test for `$expr` checks: `v` is `#rrggbb`, `r`, `g`, `b` are 0–255. */
+/**
+ * A colour test for `$expr` checks: `r`, `g`, `b` are 0–255. The value is `#rrggbb`, or a light /
+ * dark pair, whose light side (the colour on the paper the request means) is tested.
+ */
 const colour = (test: string): FacetCheck["expect"] => ({
-  $expr: `typeof v === 'string' && /^#[0-9a-f]{6}/i.test(v) && (([r, g, b]) => ${test})([1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)))`,
+  $expr: `((c) => typeof c === 'string' && /^#[0-9a-f]{6}/i.test(c) && (([r, g, b]) => ${test})([1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16))))(v && typeof v === 'object' ? v.light : v)`,
 });
 const defaultColour = (why: string, test: string): FacetCheck => ({ why, expect: { brush: { colour: { default: colour(test) } } } });
 
@@ -54,10 +57,11 @@ const SCRATCH: Scratch[] = [
     brief: "For the image editor: a soft chalk-pastel brush in off-white for adding grainy texture and highlights to photos.",
     checks: [
       { why: "a dry medium", expect: { brush: { medium: "dry" } } },
-      { why: "grainy", expect: { brush: { behaviour: { grain: { $min: 0.6 } } } } },
+      // The image editor ignores paper grain (behaviour.grain) and tip grain: texture there comes from jitter and scatter.
+      { why: "textured the way the image editor paints (jitter or scatter)", expect: { brush: { dynamics: { $expr: "['sizeJitter', 'opacityJitter', 'angleJitter', 'scatter'].some((k) => (v[k] ?? 0) >= 0.1)" } } } },
       defaultColour("off-white", "r > 225 && g > 225 && b > 215"),
     ],
-    solution: [{ tool: "create_brush", args: { id: "pastel-image", name: "Off-white pastel", basedOn: "soft-pastel", colour: { default: "#f8f6f0" }, behaviour: { grain: 0.85 } } }],
+    solution: [{ tool: "create_brush", args: { id: "pastel-image", name: "Off-white pastel", basedOn: "soft-pastel", colour: { default: "#f8f6f0" }, behaviour: { grain: 0 }, dynamics: { opacityJitter: 0.25, scatter: 0.08 } } }],
   },
   {
     id: "ink-dip-pen",

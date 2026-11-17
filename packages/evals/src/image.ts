@@ -112,24 +112,38 @@ function shrink(mask: Uint8Array, width: number, height: number, f: number): { c
   return { cells, w, h };
 }
 
+/** A mask placed in the middle of a larger `width` × `height` one (zeros around it). */
+function centre(mask: Uint8Array, w: number, h: number, width: number, height: number): Uint8Array {
+  if (w === width && h === height) return mask;
+  const out = new Uint8Array(width * height);
+  const dx = Math.floor((width - w) / 2);
+  const dy = Math.floor((height - h) / 2);
+  for (let y = 0; y < h; y++) out.set(mask.subarray(y * w, (y + 1) * w), (y + dy) * width + dx);
+  return out;
+}
+
 /**
- * How much a drafted brush's stroke looks like a reference stroke drawn the same way (same path,
- * same size), each 0–1:
+ * How much a drafted brush's stroke looks like a reference stroke drawn the same way (same path),
+ * each 0–1. The canvas and vector previews size the picture to the brush, so pictures of
+ * different sizes are compared centred on the larger one.
  * - `coverage`: how close the amounts of paint are (a thin pen against a wide wash scores low).
  * - `colour`: how close the mean colours of the marks, and the papers, are.
  * - `structure`: overlap (IoU) of where the marks are, on an 8 px grid: the width, edges and scatter.
  * It is rough: it rewards the right width, colour and spread, not the right texture.
  */
 export function strokeSimilarity(candidate: Picture, reference: Picture): { coverage: number; colour: number; structure: number; overall: number } {
-  if (candidate.width !== reference.width || candidate.height !== reference.height) throw new Error("Strokes to compare must be the same size.");
-  const ca = inkCoverage(candidate);
-  const ra = inkCoverage(reference);
+  const width = Math.max(candidate.width, reference.width);
+  const height = Math.max(candidate.height, reference.height);
+  const cm = centre(inkMask(candidate), candidate.width, candidate.height, width, height);
+  const rm = centre(inkMask(reference), reference.width, reference.height, width, height);
+  const ca = cm.reduce((s, v) => s + v, 0) / cm.length;
+  const ra = rm.reduce((s, v) => s + v, 0) / rm.length;
   const coverage = Math.max(ca, ra) === 0 ? 1 : Math.min(ca, ra) / Math.max(ca, ra);
   const colourDist = dist(inkColour(candidate), inkColour(reference)) / 441.7;
   const paperDist = dist(paperOf(candidate), paperOf(reference)) / 441.7;
   const colour = Math.max(0, 1 - 1.5 * colourDist) * (1 - 0.5 * Math.min(1, paperDist * 2));
-  const a = shrink(inkMask(candidate), candidate.width, candidate.height, 8);
-  const b = shrink(inkMask(reference), reference.width, reference.height, 8);
+  const a = shrink(cm, width, height, 8);
+  const b = shrink(rm, width, height, 8);
   let both = 0;
   let either = 0;
   for (let i = 0; i < a.cells.length; i++) {
