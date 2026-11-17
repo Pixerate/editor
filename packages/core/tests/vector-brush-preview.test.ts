@@ -28,7 +28,7 @@ describe('renderVectorBrushPreview through preview_brush', () => {
 		const { tools } = setup();
 		const r = await tools.callTool('vectorbrushes__preview_brush', { id, width: 160, height: 64, color: '#1d4ed8' });
 		expect(r.isError).toBeFalsy();
-		expect(r.structuredContent).toEqual({ id, width: 160, height: 64 });
+		expect(r.structuredContent).toEqual({ id, width: 160, height: 64, color: '#1d4ed8' });
 		const image = r.content[0] as { type: string; data: string; mimeType: string };
 		expect(image).toMatchObject({ type: 'image', mimeType: 'image/png' });
 		const { png, painted } = inspect(image.data);

@@ -18,6 +18,7 @@ import { PAINT_FAMILIES, type PaintBrushEngine, type PaintFamily } from '../pain
 import { resolveCategory, resolveEngine, resolveFamily } from './resolve';
 import { BRUSH_JSON_SCHEMA } from './schema';
 import { BRUSH_KINDS, BRUSH_MEDIA, BRUSH_TOOLS, type Brush } from './types';
+import { brushPreviewColours } from './preview';
 import { BRUSH_PACK_FORMATS, importBrushPack, MAX_BRUSH_PACK_BYTES, type BrushPackFormat } from './import/pack';
 import { base64ToBytes } from '../raster/png';
 import { BRUSH_SOURCE_CHANNELS, brushSourceIdOf, brushSourceIds, brushSourceRef, isBrushSourceRef, MAX_BRUSH_SOURCE_INPUT_PIXELS, MAX_BRUSH_SOURCE_SIZE, summarizeBrushSource } from './sources';
@@ -321,14 +322,14 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
     tools.push({
       name: 'preview_brush',
       title: 'Preview a brush',
-      description: 'Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Returns the image plus id, width and height. Changes nothing.',
+      description: `Draws a sample S-stroke with a brush (by id) on a plain background and returns it as an image, to see a brush before painting with it or after create_brush / update_brush. Without color it draws in the brush's own default colour (a light / dark pair takes the side for the paper it is drawn on), else a colour for its medium, made darker or lighter until it reads on that paper, as the brush panel shows it. Returns the image plus id, width, height and color: the #rrggbb it drew in. Changes nothing.`,
       inputSchema: {
         type: 'object',
         properties: {
           id: ID,
           width: { type: 'integer', minimum: 32, maximum: 1024, description: 'Image width in px (default 256).' },
           height: { type: 'integer', minimum: 16, maximum: 512, description: 'Image height in px (default 96).' },
-          color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Paint colour #rrggbb (default the brush\'s own default colour, else #1f2937).' },
+          color: { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', description: 'Paint colour #rrggbb, drawn as given (default: the brush\'s own default colour resolved for the paper, else a colour for its medium, kept readable on the paper).' },
         },
         required: ['id'],
         additionalProperties: false,
@@ -336,11 +337,12 @@ export function createBrushLibraryTools(library: BrushLibrary, options: BrushLib
       annotations: { title: 'Preview a brush', ...READ },
       handler: async ({ id, width, height, color }) => {
         const { brush } = await entry(id as string);
-        const own = typeof brush.colour?.default === 'string' && /^#[0-9a-f]{6}/i.test(brush.colour.default) ? brush.colour.default.slice(0, 7) : undefined;
         const w = (width as number | undefined) ?? 256;
         const h = (height as number | undefined) ?? 96;
-        const image = await render(brush, { width: w, height: h, color: (color as string | undefined) ?? own ?? '#1f2937' });
-        return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }], structuredContent: { id, width: w, height: h } };
+        // As the brush panel previews it: the brush's colour for the renderer's paper, readable on it.
+        const used = ((color as string | undefined) ?? brushPreviewColours(brush, { profile, paper: render.paper }).color).toLowerCase();
+        const image = await render(brush, { width: w, height: h, color: used });
+        return { content: [{ type: 'image', data: image.data, mimeType: image.mimeType }], structuredContent: { id, width: w, height: h, color: used } };
       },
     });
   }

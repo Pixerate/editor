@@ -184,6 +184,9 @@ public func cssInkSide(_ fill: String, dark: String = "#111111", light: String =
     return cssContrastRatio(d, f) >= cssContrastRatio(l, f) ? "dark" : "light"
 }
 
+/// `oklchToOklab` then `oklabToRgb` (`color/convert.ts`): sRGB channels of an OKLCH colour (h in degrees), unclamped.
+public func cssOklchToRgb(_ l: Double, _ c: Double, _ h: Double, _ alpha: Double = 1) -> CssRgba { oklchToRgb(l, c, h, alpha) }
+
 /// `oklchToOklab` then `oklabToRgb`.
 private func oklchToRgb(_ l: Double, _ c: Double, _ h: Double, _ alpha: Double) -> CssRgba {
     let rad = (h * Double.pi) / 180
