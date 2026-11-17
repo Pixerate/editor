@@ -1,4 +1,4 @@
-import { HOST_WORDS } from "./prompt.ts";
+import { HOST_LIMITS, HOST_WORDS, PREVIEW_COLOUR_NOTE, type ReferenceView } from "./prompt.ts";
 import type { EvalTask, JudgeScores, Model, Part } from "./types.ts";
 
 export const JUDGE_SCHEMA = {
@@ -25,11 +25,14 @@ Score each from 1 to 5:
 Be strict and consistent: 5 is rare. Answer with JSON only: {"fidelity", "medium", "craft", "settings", "notes"}, notes a sentence or two on the biggest problems.`;
 
 /** The judge's request for one drafted brush. */
-export function judgeParts(task: EvalTask, candidate: Buffer, settings: unknown, reference?: Buffer): Part[] {
-  const parts: Part[] = [{ type: "text", text: `Brush type: ${task.type}. It is for ${HOST_WORDS[task.host]}.` }];
+export function judgeParts(task: EvalTask, candidate: { png: Buffer; colour?: string }, settings: unknown, reference?: ReferenceView): Part[] {
+  const limits = HOST_LIMITS[task.host];
+  const parts: Part[] = [{ type: "text", text: `Brush type: ${task.type}. It is for ${HOST_WORDS[task.host]}.${limits ? ` ${limits}` : ""} Strokes are drawn by preview_brush: ${PREVIEW_COLOUR_NOTE}` }];
+  const drawnIn = (c: { colour?: string }, own: boolean) => (c.colour ? ` (drawn in ${c.colour}${own ? "" : ", the preview's fallback: the brush has no colour of its own, so don't grade its colour"})` : "");
   if (task.mode === "scratch") parts.push({ type: "text", text: `Request: ${task.brief}` });
-  else if (reference) parts.push({ type: "text", text: `The reference brush's stroke${task.brief ? ` (notes: ${task.brief})` : ""}:` }, { type: "image", png: reference, label: "Reference" });
-  parts.push({ type: "text", text: "The drafted brush's stroke:" }, { type: "image", png: candidate, label: "Candidate" });
+  else if (reference) parts.push({ type: "text", text: `The reference brush's stroke${drawnIn(reference, reference.ownColour)}${task.brief ? ` (notes: ${task.brief})` : ""}:` }, { type: "image", png: reference.png, label: "Reference" });
+  const own = !!(settings as { colour?: { default?: unknown } } | undefined)?.colour?.default;
+  parts.push({ type: "text", text: `The drafted brush's stroke${drawnIn(candidate, own || task.mode === "scratch")}:` }, { type: "image", png: candidate.png, label: "Candidate" });
   parts.push({ type: "text", text: `Its settings:\n${JSON.stringify(settings, null, 2)}` });
   return parts;
 }

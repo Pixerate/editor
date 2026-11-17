@@ -5,12 +5,12 @@ import { afterAll, describe, expect, it } from "vitest";
 import { geminiContents } from "./adapters/gemini.ts";
 import { createBrushSession, strokePng, WITHHELD_TOOLS } from "./host.ts";
 import { inkColour, readPng, strokeSimilarity, isBlank } from "./image.ts";
-import { judgeScore, parseJudge } from "./judge.ts";
+import { judgeParts, judgeScore, parseJudge } from "./judge.ts";
 import { commandResponse, createModel, oracleCalls, wireRequest } from "./models.ts";
-import { systemPrompt, SKILLS, readSkill } from "./prompt.ts";
+import { systemPrompt, SKILLS, readSkill, taskMessage } from "./prompt.ts";
 import { markdownReport } from "./report.ts";
 import { compareRuns } from "./compare.ts";
-import { facetChecks, overallScore, runSample, typeChecks } from "./run.ts";
+import { facetChecks, overallScore, referenceStroke, runSample, typeChecks } from "./run.ts";
 import { BUILTIN_TASKS, loadTaskFile, selectTasks } from "./tasks.ts";
 import { BRUSH_TYPES, FatalModelError, RESPONSE_MARKER, type EvalTask, type Model, type ModelRequest, type ModelResponse } from "./types.ts";
 
@@ -120,6 +120,28 @@ describe("stroke colour", () => {
     const t = task("dry-conte-canvas");
     const d = { brush: { colour: { default: { light: "#a0402a", dark: "#f1e6d6" } } } };
     expect(facetChecks(t.checks!.filter((c) => c.why === "rust red"), d)[0]!.pass).toBe(true);
+  });
+});
+
+describe("colour hints", () => {
+  it("tell the model the colour a reference was drawn in, and whether it is the brush's own", async () => {
+    const own = await referenceStroke(task("ref-chalk-canvas"), out);
+    const fallback = await referenceStroke(task("ref-watercolor-wash"), out);
+    expect(own).toMatchObject({ ownColour: true, colour: expect.stringMatching(/^#[0-9a-f]{6}$/) });
+    expect(fallback).toMatchObject({ ownColour: false, colour: expect.stringMatching(/^#[0-9a-f]{6}$/) });
+    const text = (parts: ReturnType<typeof taskMessage>) => parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join(" ");
+    expect(text(taskMessage(task("ref-chalk-canvas"), own))).toContain(`drawn in ${own.colour}, from the brush's own default colour`);
+    expect(text(taskMessage(task("ref-watercolor-wash"), fallback))).toMatch(/fallback for its medium: the brush has no default colour of its own/);
+  });
+
+  it("tell the judge what the host ignores and when a colour is only the preview's fallback", async () => {
+    const reference = await referenceStroke(task("ref-watercolor-wash"), out);
+    const text = (parts: ReturnType<typeof judgeParts>) => parts.flatMap((p) => (p.type === "text" ? [p.text] : [])).join(" ");
+    const forImage = text(judgeParts(task("dry-pastel-image"), { png: reference.png, colour: "#8a8478" }, { colour: { default: "#f8f6f0" } }));
+    expect(forImage).toMatch(/ignores paper grain/);
+    expect(forImage).toMatch(/darkens or lightens a colour until it reads/);
+    const forRef = text(judgeParts(task("ref-watercolor-wash"), { png: reference.png, colour: "#1d4ed8" }, {}, reference));
+    expect(forRef.match(/don't grade its colour/g)).toHaveLength(2);
   });
 });
 

@@ -44,6 +44,11 @@ export function createBrushSession(host: BrushHost, holdOut?: string): BrushSess
   return { host, library, registry, tools, call: (name, args = {}) => registry.callTool(name, args) };
 }
 
+/** Whether a brush has a default colour of its own (otherwise its preview is drawn in a fallback for its medium). */
+export function hasOwnColour(brush: { kind?: string; colour?: { default?: unknown } }): boolean {
+  return brush.kind === "mark" && brush.colour?.default !== undefined;
+}
+
 /** The size strokes are drawn at for grading, the judge and references. */
 export const SHEET = { width: 512, height: 160 } as const;
 
@@ -54,17 +59,19 @@ export const SHEET = { width: 512, height: 160 } as const;
  * engine draws it instead and `fallback` says why: the grade should not punish the model for the
  * renderer.
  */
-export async function strokePng(session: BrushSession, id: string): Promise<{ png: Buffer; fallback?: string }> {
+export async function strokePng(session: BrushSession, id: string): Promise<{ png: Buffer; colour?: string; fallback?: string }> {
   const r = await session.call("preview_brush", { id, ...SHEET });
   if (!r.isError) {
     const image = r.content.find((c) => c.type === "image") as { data: string } | undefined;
     if (!image) throw new Error(`preview_brush ${id} returned no image.`);
-    return { png: Buffer.from(image.data, "base64") };
+    const colour = (r.structuredContent as { color?: unknown } | undefined)?.color;
+    return { png: Buffer.from(image.data, "base64"), ...(typeof colour === "string" && { colour }) };
   }
   const why = (r.content[0] as { text?: string })?.text ?? "failed";
   const entry = await session.library.get(id);
   if (!entry) throw new Error(`preview_brush ${id}: ${why}`);
   const render = paintBrushPreviewRenderer();
-  const image = await render(entry.brush, { ...SHEET, color: brushPreviewColours(entry.brush, { paper: render.paper }).color });
-  return { png: Buffer.from(image.data, "base64"), fallback: why };
+  const colour = brushPreviewColours(entry.brush, { paper: render.paper }).color;
+  const image = await render(entry.brush, { ...SHEET, color: colour });
+  return { png: Buffer.from(image.data, "base64"), colour, fallback: why };
 }
