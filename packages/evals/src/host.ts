@@ -1,4 +1,4 @@
-import { BRUSH_HOST_PROFILES, BRUSH_PRESETS, createBrushLibrary, createBrushLibraryToolProvider, type BrushLibrary } from "@pixerate/editor/brushes";
+import { BRUSH_HOST_PROFILES, BRUSH_PRESETS, brushPreviewColours, createBrushLibrary, createBrushLibraryToolProvider, type BrushLibrary } from "@pixerate/editor/brushes";
 import { renderCanvasBrushPreview } from "@pixerate/editor/canvas";
 import { paintBrushPreviewRenderer } from "@pixerate/editor/paint-editor";
 import { ToolRegistry } from "@pixerate/editor/tools";
@@ -48,9 +48,10 @@ export function createBrushSession(host: BrushHost, holdOut?: string): BrushSess
 export const SHEET = { width: 512, height: 160 } as const;
 
 /**
- * Draws `id`'s sample stroke in its own default colour (else the tool's default) with the
- * session's renderer, as PNG bytes. Should the host's renderer refuse a brush, the paint engine
- * draws it instead and `fallback` says why: the grade should not punish the model for the
+ * Draws `id`'s sample stroke with the session's `preview_brush`, in the colour it picks (the
+ * brush's own, a light / dark pair resolved for the paper, as `brushPreviewColours` does), so the
+ * graded stroke is the one the model saw. Should the host's renderer refuse a brush, the paint
+ * engine draws it instead and `fallback` says why: the grade should not punish the model for the
  * renderer.
  */
 export async function strokePng(session: BrushSession, id: string): Promise<{ png: Buffer; fallback?: string }> {
@@ -63,8 +64,7 @@ export async function strokePng(session: BrushSession, id: string): Promise<{ pn
   const why = (r.content[0] as { text?: string })?.text ?? "failed";
   const entry = await session.library.get(id);
   if (!entry) throw new Error(`preview_brush ${id}: ${why}`);
-  const brush = entry.brush;
-  const own = typeof brush.colour?.default === "string" && /^#[0-9a-f]{6}/i.test(brush.colour.default) ? brush.colour.default.slice(0, 7) : "#1f2937";
-  const image = await paintBrushPreviewRenderer()(brush, { ...SHEET, color: own });
+  const render = paintBrushPreviewRenderer();
+  const image = await render(entry.brush, { ...SHEET, color: brushPreviewColours(entry.brush, { paper: render.paper }).color });
   return { png: Buffer.from(image.data, "base64"), fallback: why };
 }
