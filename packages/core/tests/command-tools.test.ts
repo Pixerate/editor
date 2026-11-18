@@ -52,6 +52,9 @@ import { createEffectAuthoringStyleToolProvider, effectAuthoringStyleDomain } fr
 import { createStickerStyleToolProvider, stickerStyleDomain } from '../src/stickers/style';
 import { brushStyleDomain, createBrushStyleToolProvider } from '../src/brushes/style';
 import { richTextStyleDomain, createRichTextStyleToolProvider } from '../src/richTextStyle';
+import { createMarkdownStyleToolProvider } from '../src/tools/markdown-style';
+import { createTextProposalToolProvider } from '../src/tools/text-proposal-tools';
+import { createTextProposals } from '../src/tools/text-proposals';
 import { createTypographyToolProvider, createFontPickerToolProvider, FontPickerModel } from '../src/typography';
 import { GradientController, createGradientToolProvider } from '../src/gradient';
 import { baseToolName } from '../src/tools';
@@ -236,6 +239,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 		}
 		registry.register(createCanvasExplosionToolProvider(canvasExplosionToolTarget(createCanvasExplosionStateController(), { getNodes: () => [] }), { namespace: 'explosion' }));
 		registry.register(createCanvasProposalToolProvider(createCanvasProposals({ getNodes: () => [], getEdges: () => [], setNodes: () => {}, setEdges: () => {} }), { namespace: 'proposals' }));
+		registry.register(createTextProposalToolProvider(createTextProposals({ getText: () => 'x', applyEdit: () => {} }), { namespace: 'textproposals' }));
 		registry.register(createCanvasEdgeAnimationToolProvider({ getEdges: () => [], setEdges: () => {} }, { namespace: 'edgeanim' }));
 		registry.register(createPaintProposalToolProvider(createPaintProposals({ controller: new PaintEditorController({ width: 64, height: 64 }) }), { namespace: 'paintproposals' }));
 		registry.register(createPaintEvolutionToolProvider(new PaintEditorController({ width: 64, height: 64 }), { id: 'paint-evolution', namespace: 'paintevo' }));
@@ -301,6 +305,7 @@ describe('built-in tool providers have complete MCP annotations', () => {
 			});
 			const styleDoc = new Editor({ extensions: createRichTextPreset(), content: '<p>x</p>' });
 			registry.register(createRichTextStyleToolProvider(styleDoc, styles, { namespace: 'richtextstyle' }));
+			registry.register(createMarkdownStyleToolProvider({ getText: () => '# Hi', applyEdits: () => {} }, styles, { namespace: 'mdstyle' }));
 			registry.register(createSpreadsheetStyleToolProvider(new SpreadsheetController({ document: { columns: [{ id: 'c0', key: 'A', title: 'A', type: 'freeform' as const }], rows: [{ id: 'r0', index: 0, type: 'freeform' as const }] } }), styles, { namespace: 'sheetstyle' }));
 			registry.register(createDiagramStyleToolProvider(new DiagramController(), styles, { namespace: 'diagramstyle' }));
 			registry.register(createCanvasStyleToolProvider(styles, { getNodes: () => [], setNodes: () => {}, namespace: 'canvasstyle' }));

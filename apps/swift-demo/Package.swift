@@ -25,5 +25,13 @@ let package = Package(
             path: "Sources/PixerateSwiftDemo",
             swiftSettings: [.enableUpcomingFeature("NonisolatedNonsendingByDefault")]
         ),
+        .testTarget(
+            name: "PixerateSwiftDemoTests",
+            dependencies: [
+                .product(name: "PixerateChartUI", package: "Pixerate"),
+            ],
+            path: "Tests/PixerateSwiftDemoTests",
+            swiftSettings: [.enableUpcomingFeature("NonisolatedNonsendingByDefault")]
+        ),
     ]
 )

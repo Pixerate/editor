@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [core/tools] A Text Listener Hears an Agent's Edit Before the History Says Who Made It (#890)
+
+- **Issue / Symptom**: `createTextChangeFeed` tagged an agent's accepted proposal as `user` when the host's text listener called `check()` directly, though the edit was a history step with `origin: 'agent:<id>'`.
+- **Root Cause**: `HistoryManager.execute` runs the command (which changes the text and fires the host's listeners) before it emits `onCommit`. A synchronous check sees the new text while no commit is pending yet, so the origin falls back to `user`.
+- **Solution / Workaround**: The feed's `subscribe` option checks in a microtask, coalescing notifications, so the commit is noted first. React (`useTextChangeFeed`) and Svelte (`createTextChangeWatcher`) check after render / in an effect, which is already late enough. A host that calls `check()` itself right after an agent's edit should pass the origin (`check('agent:<id>')`) or call `noteOrigin` first. Tests of the feed's `subscribe` path must await a microtask before reading changes.
+
+### [core/tools] Markdown House-Style Fixes Must Be Narrowed, Not Applied Over the Whole Finding (#890)
+
+- **Issue / Symptom**: Applying the `heading-case` fix for `# The **Big** Launch` over the heading's whole range wrote `The big launch` and deleted the `**`; a list item's added full stop landed inside `**now**` or inside a code span's backticks.
+- **Root Cause**: The house-style checks run on plain block text (`markdownStyleState` leaves syntax out) and return a replacement for the whole match. Mapped back to the source, that range spans the syntax between the text pieces, and an append at the end of the text maps to the end of the last piece, before closing syntax.
+- **Solution / Workaround**: `narrowMarkdownStyleTarget` trims each certain fix to the whole words it changes, rewrites same-length changes character by character around syntax, and drops the replacement (leaving the finding uncertain) when it can only apply by changing syntax. Appends go to the end of the block's content (`block.to`, past closing syntax). `richTextBlockPos(block, offset, end)` maps a range's end to the end of the earlier segment so it never takes in the syntax between segments.
+
 ### [swift/paint-ui] AppKit Resets a View's Root Layer `isGeometryFlipped` to Match `isFlipped` (#896)
 
 - **Issue / Symptom**: On macOS, `PaintCanvasView` drew content that spans several tile rows (a placed picture, long strokes) as horizontal 256 px bands, each showing another part of the painting. iOS was unaffected, and exports, `compositeTiles` and `PaintCanvasPresenter` were all correct.

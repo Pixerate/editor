@@ -25,6 +25,23 @@ export * from './markdown-prose.js';
 export * from './text-mechanics.js';
 export * from './text-mechanics-contracts.js';
 export * from './text-mechanics-tools.js';
+export * from './markdown-style.js';
+export * from './markdown-style-contracts.js';
+export * from './text-changes.js';
+export * from './text-proposals.js';
+export * from './text-proposal-tools.js';
+// The document house-style domain has no editor imports, so text hosts can use it from here.
+export {
+	richTextStyleDomain,
+	richTextStyleSurface,
+	richTextHeadingCase,
+	richTextBlockPos,
+	type RichTextStyleBlock,
+	type RichTextStyleRun,
+	type RichTextStyleState,
+	type RichTextStyleProfile,
+	type RichTextStyleTarget
+} from '../richTextStyle.js';
 export * from './playback.js';
 export * from './script.js';
 export * from './style.js';

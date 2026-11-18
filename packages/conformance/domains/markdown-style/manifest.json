@@ -1,0 +1,17 @@
+{
+  "domain": "markdown-style",
+  "formatVersion": 1,
+  "description": "House style (the rich-text domain checks) on Markdown source: the blocks the reader finds, each finding with its UTF-16 source range, message and certain replacement, and the text after every certain fix. The brand's colour and font checks do not apply to Markdown.",
+  "checks": [
+    "heading-case",
+    "heading-levels",
+    "list-punctuation",
+    "quotes",
+    "terms",
+    "number-format",
+    "date-format"
+  ],
+  "files": [
+    "cases.json"
+  ]
+}
