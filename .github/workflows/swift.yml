@@ -38,9 +38,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Three jobs in parallel: the wall time is the slowest one, not the sum. Tests build with -O
+  # Two jobs in parallel: the wall time is the slowest one (iOS), not the sum. Tests build with -O
   # (and testability): the debug-built wet and conformance code ran ~7x slower than the extra
-  # compile time it saves (#533).
+  # compile time it saves (#533). The demo app builds in the macOS job rather than a job of its own,
+  # so a run needs two macOS runners, not three: GitHub's macOS arm64 capacity is short, and a job
+  # that gets no runner is cancelled after ~15 minutes (see GOTCHAS.md).
   macos:
     name: Swift (macOS)
     runs-on: macos-latest
@@ -69,6 +71,13 @@ jobs:
         # Builds every target and test optimised, then runs the tests. Writes the conformance summary
         # (passed / failed / skipped scenarios) to the job summary.
         run: swift test -Xswiftc -O -Xswiftc -enable-testing
+
+      - name: Build the demo app (macOS)
+        # Runs when the tests fail too, so a broken demo still shows as it did in its own job.
+        if: ${{ !cancelled() }}
+        # apps/swift-demo: its own package, on the root package by relative path. It has its own .build
+        # and builds debug, so it can't reuse the optimised test build above: about 1.5-3 minutes more.
+        run: swift build --package-path apps/swift-demo
 
   ios:
     name: Swift (iOS simulator)
@@ -120,17 +129,3 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  demo:
-    name: Swift (demo app)
-    runs-on: macos-latest
-    timeout-minutes: 30
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Build the demo app (macOS)
-        # apps/swift-demo: its own package, on the root package by relative path.
-        run: |
-          swift --version
-          swift build --package-path apps/swift-demo
