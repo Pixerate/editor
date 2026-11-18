@@ -353,9 +353,11 @@ final class AgentTextTests: XCTestCase {
     func testCallsByOneAgentRunOneAfterAnother() async throws {
         let text = FakeText("so i dont")
         let director = AgentTextDirector(target: text, clock: InstantPresenceClock(), linger: 0)
-        async let first = director.perform(AgentTextEdit(from: 0, to: 2, text: "So"), by: pixie)
-        async let second = director.perform(AgentTextEdit(from: 3, to: 4, text: "I"), by: pixie)
-        _ = try await (first, second)
+        // Main-actor tasks start in the order they are made. `async let` children start on the
+        // global executor and race to the main actor, so either call could be queued first.
+        let first = Task { @MainActor in try await director.perform(AgentTextEdit(from: 0, to: 2, text: "So"), by: pixie) }
+        let second = Task { @MainActor in try await director.perform(AgentTextEdit(from: 3, to: 4, text: "I"), by: pixie) }
+        _ = try await (first.value, second.value)
         XCTAssertEqual(text.text, "So I dont")
         XCTAssertEqual(text.commits.map(\.text), ["So", "I"])
     }
