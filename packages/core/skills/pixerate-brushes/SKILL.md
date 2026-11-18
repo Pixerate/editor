@@ -39,7 +39,7 @@ and **wet oil** are `paint` on `surface: 'wet'`; **impasto** is `surface: 'thick
 pressure to size); **crayon** and **chalk** are `dry` with high `grain`; a **highlighter** is
 `ink` / `highlighter`, a multiply chisel tip with a little light, `spill` radius 0, fluorescent
 yellow by default; a **stamp brush** is a `stamp` tip with continuous marks; **particle** and
-**sticker** brushes are `marks` particles or objects on a `stamp` tip. An **image brush** (a
+**sticker** brushes are `marks` particles or objects on a `stamp` tip. **Hair** and **fur** are `marks` particles (`hair-strands`, `flow-fur`), not a bristle tip, which streaks one band of paint. An **image brush** (a
 scanned charcoal mark, a leaf, a dry-brush texture) is a `stamp` tip whose stamp is an image
 source, usually with `tip.grain`, `angleJitter`, `flip` and a little `scatter` so repeats don't
 show.
@@ -58,7 +58,7 @@ paints without (warnings), each with a fix; lists and writes use the current hos
 | Host | Renders |
 | --- | --- |
 | Paint editor (`paint`) | Everything, image tips and tip grain included. |
-| Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, stamp or image tips, light or motion; it paints without tip grain and `count`. Pick one with `set_brush_preset`. |
+| Image editor (`image`) | Dry dabs on round, flat and chisel tips, the Mixer Brush and the eraser; no wet or thick surface, particles, objects, stamp or image tips, light or motion; it paints without paper grain (`behaviour.grain`), tip grain and `count`, so texture there comes from jitter and scatter. Pick one with `set_brush_preset`. |
 | Canvas (`canvas`) | Dry dab brushes along a path (no tools, wet, thick, particles, objects, stamp or image tips, or light); velocity, tip grain and `count` are ignored. Draw with one as `canvas.drawFreehand` `brush`. |
 | Vector strokes (`vector`) | As canvas, plus wet paint (watercolour, gouache, wet oils: simulated in the stroke's own area, then dried), the Mixer Brush, and the smudge and blender tools (acting on the shapes beneath the stroke); light brushes paint as plain colour. The wet tools (water, hair dryer, blow, wet blend, wet drag, blot), thick paint, particles, objects and erasers are refused. Draw with one as `vector.addBrushstroke` `brushId`. |
 

@@ -1,0 +1,14 @@
+{
+	"prompt": "Make a fur brush for painting a fox's coat, saved as fox-fur: each stroke should lay many fine hairs that follow the stroke, in russet orange.",
+	"fixture": { "editor": "brushes" },
+	"checks": [
+		{ "why": "a saved brush the paint editor can use", "tool": "describe_brush", "args": { "id": "fox-fur" }, "expect": { "builtin": false, "check": { "ok": true } } },
+		{ "why": "many fine hairs: strand particles, not a bristle dab", "tool": "describe_brush", "args": { "id": "fox-fur" }, "expect": { "family": "strands", "brush": { "marks": { "kind": "particles" } } } },
+		{ "why": "russet orange", "tool": "describe_brush", "args": { "id": "fox-fur" }, "expect": { "brush": { "colour": { "default": { "$expr": "((c) => typeof c === 'string' && (([r, g, b]) => r > 150 && r > g + 50 && g > b)([1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16))))(v && typeof v === 'object' ? v.light : v)" } } } } }
+	],
+	"solution": [
+		{ "tool": "list_brush_presets", "args": { "family": "strands" } },
+		{ "tool": "create_brush", "args": { "id": "fox-fur", "name": "Fox fur", "basedOn": "flow-fur", "colour": { "default": "#c2410c" } } },
+		{ "tool": "check_brush", "args": { "id": "fox-fur" } }
+	]
+}
