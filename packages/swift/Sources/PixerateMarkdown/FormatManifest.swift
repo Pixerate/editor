@@ -118,8 +118,11 @@ public struct FormatCommandDefinition: Sendable {
     public let enabledWhen: [FormatCondition]
     public let shortcut: FormatShortcut?
     public let variants: [FormatCommandVariant]
+    /// The command's `params` JSON Schema as the manifest writes it (JSON text), or nil when it
+    /// takes none. Agent tools use it as the command's input schema.
+    public let params: String?
 
-    public init(id: String, label: String, group: String, surfaces: Set<FormatSurface>, enabledWhen: [FormatCondition], shortcut: FormatShortcut?, variants: [FormatCommandVariant]) {
+    public init(id: String, label: String, group: String, surfaces: Set<FormatSurface>, enabledWhen: [FormatCondition], shortcut: FormatShortcut?, variants: [FormatCommandVariant], params: String? = nil) {
         self.id = id
         self.label = label
         self.group = group
@@ -127,6 +130,7 @@ public struct FormatCommandDefinition: Sendable {
         self.enabledWhen = enabledWhen
         self.shortcut = shortcut
         self.variants = variants
+        self.params = params
     }
 }
 

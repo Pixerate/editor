@@ -167,7 +167,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createFormatCommands`, `formatCommandsFor`",
         "react": "Via core (`formatCommandsFor`)",
         "svelte": "Via core (`formatCommandsFor`)",
-        "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools planned (#546)"
+        "swift": "`FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools with the web names in PixerateMarkdownTools: `createMarkdownCommandToolProvider` (`list_commands` / `run_command` over `createMarkdownFormatCommands`), `createMarkdownToolProvider` (`get_text`, `find_text`, `replace_range`, `format_text`, `set_block_type`…) and `createMarkdownTextMechanicsToolProvider` (#609)"
       },
       {
         "feature": "Rich Text Preset (Headings, Lists, Task Lists, Links)",
@@ -2631,7 +2631,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`textMechanicsEditsAt`, `textMechanicsFindings`, `textMechanicsCheckedRange` over `markdownProseMap` & `createTextMechanicsToolProvider` (`/tools`)",
         "react": "Via core",
         "svelte": "Via core",
-        "swift": "Ported (#892) in PixerateMarkdown: `TextMechanics.edits(at:in:document:options:)`, `findings`, `checkedRange` over `MarkdownDocument`, with `naturalLanguageTagger` (Apple's NaturalLanguage tagger); reproduces every scenario in `domains/text-mechanics`. Agent tools planned (#609)"
+        "swift": "Ported (#892) in PixerateMarkdown: `TextMechanics.edits(at:in:document:options:)`, `findings`, `checkedRange` over `MarkdownDocument`, with `naturalLanguageTagger` (Apple's NaturalLanguage tagger); reproduces every scenario in `domains/text-mechanics`. `check_text_mechanics` / `fix_text_mechanics` from `createMarkdownTextMechanicsToolProvider` in PixerateMarkdownTools (#609)"
       },
       {
         "feature": "Text Proposals (#890: replacements an agent suggests for a range of a text, shown without changing it; accepted as one undo step made by the proposer (`agent:<id>`) or dismissed; they move as the person writes and are dropped, or re-anchored when their text is only wrapped in syntax, when the person edits what they would replace; every proposal ends `accepted`, `rejected`, `stale` or `cleared` for whatever learns from the answers; agent tools `propose_text_edit`, `list_text_proposals`, `accept_text_proposal`, `reject_text_proposal`)",
