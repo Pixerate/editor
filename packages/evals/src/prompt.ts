@@ -12,6 +12,24 @@ export function readSkill(name: string): string {
   return readFileSync(`${skillsDir}${name}/SKILL.md`, "utf8").replace(/^---\n[\s\S]*?\n---\n/, "").trim();
 }
 
+/** A reference task's stroke: the picture, the colour preview_brush drew it in, and whether that is the brush's own. */
+export interface ReferenceView {
+  png: Buffer;
+  colour?: string;
+  ownColour: boolean;
+}
+
+/** What preview_brush does to colours, which the model and the judge need to read a stroke. */
+export const PREVIEW_COLOUR_NOTE = "preview_brush darkens or lightens a colour until it reads against the paper, so a white or pale brush previews darker than it is.";
+
+/** What each host leaves out, which a brush made for it should not be marked down for. */
+export const HOST_LIMITS: Record<BrushHost, string> = {
+  paint: "",
+  image: "The image editor ignores paper grain (behaviour.grain) and tip grain, and has no wet, thick, particle or stamp brushes: texture there comes from jitter and scatter.",
+  canvas: "Canvas strokes take only dry dab brushes and ignore velocity, tip grain and count.",
+  vector: "Vector strokes paint light brushes as plain colour and take no thick paint, particles, stamps or erasers.",
+};
+
 /** What each host is, in the words a person setting the task would use. */
 export const HOST_WORDS: Record<BrushHost, string> = {
   paint: "the paint editor (it renders every kind of brush)",
@@ -33,16 +51,21 @@ export function systemPrompt(): string {
 }
 
 /** The task's first message: the brief (and the reference strokes), the id and the host. */
-export function taskMessage(task: EvalTask, reference?: Buffer): Part[] {
+export function taskMessage(task: EvalTask, reference?: ReferenceView): Part[] {
   const where = `It is for ${HOST_WORDS[task.host]}; the tools you have are that host's.`;
   if (task.mode === "reference") {
     if (!reference) throw new Error(`Reference task "${task.id}" has no reference strokes.`);
+    const colour = !reference.colour
+      ? ""
+      : reference.ownColour
+        ? ` It is drawn in ${reference.colour}, from the brush's own default colour (${PREVIEW_COLOUR_NOTE})`
+        : ` It is drawn in ${reference.colour}, preview_brush's fallback for its medium: the brush has no default colour of its own, so the person paints it in theirs.`;
     return [
       {
         type: "text",
-        text: `Make a brush that paints like this one. This is its sample stroke, as preview_brush draws it at 512 × 160 in the brush's own colour:`,
+        text: `Make a brush that paints like this one. This is its sample stroke, as preview_brush draws it at 512 × 160.${colour}`,
       },
-      { type: "image", png: reference, label: "Reference stroke" },
+      { type: "image", png: reference.png, label: "Reference stroke" },
       { type: "text", text: [task.brief, `Save it with the id \`${task.brushId}\` and a name of your choosing. ${where}`].filter(Boolean).join("\n\n") },
     ];
   }

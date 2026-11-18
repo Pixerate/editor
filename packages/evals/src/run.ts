@@ -2,10 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BRUSH_PRESETS } from "@pixerate/editor/brushes";
 import { matchesEvalExpectation } from "@pixerate/editor/tools";
-import { createBrushSession, strokePng, type BrushSession } from "./host.ts";
+import { createBrushSession, hasOwnColour, strokePng, type BrushSession } from "./host.ts";
 import { isBlank, readPng, strokeSimilarity } from "./image.ts";
 import { judge, judgeParts, judgeScore } from "./judge.ts";
-import { notSavedMessage, systemPrompt, taskMessage } from "./prompt.ts";
+import { notSavedMessage, systemPrompt, taskMessage, type ReferenceView } from "./prompt.ts";
 import { FatalModelError, type Check, type EvalTask, type FacetCheck, type Model, type ModelMessage, type ModelResponse, type Part, type SampleResult } from "./types.ts";
 
 export interface RunContext {
@@ -38,20 +38,21 @@ export function recorded(model: Model, answers: string): Model {
   };
 }
 
-const references = new Map<string, Promise<Buffer>>();
+const references = new Map<string, Promise<ReferenceView>>();
 
-/** A reference task's stroke: its preset drawn by the host's renderer (once per run folder). */
-export function referenceStroke(task: EvalTask, out: string): Promise<Buffer> {
+/** A reference task's stroke: its preset drawn by the host's renderer (once per run folder), with the colour it was drawn in. */
+export function referenceStroke(task: EvalTask, out: string): Promise<ReferenceView> {
   if (!task.reference) throw new Error(`"${task.id}" is not a reference task.`);
   const key = `${out}\0${task.id}`;
   let ready = references.get(key);
   if (!ready) {
     ready = (async () => {
-      const { png } = await strokePng(createBrushSession(task.host), task.reference!.preset);
+      const { png, colour } = await strokePng(createBrushSession(task.host), task.reference!.preset);
+      const preset = BRUSH_PRESETS.find((b) => b.id === task.reference!.preset)!;
       const dir = path.join(out, "references", task.id);
       mkdirSync(dir, { recursive: true });
       writeFileSync(path.join(dir, "reference.png"), png);
-      return png;
+      return { png, ...(colour && { colour }), ownColour: hasOwnColour(preset) };
     })();
     references.set(key, ready);
   }
@@ -225,9 +226,11 @@ export async function runSample(task: EvalTask, sample: number, ctx: RunContext)
     scores.requirements = rate(requirements);
 
     let stroke: Buffer | undefined;
+    let strokeColour: string | undefined;
     try {
       const drawn = await strokePng(session, task.brushId);
       stroke = drawn.png;
+      strokeColour = drawn.colour;
       writeFileSync(path.join(dir, "stroke.png"), stroke);
       if (drawn.fallback) writeFileSync(path.join(dir, "stroke-note.txt"), `The host's preview_brush refused this brush, so the paint engine drew it: ${drawn.fallback}\n`);
     } catch (e) {
@@ -239,13 +242,13 @@ export async function runSample(task: EvalTask, sample: number, ctx: RunContext)
 
     let similarity: SampleResult["similarity"];
     if (reference && stroke) {
-      const s = strokeSimilarity(readPng(stroke), readPng(reference));
+      const s = strokeSimilarity(readPng(stroke), readPng(reference.png));
       similarity = { coverage: s.coverage, colour: s.colour, structure: s.structure };
       scores.similarity = s.overall;
     }
     let judged: SampleResult["judge"];
     if (ctx.judge && stroke) {
-      judged = await judge(recorded(ctx.judge, answers), `judge/${task.id}/${sample}`, judgeParts(task, stroke, description.brush, reference));
+      judged = await judge(recorded(ctx.judge, answers), `judge/${task.id}/${sample}`, judgeParts(task, { png: stroke, ...(strokeColour && { colour: strokeColour }) }, description.brush, reference));
       scores.judge = judgeScore(judged);
     }
     checks.unshift(...validity, ...requirements);

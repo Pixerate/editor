@@ -38,9 +38,10 @@ const medianColour = (px: readonly [number, number, number][]): [number, number,
  */
 function backdrop(p: Picture): { rows: [number, number, number][]; noise: number } {
   const rows = marginRows(p).map(medianColour);
-  // How far the paper strays from its colour (its grain), over the top and bottom 4 rows: twice
-  // the 90th percentile, which reads like the 99th of paper grain but is not moved by a thin
-  // stroke whose curve crosses those rows (a vector preview's S runs almost edge to edge).
+  // How far the paper strays from its colour (its grain), over the top and bottom 4 rows: four
+  // times the median, which reads like the 99th percentile of paper grain but moves only when a
+  // stroke covers most of those rows (a vector S runs almost edge to edge; a vortex can pull bare
+  // paper into the edges of the bands it previews over).
   const band = Math.min(4, Math.floor(p.height / 8));
   const d: number[] = [];
   for (let y = 0; y < p.height; y++) {
@@ -50,7 +51,7 @@ function backdrop(p: Picture): { rows: [number, number, number][]; noise: number
     for (const px of row) d.push(dist(px, c));
   }
   d.sort((a, b) => a - b);
-  return { rows, noise: 2 * (d[Math.floor(d.length * 0.9)] ?? 0) };
+  return { rows, noise: 4 * (d[Math.floor(d.length * 0.5)] ?? 0) };
 }
 
 /** The colour behind the stroke: the median of every row's margins (alpha composited over white). */

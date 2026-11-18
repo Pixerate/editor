@@ -64,7 +64,7 @@ node src/cli.ts --model replay:results/opus/answers --judge "command:node src/ad
 
 **Types.** The paint families `describe_brush` reports (`dry`, `ink`, `wet`, `thick`, `metallic`, `spray`, `glow`, `iridescent`, `strands`, `stickers`, `living`, `ethereal`, `volatile`, `reactive`) and `tool` (smudge, blender, eraser…). **Hosts:** most tasks are for the paint editor, which renders everything; some are for the image editor, canvas strokes and vector strokes, which render less, so the model has to pick a brush the host accepts.
 
-**Reference tasks** hold a built-in preset out of the library, so it can be neither listed nor based on, and show the model only its sample stroke (512 × 160, as `preview_brush` draws it). Where a still stroke can't show what a brush does (paint that fades, grows a pattern or acts like a magnetic liquid), a sentence says so.
+**Reference tasks** hold a built-in preset out of the library, so it can be neither listed nor based on, and show the model only its sample stroke (512 × 160, as `preview_brush` draws it). Where a still stroke can't show what a brush does (paint that fades, grows a pattern or acts like a magnetic liquid), a sentence says so. The model is told the colour the stroke was drawn in, and whether it is the preset's own default or only `preview_brush`'s fallback for its medium (a brush with no colour of its own paints in the person's colour, so it should leave `colour.default` unset).
 
 **Scores**, 0–100 per sample:
 
@@ -73,7 +73,7 @@ node src/cli.ts --model replay:results/opus/answers --judge "command:node src/ad
 | Valid | 15% | The brush is saved under the task's id, and `check_brush` says the host can paint it. A sample that saved nothing scores 0. |
 | As asked | 25% | It files under the task's type (`describe_brush`'s `family`, or `kind: tool`), and what the request plainly asks for (`checks`: the medium, the surface, grain, a colour, a light, a vortex…). On reference tasks: the same kind, medium, surface, marks and tip shape as the held-out preset. |
 | Paints | 15% | Its stroke is not blank. A brush that paints nothing scores at most 20. |
-| Look | 45% | The judge's grade (fidelity counts double, then medium, craft and settings, each 1–5) of the stroke and the brush's settings. On reference tasks without a judge, stroke similarity to the reference (coverage 30%, colour 35%, placement 35%); with both, judge 30% and similarity 15%. Without a judge, scratch tasks are scored on the other areas only. |
+| Look | 45% | The judge's grade (it is told what the host ignores, such as paper grain in the image editor, the colour each stroke was drawn in, and when a colour is only the preview's fallback; fidelity counts double, then medium, craft and settings, each 1–5) of the stroke and the brush's settings. On reference tasks without a judge, stroke similarity to the reference (coverage 30%, colour 35%, placement 35%); with both, judge 30% and similarity 15%. Without a judge, scratch tasks are scored on the other areas only. |
 
 *First try* is the share of samples that saved the brush without any write tool being refused on the way.
 
