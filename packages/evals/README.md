@@ -71,7 +71,7 @@ node src/cli.ts --model replay:results/opus/answers --judge "command:node src/ad
 | Area | Weight | What |
 | --- | ---: | --- |
 | Valid | 15% | The brush is saved under the task's id, and `check_brush` says the host can paint it. A sample that saved nothing scores 0. |
-| As asked | 25% | It files under the task's type (`describe_brush`'s `family`, or `kind: tool`), and what the request plainly asks for (`checks`: the medium, the surface, grain, a colour, a light, a vortex…). On reference tasks: the same kind, medium, surface, marks and tip shape as the held-out preset. |
+| As asked | 25% | It files under the task's type (`describe_brush`'s `family`, or `kind: tool`), and what the request plainly asks for (`checks`: the medium, the surface, grain, a colour, a light, a vortex…). On reference tasks: the same kind, medium, surface and marks as the held-out preset, the same kind of tip (an ellipse, bristles or a stamp: `round`, `flat` and `chisel` are one ellipse, named for people) and a roundness within 0.3. |
 | Paints | 15% | Its stroke is not blank. A brush that paints nothing scores at most 20. |
 | Look | 45% | The judge's grade (it is told what the host ignores, such as paper grain in the image editor, the colour each stroke was drawn in, and when a colour is only the preview's fallback; fidelity counts double, then medium, craft and settings, each 1–5) of the stroke and the brush's settings. On reference tasks without a judge, stroke similarity to the reference (coverage 30%, colour 35%, placement 35%); with both, judge 30% and similarity 15%. Without a judge, scratch tasks are scored on the other areas only. |
 

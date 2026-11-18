@@ -87,7 +87,14 @@ export function typeChecks(task: EvalTask, description: Record<string, unknown>)
   return checks;
 }
 
-/** Reference tasks: the saved brush works the way the held-out preset does (same kind, surface, marks and tip shape). */
+/** What a tip draws: `round`, `flat` and `chisel` are one ellipse set by `roundness` and `angle` (the names are for people). */
+const tipKind = (shape: unknown) => (shape === "round" || shape === "flat" || shape === "chisel" ? "ellipse" : String(shape));
+
+/**
+ * Reference tasks: the saved brush works the way the held-out preset does: the same kind,
+ * medium, surface and marks, the same kind of tip (an ellipse, bristles or a stamp) and, for an
+ * ellipse, a roundness within 0.3 (a difference a stroke shows; the shape's name doesn't).
+ */
 export function referenceChecks(preset: Record<string, any>, brush: Record<string, any>): Check[] {
   const same = (name: string, a: unknown, b: unknown): Check => ({ name, pass: a === b, detail: `${String(b)}, reference ${String(a)}` });
   return [
@@ -95,7 +102,16 @@ export function referenceChecks(preset: Record<string, any>, brush: Record<strin
     ...(preset.kind === "tool" ? [same("same tool", preset.tool, brush.tool)] : [same("same medium", preset.medium, brush.medium)]),
     same("same surface", preset.behaviour?.surface ?? "dry", brush.behaviour?.surface ?? "dry"),
     same("same marks", preset.marks?.kind ?? "continuous", brush.marks?.kind ?? "continuous"),
-    same("same tip shape", preset.tip?.shape, brush.tip?.shape),
+    same("same kind of tip", tipKind(preset.tip?.shape), tipKind(brush.tip?.shape)),
+    ...(tipKind(preset.tip?.shape) === "ellipse" && tipKind(brush.tip?.shape) === "ellipse"
+      ? [
+          {
+            name: "a similar tip roundness",
+            pass: Math.abs((preset.tip?.roundness ?? 1) - (brush.tip?.roundness ?? 1)) <= 0.3,
+            detail: `${brush.tip?.roundness ?? 1}, reference ${preset.tip?.roundness ?? 1}`,
+          },
+        ]
+      : []),
   ];
 }
 

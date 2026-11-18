@@ -10,7 +10,7 @@ import { commandResponse, createModel, oracleCalls, wireRequest } from "./models
 import { systemPrompt, SKILLS, readSkill, taskMessage } from "./prompt.ts";
 import { markdownReport } from "./report.ts";
 import { compareRuns } from "./compare.ts";
-import { facetChecks, overallScore, referenceStroke, runSample, typeChecks } from "./run.ts";
+import { facetChecks, overallScore, referenceChecks, referenceStroke, runSample, typeChecks } from "./run.ts";
 import { BUILTIN_TASKS, loadTaskFile, selectTasks } from "./tasks.ts";
 import { BRUSH_TYPES, FatalModelError, RESPONSE_MARKER, type EvalTask, type Model, type ModelRequest, type ModelResponse } from "./types.ts";
 
@@ -142,6 +142,20 @@ describe("colour hints", () => {
     expect(forImage).toMatch(/darkens or lightens a colour until it reads/);
     const forRef = text(judgeParts(task("ref-watercolor-wash"), { png: reference.png, colour: "#1d4ed8" }, {}, reference));
     expect(forRef.match(/don't grade its colour/g)).toHaveLength(2);
+  });
+});
+
+describe("reference checks", () => {
+  it("compare what a tip draws, not its name: round, flat and chisel are one ellipse", () => {
+    const preset = { kind: "mark", medium: "ink", tip: { shape: "flat", roundness: 0.8 } };
+    const names = (brush: Record<string, unknown>) => referenceChecks(preset, brush).filter((c) => !c.pass).map((c) => c.name);
+    expect(names({ kind: "mark", medium: "ink", tip: { shape: "round" } })).toEqual([]);
+    expect(names({ kind: "mark", medium: "ink", tip: { shape: "flat", roundness: 0.3 } })).toEqual(["a similar tip roundness"]);
+    expect(names({ kind: "mark", medium: "ink", tip: { shape: "bristle" } })).toEqual(["same kind of tip"]);
+  });
+
+  it("say in words what a still stroke can't show", () => {
+    expect(task("ref-hair-strands").brief).toMatch(/separate fine strands/);
   });
 });
 
