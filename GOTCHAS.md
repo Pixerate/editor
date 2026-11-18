@@ -21,6 +21,12 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [ci/swift] Swift Jobs Cancelled After ~15 Minutes With No Steps Are GitHub Runner Capacity, Not Code
+
+- **Issue / Symptom**: A Swift workflow job (`runs-on: macos-latest`) ends `cancelled` about 15 minutes after it was queued, with no steps run, and the PR goes red. Re-running can fail the same way; in run 44334044296 the demo job missed a runner three times while the other two jobs passed. The annotation reads "The job was not acquired by Runner of type hosted even after multiple attempts", and GitHub shows a notice about capacity constraints on macOS arm64 runners (seen from 17 Nov 2026).
+- **Root Cause**: GitHub's hosted macOS arm64 pool is short of machines. A job that is never picked up is cancelled by GitHub, so nothing in the code, the workflow's `timeout-minutes` (which only counts once a runner starts) or the tests caused it.
+- **Solution / Workaround**: Tell it apart from a real failure before debugging: the job has no steps and an empty `runner_name` (`gh api repos/Pixerate/editor/actions/runs/<run>/jobs --jq '.jobs[] | [.name, .runner_name, .conclusion, (.steps|length)]'`), and the annotation above. Re-run the failed jobs later. To lower the odds, the Swift workflow uses two macOS jobs per run, not three (the demo app builds in `Swift (macOS)`); keep new macOS work in those jobs rather than adding jobs. Pinning a label such as `macos-15` instead of `macos-latest` is an untested option.
+
 ### [swift/core] The In-Process MCP Server: Local-Only Checks, No `list_changed`, Failed Listeners
 
 - **Issue / Symptom**: Hosting MCP over HTTP inside an app (`MCPHTTPServer`, first in Swash) hit four traps. (1) Any web page can POST to `http://127.0.0.1:<port>/mcp` (a `text/plain` POST needs no CORS preflight, and DNS rebinding makes a foreign host name resolve to 127.0.0.1), and the token is optional. (2) Clients list tools once when they connect, and the server (plain JSON, `GET` refused, no SSE) can't send `notifications/tools/list_changed`, so a `tools/list` built from the open documents showed only the list tool to an agent that connected before any document was open. (3) An `NWListener` that fails (`EADDRINUSE`) stays allocated until cancelled, and cancelling it reports `.cancelled`, which overwrote the failure with "Stopped". (4) A 401 on every path, `/.well-known/oauth-protected-resource` included, sends MCP clients looking for an OAuth server that doesn't exist.
