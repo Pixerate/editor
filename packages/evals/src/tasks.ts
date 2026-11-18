@@ -264,7 +264,7 @@ const REFERENCE: { type: BrushType; host: BrushHost; preset: string; brief?: str
   { type: "spray", host: "paint", preset: "airbrush" },
   { type: "glow", host: "paint", preset: "neon-marker" },
   { type: "iridescent", host: "paint", preset: "soap-film", brief: "Its colour is a thin-film shimmer that shifts with the light." },
-  { type: "strands", host: "paint", preset: "hair-strands" },
+  { type: "strands", host: "paint", preset: "hair-strands", brief: "Each stroke lays many separate fine strands that follow it, like hair; at this size they read as one streaky line." },
   { type: "stickers", host: "paint", preset: "sticker-confetti" },
   { type: "living", host: "paint", preset: "coral-ink", brief: "In wet paint, a pattern grows in it before it dries." },
   { type: "ethereal", host: "paint", preset: "ghost-gouache", brief: "A little while after it is laid, its own colour fades away." },
