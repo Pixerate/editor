@@ -68,3 +68,19 @@ client.close()
 ```
 
 It speaks protocol 1 over `URLSessionWebSocketTask` (the token goes in `?token=`, so a native app needs no `--origin`), sends the registry's tools on connect and when they change, runs calls through `registry.callTool` (a cancelled call sends no result) and reconnects with the same back-off. Its tools carry the TypeScript editors' names and schemas, so an agent and the skills use them the same way. `ToolBridgeLiveTests` runs against a real bridge when `PIXERATE_BRIDGE_TEST_PORT` is set.
+
+### Serving MCP from the app itself
+
+A Swift app can skip the bridge and host a Streamable HTTP MCP server in-process (`MCPHTTPServer`, `MCPToolRouter`, `MCPServerController` in `PixerateCore`). MCP clients then connect to `http://127.0.0.1:<port>/mcp` with `"type": "http"`:
+
+```swift
+let router = MCPToolRouter(configuration: .init(serverName: "Swash", serverVersion: "1.4", singular: "document"), catalog: catalogRegistry)
+let mcp = MCPServerController(serverName: "swash", realm: "Swash", defaultPort: 4478, router: router)
+mcp.update(enabled: true, port: storedPort, token: storedToken)   // from the app's settings
+router.attach(target)      // an MCPToolTarget per open document, with its own ToolRegistry
+router.activate(target)    // its window became active: calls without `document` go here
+router.detach(target)
+```
+
+`tools/list` is `list_<plural>` plus the catalogue registry's tools, each with an optional target argument (`document`, `canvas`…). The catalogue never depends on what is open, because the server has no SSE stream to announce changes. Each app chooses its own default port; there is no shared default, so it never collides with the bridge (4477) or another app. The server takes local requests only (Host, Origin, `application/json`), returns 404 for any path but `/mcp` before checking the token, and compares the optional Bearer token in constant time.
+
