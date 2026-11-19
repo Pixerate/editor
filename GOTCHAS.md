@@ -1006,6 +1006,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The element is cloned with its computed styles inlined and drawn as an SVG `<foreignObject>` image. An SVG used as an image cannot load anything external, so web fonts and `<img>` URLs are not fetched; same-origin images are copied in as data URLs, cross-origin ones cannot be read. Pseudo-elements are not part of the DOM, so they are not cloned. Safari has tainted canvases that drew a `foreignObject`.
 - **Solution / Workaround**: For pixel-exact output, pass `rasterize` to the surface options and use a library such as html-to-image (it embeds fonts) or a server-side renderer. Mark UI that should never show with `data-capture="exclude"` and transient overlays with `data-capture="overlay"`. Non-viewport canvas regions re-frame the xyflow viewport transform and remove everything outside it (the background pattern and screen-space layers follow the live viewport, so they would be misplaced).
 
+### [core/canvas] Canvas `content` Captures Left Out Ink and Paint Strokes
+
+- **Issue / Symptom**: `capture_view` `content` (and a host's thumbnail built on `createCanvasCaptureSurface`) framed only the nodes and showed none of the strokes drawn on an ink or paint layer, though `viewport` showed them.
+- **Root Cause**: `content` was the union of node rects, and re-framed regions draw only the flow's viewport element, removing its siblings (they follow the live viewport, so they would be misplaced). Ink (`CanvasDrawLayer`) and host paint layers are such siblings: `inset: 0` boxes with their own viewport transform inside.
+- **Solution / Workaround**: Pass `layers` to the surface (`createCanvasCaptureSurface`, `createCanvasCaptureToolProvider`, `useCanvasCapture`, `createCanvasCapture`): each layer's element and its stroke bounds in flow coordinates. `content` unions those bounds, and re-framed captures wrap a clone of each layer in a transform that undoes the live viewport and applies the frame's, under or over the nodes by DOM order. A layer's element must be an untransformed box over the flow root; a layer inside the viewport element is already drawn and is skipped.
+
 ### [core/video-editor] A Ripple Is Refused Because of a Music Bed or Title on Another Track
 
 - **Issue / Symptom**: `delete_clips` / `trim_clip` with `ripple`, or `extract_range`, fails with "Rippling out … would pull track "a1" out of sync: clip "music" … is in that stretch", even though the edited track itself has room.

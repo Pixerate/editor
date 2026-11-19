@@ -11,7 +11,8 @@ export type CreateCanvasCaptureOptions<TNode extends CanvasNode = CanvasNode> = 
  * The `capture_view` agent tool for a Svelte Flow canvas: screenshots of the viewport, all
  * content, the selection, nodes by id or a rect in canvas units. Pass the root element as a
  * getter (it is usually bound after the component mounts) and register the result with
- * `useAgentToolProvider`.
+ * `useAgentToolProvider`. Pass `layers` for ink or paint drawn outside the flow's viewport, so
+ * `content` frames their strokes too.
  *
  * ```svelte
  * <script>

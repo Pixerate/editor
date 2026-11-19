@@ -52,4 +52,28 @@ describe('useCanvasCapture', () => {
 		await act(async () => root.unmount());
 		expect(registry.listTools().tools).toEqual([]);
 	});
+
+	it('frames the latest layers with the nodes', async () => {
+		const registry = new ToolRegistry();
+		const Host = ({ inkWidth }: { inkWidth: number }) => {
+			const pane = useRef<HTMLDivElement>(null);
+			const capture = useCanvasCapture({
+				element: pane,
+				getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+				getNodes: () => [{ id: 'a', position: { x: 0, y: 0 }, data: {}, width: 100, height: 50 }],
+				layers: [{ element: null, bounds: () => ({ x: 200, y: 0, width: inkWidth, height: 10 }) }],
+				rasterize: async () => 'data:image/png;base64,QUJD'
+			});
+			useAgentToolProvider(registry, capture);
+			return <div ref={pane} className="react-flow" />;
+		};
+		const container = document.createElement('div');
+		document.body.appendChild(container);
+		const root = createRoot(container);
+		await act(async () => root.render(<Host inkWidth={50} />));
+		await act(async () => root.render(<Host inkWidth={100} />));
+		const result = await registry.callTool('capture_view', { region: 'content', padding: 0 });
+		expect(result.structuredContent).toMatchObject({ rect: { x: 0, y: 0, width: 300, height: 50 } });
+		await act(async () => root.unmount());
+	});
 });
