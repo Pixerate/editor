@@ -45,6 +45,13 @@ public enum FormatCommandEdits: Sendable {
         return formatting.setLink(url, selection: selection)
     }
 
+    /// The destination of the link at `selection`, if there is one.
+    public static func activeLink(text: String, selection: NSRange) -> String? {
+        let formatting = MarkdownFormatting(text: text)
+        guard let node = formatting.link(at: selection), case .link(let destination, _, _) = node.kind else { return nil }
+        return destination
+    }
+
     /// Makes the selection a fenced code block with `language` (nil for no info string). Inside
     /// a fenced block, only the info string changes.
     public static func codeBlock(language: String?, text: String, selection: NSRange) -> MarkdownEdit? {
