@@ -176,4 +176,9 @@ public enum MarkdownSyntax: Sendable {
         }
         return out
     }
+
+    /// A link destination as a URL, normalising characters that `URL(string:)` rejects.
+    public static func url(_ destination: String) -> URL? {
+        URL(string: destination) ?? URL(string: normalizeURI(destination))
+    }
 }

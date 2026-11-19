@@ -247,7 +247,49 @@ enum ParserChecks {
                 print("❌ html \(html.debugDescription): expected \(expected.debugDescription), got \(actual.debugDescription)")
             }
         }
-        print("HTML paste conversion checks: \(failures == 0 ? "all passed" : "\(failures) failed") (\(htmlCases.count) cases)")
+
+        // Confluence copies images as media placeholders; they link to the attachment on the source page's site
+        let media = "<p>Before</p><div data-node-type=\"mediaSingle\"><div data-node-type=\"media\" data-type=\"file\" data-context-id=\"42\" data-alt=\"shot 1.png\" data-file-name=\"shot 1.png\"></div></div>"
+        let mediaConfluence = HTMLToMarkdown.convert(media, sourceURL: URL(string: "https://example.atlassian.net/wiki/spaces/X/pages/42"))
+        if mediaConfluence != "Before\n\n![shot 1.png](https://example.atlassian.net/wiki/download/attachments/42/shot%201.png)" {
+            failures += 1
+            print("❌ Confluence media: expected attachment URL, got \(mediaConfluence.debugDescription)")
+        }
+        let mediaNoSource = HTMLToMarkdown.convert(media, sourceURL: nil)
+        if mediaNoSource != "Before\n\n![shot 1.png](shot%201.png)" {
+            failures += 1
+            print("❌ media without source: expected file name, got \(mediaNoSource.debugDescription)")
+        }
+
+        // Jira names the page in data-collection, and attribute values are entity-encoded
+        let jira = "<div data-node-type='media' data-collection='contentId-7' data-file-name='a&amp;b.png'></div>"
+        let jiraMedia = HTMLToMarkdown.convert(jira, sourceURL: URL(string: "https://jira.example.com:8443/browse/X-1"))
+        if jiraMedia != "![a&b.png](https://jira.example.com:8443/download/attachments/7/a&b.png)" {
+            failures += 1
+            print("❌ Jira media: expected attachment URL, got \(jiraMedia.debugDescription)")
+        }
+
+        let external = "<div data-node-type=\"media\" data-type=\"external\" data-url=\"https://img.example.com/x.png\" data-alt=\"Logo\"></div>"
+        let externalMedia = HTMLToMarkdown.convert(external, sourceURL: nil)
+        if externalMedia != "![Logo](https://img.example.com/x.png)" {
+            failures += 1
+            print("❌ external media: expected URL, got \(externalMedia.debugDescription)")
+        }
+
+        // activeLink and MarkdownSyntax.url checks
+        let linkDoc = "A [link](https://example.com/a%20b) here"
+        let active = FormatCommandEdits.activeLink(text: linkDoc, selection: NSRange(location: 4, length: 0))
+        if active != "https://example.com/a%20b" {
+            failures += 1
+            print("❌ activeLink: expected link destination, got \(active.debugDescription)")
+        }
+        let urlParsed = MarkdownSyntax.url("https://example.com/path with spaces")
+        if urlParsed?.absoluteString != "https://example.com/path%20with%20spaces" {
+            failures += 1
+            print("❌ MarkdownSyntax.url: expected normalized URI, got \(String(describing: urlParsed?.absoluteString))")
+        }
+
+        print("HTML paste conversion checks: \(failures == 0 ? "all passed" : "\(failures) failed") (\(htmlCases.count + 6) cases)")
         return failures
     }
     
