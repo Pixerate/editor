@@ -137,7 +137,8 @@ export function richTextStyleState(doc: DocNode): RichTextStyleState {
 export function richTextBlockPos(block: RichTextStyleBlock, offset: number, end = false): number {
 	let seg = block.segments[0];
 	for (const s of block.segments) if (end && offset > 0 ? s.offset < offset : s.offset <= offset) seg = s;
-	return seg ? seg.pos + (offset - seg.offset) : block.from;
+	// Before the first segment (an atom the Markdown reader put there) is the first text's start.
+	return seg ? seg.pos + Math.max(0, offset - seg.offset) : block.from;
 }
 
 const profileOf = (p: Readonly<Record<string, unknown>>) => p as RichTextStyleProfile;

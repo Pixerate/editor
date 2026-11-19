@@ -21,6 +21,18 @@ All contributors and AI assistants should check this file before starting work a
 
 ## Entries
 
+### [swift/markdown] A Port of a TS Regular Expression Must Translate `$`, `\d`, `\s`, `\w`, `\b` and `[` (#890)
+
+- **Issue / Symptom**: Porting the Markdown prose reader and the house-style checks to Swift, patterns copied verbatim into `NSRegularExpression` would match differently: `^ {0,3}(=+|-+)[ \t]*$` matched a line ending in a newline, `\d` took Arabic-Indic digits, `\b` treated `é` as a word character, and `[*_~\\[\]]` became a nested set.
+- **Root Cause**: Without `.anchorsMatchLines`, ICU's `$` also matches before a final line terminator (JavaScript's matches only at the end). ICU's `\d`, `\s`, `\w` and `\b` are Unicode-wide; JavaScript's (even with `u`) are ASCII except `\s`, whose set differs again. An unescaped `[` inside a class opens a nested set in ICU but is a literal in JavaScript.
+- **Solution / Workaround**: Use `JSRegExp` (`PixerateMarkdown`), which rewrites a JavaScript pattern for ICU: `$` → `\z`, the JavaScript sets for `\d`, `\s`, `\w`, explicit ASCII look-arounds for `\b` / `\B`, and `[` inside a class escaped. `exec(_:from:)` searches a range with opaque, anchoring bounds, which is what `exec(text.slice(k))` does. Index by UTF-16 unit (`NSString`, `[UInt16]`), as the TS does, when a contract compares offsets.
+
+### [core/tools] A Setext Heading's Underline and a Leading Code Span Leaked U+FFFC Into Markdown Fixes (#890)
+
+- **Issue / Symptom**: `fix_rich_text_style` on Markdown wrote U+FFFC into the source: the sentence-case fix for `Title Here\n=` and for `` ## `make` Builds It All `` replaced text with the object-replacement character the reader uses for atoms.
+- **Root Cause**: `endOfHeadingText` returned the whole block for a setext heading, so the `=` underline read as an inline atom at the end of the heading's text. For a heading starting with a code span, `richTextBlockPos(block, 0)` mapped the leading atom to one unit before the first text (inside the backticks), so `narrowMarkdownStyleTarget` found no block and returned the unnarrowed replacement, atom included. Narrowing also left trailing atoms out of the original text while the replacement kept them.
+- **Solution / Workaround**: A setext heading's text ends before its underline; `richTextBlockPos` clamps offsets before the first segment to its start; narrowing takes in the leading and trailing atoms when the target runs from the block's start or to its end, and never returns a replacement made only of atoms. The `markdown-style` contract has a case for each (`the reader: …`).
+
 ### [ci/swift] Swift Jobs Cancelled After ~15 Minutes With No Steps Are GitHub Runner Capacity, Not Code
 
 - **Issue / Symptom**: A Swift workflow job (`runs-on: macos-latest`) ends `cancelled` about 15 minutes after it was queued, with no steps run, and the PR goes red. Re-running can fail the same way; in run 44334044296 the demo job missed a runner three times while the other two jobs passed. The annotation reads "The job was not acquired by Runner of type hosted even after multiple attempts", and GitHub shows a notice about capacity constraints on macOS arm64 runners (seen from 17 Nov 2026).

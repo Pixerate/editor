@@ -70,6 +70,30 @@ export const MARKDOWN_STYLE_CASES: readonly MarkdownStyleCase[] = [
 		profile: { headingCase: 'sentence', checks: ALL.filter((c) => c === 'heading-case') }
 	},
 	{
+		name: 'the reader: footnotes, alerts, nested quotes and lists, tasks, indented code, HTML and tables in lists',
+		source:
+			'Intro with a note[^1] and \\*escaped\\* text\nthat wraps "here".\n\n> [!NOTE]\n> An "alert" line.\n\n> Outer quote\n> > Inner "quote"\n\n1. First "step"\n   continued\n   - nested "item"\n2. [x] Done task\n\n    indented "code"\n\n<div>\n"html"\n</div>\n\n- | a | b |\n  |---|---|\n  | "c" | d |\n\n[^1]: The "footnote" text.\n\nTitle Here ##\n=\n\n### Closing Hashes ###\n',
+		profile: { headingCase: 'sentence', quotes: 'curly', listItemEnd: 'period', checks: ['heading-case', 'quotes', 'list-punctuation'] }
+	},
+	{
+		name: 'reference links, autolinks, inline HTML and math with dollars',
+		source: 'See [the "guide"][g], <https://example.com/"x"> and <span>"inline"</span>. It costs $5 and $10, while $x$ is "math".\n\n[g]: https://example.com\n\n$$\n"display"\n$$\n',
+		profile: { quotes: 'curly', checks: ['quotes'] }
+	},
+	{
+		name: 'title case with small words and proper nouns, upper case, terms with notes and deletions',
+		source: '# a tour of the github api for beginners\n\n## Notes on Acme\n\nPlease Click Here to basically start.\n',
+		profile: {
+			headingCase: 'title',
+			properNouns: ['GitHub', 'API', 'Acme'],
+			terms: [
+				{ avoid: 'click here', note: 'link text says where it goes' },
+				{ avoid: 'basically', use: '' }
+			],
+			checks: ['heading-case', 'terms']
+		}
+	},
+	{
 		name: 'periods appended before closing emphasis, UTF-16 offsets after emoji',
 		source: '😀 Intro\n\n* Ship it **now**\n* 🚀 Launch [the plan](#plan)\n',
 		profile: { listItemEnd: 'period', checks: ['list-punctuation'] }
