@@ -163,6 +163,11 @@ layers, general to specific, and the `style` toolset merges them per domain.
   (`palette-only`, `min-contrast`, `distinguishable`, `fonts-allowed`) run in every
   `check_<domain>_style`; a domain that cannot be checked against the brand yet reports them in
   `skipped`.
+- **Native apps read styles the same way.** The Swift editors (Swash and the other native apps)
+  offer the same `list_styles`, `get_style`, `get_style_file` and `get_style_schema` over the
+  same layers, with the same results. They do not offer `check_style_skill`, `save_style`,
+  `remove_style`, `list_style_choices` or `choose_style` yet, and do not upgrade older profile
+  versions: if those tools are missing, write the skill's files for the user to install instead.
 
 ## Errors
 

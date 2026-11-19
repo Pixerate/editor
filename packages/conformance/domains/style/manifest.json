@@ -1,0 +1,10 @@
+{
+  "domain": "style",
+  "formatVersion": 1,
+  "description": "The style resolver (layers, locks, required layers, skill state, groups, scopes, extends, $token references, frontmatter profiles, the brand and file limits) and its read tools, as recorded tool calls over memory stores, with the rich-text and brand domains. domains.json is what get_style_schema returns for each.",
+  "files": [
+    "domains.json",
+    "tools.json",
+    "scenarios.json"
+  ]
+}

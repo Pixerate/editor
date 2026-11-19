@@ -1,0 +1,2009 @@
+[
+  {
+    "name": "two layers merge: org prose and profile, a user override, sources per field",
+    "layers": [
+      {
+        "id": "org",
+        "files": {
+          "house/SKILL.md": "---\nname: house\ndescription: Acme house writing style.\ndomains: [rich-text]\n---\n\n# Acme style\n\nWrite plainly and warmly. Prefer short sentences.\n",
+          "house/rich-text.json": "{\"headingCase\":\"title\",\"listItemEnd\":\"none\",\"terms\":[{\"avoid\":\"utilize\",\"use\":\"use\"}],\"checks\":[\"heading-case\",\"terms\"]}",
+          "house/references/tone.md": "# Tone\n\nFriendly, never flippant.\n"
+        }
+      },
+      {
+        "id": "user",
+        "files": {
+          "mine/SKILL.md": "---\nname: mine\ndescription: My own tweaks.\ndomains: rich-text\n---\n\nI like sentence case.\n",
+          "mine/rich-text.json": "{\"headingCase\":\"sentence\",\"properNouns\":[\"Acme\"]}"
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "list_styles",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "brand"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "house",
+          "file": "references/tone.md"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "house",
+          "file": "rich-text.json"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "house",
+          "file": "SKILL.md"
+        }
+      },
+      {
+        "tool": "get_style_schema",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style_schema",
+        "args": {
+          "domain": "brand"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "house",
+              "description": "Acme house writing style.",
+              "layer": "org",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "mine",
+              "description": "My own tweaks.",
+              "layer": "user",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "house",
+              "description": "Acme house writing style.",
+              "layer": "org",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "mine",
+              "description": "My own tweaks.",
+              "layer": "user",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "house",
+              "description": "Acme house writing style.",
+              "layer": "org"
+            },
+            {
+              "name": "mine",
+              "description": "My own tweaks.",
+              "layer": "user"
+            }
+          ],
+          "profile": {
+            "headingCase": "sentence",
+            "listItemEnd": "none",
+            "terms": [
+              {
+                "avoid": "utilize",
+                "use": "use"
+              }
+            ],
+            "checks": [
+              "heading-case",
+              "terms"
+            ],
+            "properNouns": [
+              "Acme"
+            ]
+          },
+          "sources": {
+            "headingCase": "user",
+            "listItemEnd": "org",
+            "terms": "org",
+            "checks": "org",
+            "properNouns": "user"
+          },
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": []
+        },
+        "text": "<style_skill name=\"house\" layer=\"org\">\n# Acme style\n\nWrite plainly and warmly. Prefer short sentences.\n</style_skill>\n\n<style_skill name=\"mine\" layer=\"user\">\nI like sentence case.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"headingCase\": \"sentence\",\n  \"listItemEnd\": \"none\",\n  \"terms\": [\n    {\n      \"avoid\": \"utilize\",\n      \"use\": \"use\"\n    }\n  ],\n  \"checks\": [\n    \"heading-case\",\n    \"terms\"\n  ],\n  \"properNouns\": [\n    \"Acme\"\n  ]\n}"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "brand",
+          "skills": [],
+          "profile": {},
+          "sources": {},
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": []
+        },
+        "text": "No house style applies to brand."
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "name": "house",
+          "file": "references/tone.md",
+          "files": [
+            "SKILL.md",
+            "references/tone.md",
+            "rich-text.json"
+          ]
+        },
+        "text": "# Tone\n\nFriendly, never flippant.\n"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "name": "house",
+          "file": "rich-text.json",
+          "files": [
+            "SKILL.md",
+            "references/tone.md",
+            "rich-text.json"
+          ]
+        },
+        "text": "{\"headingCase\":\"title\",\"listItemEnd\":\"none\",\"terms\":[{\"avoid\":\"utilize\",\"use\":\"use\"}],\"checks\":[\"heading-case\",\"terms\"]}"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "name": "house",
+          "file": "SKILL.md",
+          "files": [
+            "SKILL.md",
+            "references/tone.md",
+            "rich-text.json"
+          ]
+        },
+        "text": "---\nname: house\ndescription: Acme house writing style.\ndomains: [rich-text]\n---\n\n# Acme style\n\nWrite plainly and warmly. Prefer short sentences.\n"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "file": "rich-text.json",
+          "description": "How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "headingCase": {
+                "type": "string",
+                "enum": [
+                  "sentence",
+                  "title",
+                  "upper"
+                ],
+                "description": "Case for headings: \"sentence\" (Only the first word), \"title\" (Major Words Capitalised) or \"upper\"."
+              },
+              "maxHeadingLevel": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6,
+                "description": "Deepest heading level allowed (default 6)."
+              },
+              "properNouns": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Names written exactly as given in any heading case, e.g. \"GitHub\", \"Pixerate\"."
+              },
+              "listItemEnd": {
+                "type": "string",
+                "enum": [
+                  "none",
+                  "period"
+                ],
+                "description": "How list items end: no full stop, or a full stop."
+              },
+              "quotes": {
+                "type": "string",
+                "enum": [
+                  "curly",
+                  "straight"
+                ],
+                "description": "Quotation marks and apostrophes: curly (“ ” ‘ ’) or straight (\" ')."
+              },
+              "terms": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "avoid": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Word or phrase to avoid (whole words, any case)."
+                    },
+                    "use": {
+                      "type": "string",
+                      "description": "What to write instead (empty: delete it)."
+                    },
+                    "note": {
+                      "type": "string",
+                      "description": "Why, shown with the finding."
+                    }
+                  },
+                  "required": [
+                    "avoid"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Banned or replaced words and phrases."
+              },
+              "thousandsSeparator": {
+                "type": "string",
+                "enum": [
+                  ",",
+                  ".",
+                  " ",
+                  "thin",
+                  "none"
+                ],
+                "description": "Thousands separator for numbers of five digits or more (\"thin\": a narrow no-break space)."
+              },
+              "dateFormat": {
+                "type": "string",
+                "enum": [
+                  "iso",
+                  "day-month-year",
+                  "month-day-year"
+                ],
+                "description": "How to write dates: 2026-11-12, 12 November 2026 or November 12, 2026."
+              },
+              "fonts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": "Font families allowed in text (for fonts-allowed). Default: the brand fonts."
+              },
+              "palette": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A CSS colour, or a { \"$token\": ... } reference."
+                },
+                "description": "Text and highlight colours allowed (for palette-only). Default: the brand palette and roles."
+              }
+            },
+            "additionalProperties": false
+          },
+          "checks": [
+            {
+              "id": "heading-case",
+              "description": "Headings use the house case (\"headingCase\": sentence, title or upper), keeping acronyms, words with digits and the profile's \"properNouns\"."
+            },
+            {
+              "id": "heading-levels",
+              "description": "Headings go no deeper than \"maxHeadingLevel\" (default 6) and never skip a level (a level 2 heading before any level 3)."
+            },
+            {
+              "id": "list-punctuation",
+              "description": "List items end the house way (\"listItemEnd\": \"none\", no full stop, or \"period\", a full stop)."
+            },
+            {
+              "id": "quotes",
+              "description": "Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\" ') as \"quotes\" says. Code is left alone."
+            },
+            {
+              "id": "terms",
+              "description": "Words the house style avoids (\"terms\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone."
+            },
+            {
+              "id": "number-format",
+              "description": "Numbers of five digits or more group thousands the house way (\"thousandsSeparator\": \",\", \".\", \" \", \"thin\" or \"none\"). Four-digit numbers (years) and code are left alone."
+            },
+            {
+              "id": "date-format",
+              "description": "Dates are written the house way (\"dateFormat\": \"iso\" 2026-11-12, \"day-month-year\" 12 November 2026, or \"month-day-year\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous."
+            },
+            {
+              "id": "palette-only",
+              "description": "Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "tolerance": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 20,
+                    "description": "How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2."
+                  },
+                  "allowNeutrals": {
+                    "type": "boolean",
+                    "description": "Allow greys, black and white that are not in the palette. Default true."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "min-contrast",
+              "description": "Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "ratio": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 21,
+                    "description": "Minimum ratio for body text. Default 4.5 (WCAG AA)."
+                  },
+                  "largeRatio": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 21,
+                    "description": "Minimum ratio for large text. Default 3."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "distinguishable",
+              "description": "Series and category colours are far enough apart to tell apart.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "minDistance": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": "Least OKLab distance × 100 between two series colours. Default 10."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "fonts-allowed",
+              "description": "Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "fonts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "description": "Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          ],
+          "example": {
+            "headingCase": "sentence",
+            "maxHeadingLevel": 3,
+            "properNouns": [
+              "Acme",
+              "GitHub"
+            ],
+            "listItemEnd": "none",
+            "quotes": "curly",
+            "terms": [
+              {
+                "avoid": "utilize",
+                "use": "use"
+              },
+              {
+                "avoid": "click here",
+                "note": "link text says where it goes"
+              }
+            ],
+            "thousandsSeparator": ",",
+            "dateFormat": "day-month-year",
+            "checks": [
+              "heading-case",
+              "heading-levels",
+              "list-punctuation",
+              "quotes",
+              "terms",
+              "number-format",
+              "date-format",
+              "fonts-allowed"
+            ]
+          }
+        },
+        "text": "<style_domain id=\"rich-text\" file=\"rich-text.json\">\nDocuments: How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.\n\nWhere it goes: rich-text.json in the skill folder, or under a \"rich-text:\" key in the SKILL.md frontmatter (not both). It applies when the skill's frontmatter \"domains\" includes rich-text, or names none.\nA variant can build on another skill with \"extends: <skill>\" in its frontmatter and give only the fields that differ; objects merge field by field, lists and values replace.\n\nChecks it can turn on in \"checks\" (an id, or { \"id\": ..., options }):\n- heading-case: Headings use the house case (\"headingCase\": sentence, title or upper), keeping acronyms, words with digits and the profile's \"properNouns\".\n- heading-levels: Headings go no deeper than \"maxHeadingLevel\" (default 6) and never skip a level (a level 2 heading before any level 3).\n- list-punctuation: List items end the house way (\"listItemEnd\": \"none\", no full stop, or \"period\", a full stop).\n- quotes: Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\" ') as \"quotes\" says. Code is left alone.\n- terms: Words the house style avoids (\"terms\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\n- number-format: Numbers of five digits or more group thousands the house way (\"thousandsSeparator\": \",\", \".\", \" \", \"thin\" or \"none\"). Four-digit numbers (years) and code are left alone.\n- date-format: Dates are written the house way (\"dateFormat\": \"iso\" 2026-11-12, \"day-month-year\" 12 November 2026, or \"month-day-year\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\n- palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\n- min-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\n- distinguishable: Series and category colours are far enough apart to tell apart.\n- fonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\n\nExample:\n{\n  \"headingCase\": \"sentence\",\n  \"maxHeadingLevel\": 3,\n  \"properNouns\": [\n    \"Acme\",\n    \"GitHub\"\n  ],\n  \"listItemEnd\": \"none\",\n  \"quotes\": \"curly\",\n  \"terms\": [\n    {\n      \"avoid\": \"utilize\",\n      \"use\": \"use\"\n    },\n    {\n      \"avoid\": \"click here\",\n      \"note\": \"link text says where it goes\"\n    }\n  ],\n  \"thousandsSeparator\": \",\",\n  \"dateFormat\": \"day-month-year\",\n  \"checks\": [\n    \"heading-case\",\n    \"heading-levels\",\n    \"list-punctuation\",\n    \"quotes\",\n    \"terms\",\n    \"number-format\",\n    \"date-format\",\n    \"fonts-allowed\"\n  ]\n}\n\nSchema:\n{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Documents house-style profile (rich-text.json)\",\"description\":\"How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.\",\"type\":\"object\",\"properties\":{\"$schema\":{\"type\":\"string\",\"description\":\"Path or URL of this schema, for editors. Ignored when the profile loads.\"},\"headingCase\":{\"type\":\"string\",\"enum\":[\"sentence\",\"title\",\"upper\"],\"description\":\"Case for headings: \\\"sentence\\\" (Only the first word), \\\"title\\\" (Major Words Capitalised) or \\\"upper\\\".\"},\"maxHeadingLevel\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":6,\"description\":\"Deepest heading level allowed (default 6).\"},\"properNouns\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"description\":\"Names written exactly as given in any heading case, e.g. \\\"GitHub\\\", \\\"Pixerate\\\".\"},\"listItemEnd\":{\"type\":\"string\",\"enum\":[\"none\",\"period\"],\"description\":\"How list items end: no full stop, or a full stop.\"},\"quotes\":{\"type\":\"string\",\"enum\":[\"curly\",\"straight\"],\"description\":\"Quotation marks and apostrophes: curly (“ ” ‘ ’) or straight (\\\" ').\"},\"terms\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"avoid\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Word or phrase to avoid (whole words, any case).\"},\"use\":{\"type\":\"string\",\"description\":\"What to write instead (empty: delete it).\"},\"note\":{\"type\":\"string\",\"description\":\"Why, shown with the finding.\"}},\"required\":[\"avoid\"],\"additionalProperties\":false},\"description\":\"Banned or replaced words and phrases.\"},\"thousandsSeparator\":{\"type\":\"string\",\"enum\":[\",\",\".\",\" \",\"thin\",\"none\"],\"description\":\"Thousands separator for numbers of five digits or more (\\\"thin\\\": a narrow no-break space).\"},\"dateFormat\":{\"type\":\"string\",\"enum\":[\"iso\",\"day-month-year\",\"month-day-year\"],\"description\":\"How to write dates: 2026-11-12, 12 November 2026 or November 12, 2026.\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"description\":\"Font families allowed in text (for fonts-allowed). Default: the brand fonts.\"},\"palette\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour, or a { \\\"$token\\\": ... } reference.\"},\"description\":\"Text and highlight colours allowed (for palette-only). Default: the brand palette and roles.\"},\"checks\":{\"type\":\"array\",\"description\":\"Checks to run in check_<domain>_style: an id, or an object with the id and its options.\",\"items\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"heading-case\",\"heading-levels\",\"list-punctuation\",\"quotes\",\"terms\",\"number-format\",\"date-format\",\"palette-only\",\"min-contrast\",\"distinguishable\",\"fonts-allowed\"],\"description\":\"heading-case: Headings use the house case (\\\"headingCase\\\": sentence, title or upper), keeping acronyms, words with digits and the profile's \\\"properNouns\\\".\\nheading-levels: Headings go no deeper than \\\"maxHeadingLevel\\\" (default 6) and never skip a level (a level 2 heading before any level 3).\\nlist-punctuation: List items end the house way (\\\"listItemEnd\\\": \\\"none\\\", no full stop, or \\\"period\\\", a full stop).\\nquotes: Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\\\" ') as \\\"quotes\\\" says. Code is left alone.\\nterms: Words the house style avoids (\\\"terms\\\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\\nnumber-format: Numbers of five digits or more group thousands the house way (\\\"thousandsSeparator\\\": \\\",\\\", \\\".\\\", \\\" \\\", \\\"thin\\\" or \\\"none\\\"). Four-digit numbers (years) and code are left alone.\\ndate-format: Dates are written the house way (\\\"dateFormat\\\": \\\"iso\\\" 2026-11-12, \\\"day-month-year\\\" 12 November 2026, or \\\"month-day-year\\\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\\npalette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\\nmin-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\\ndistinguishable: Series and category colours are far enough apart to tell apart.\\nfonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\"},{\"type\":\"object\",\"description\":\"Headings use the house case (\\\"headingCase\\\": sentence, title or upper), keeping acronyms, words with digits and the profile's \\\"properNouns\\\".\",\"properties\":{\"id\":{\"const\":\"heading-case\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Headings go no deeper than \\\"maxHeadingLevel\\\" (default 6) and never skip a level (a level 2 heading before any level 3).\",\"properties\":{\"id\":{\"const\":\"heading-levels\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"List items end the house way (\\\"listItemEnd\\\": \\\"none\\\", no full stop, or \\\"period\\\", a full stop).\",\"properties\":{\"id\":{\"const\":\"list-punctuation\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\\\" ') as \\\"quotes\\\" says. Code is left alone.\",\"properties\":{\"id\":{\"const\":\"quotes\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Words the house style avoids (\\\"terms\\\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\",\"properties\":{\"id\":{\"const\":\"terms\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Numbers of five digits or more group thousands the house way (\\\"thousandsSeparator\\\": \\\",\\\", \\\".\\\", \\\" \\\", \\\"thin\\\" or \\\"none\\\"). Four-digit numbers (years) and code are left alone.\",\"properties\":{\"id\":{\"const\":\"number-format\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Dates are written the house way (\\\"dateFormat\\\": \\\"iso\\\" 2026-11-12, \\\"day-month-year\\\" 12 November 2026, or \\\"month-day-year\\\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\",\"properties\":{\"id\":{\"const\":\"date-format\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\",\"properties\":{\"id\":{\"const\":\"palette-only\"},\"tolerance\":{\"type\":\"number\",\"minimum\":0,\"maximum\":20,\"description\":\"How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2.\"},\"allowNeutrals\":{\"type\":\"boolean\",\"description\":\"Allow greys, black and white that are not in the palette. Default true.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\",\"properties\":{\"id\":{\"const\":\"min-contrast\"},\"ratio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for body text. Default 4.5 (WCAG AA).\"},\"largeRatio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for large text. Default 3.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Series and category colours are far enough apart to tell apart.\",\"properties\":{\"id\":{\"const\":\"distinguishable\"},\"minDistance\":{\"type\":\"number\",\"minimum\":1,\"maximum\":50,\"description\":\"Least OKLab distance × 100 between two series colours. Default 10.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\",\"properties\":{\"id\":{\"const\":\"fonts-allowed\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's.\"}},\"required\":[\"id\"],\"additionalProperties\":false}]}}},\"additionalProperties\":false}\n</style_domain>"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "brand",
+          "file": "brand.json",
+          "description": "The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Display name of the brand."
+              },
+              "colors": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A CSS colour (hex, rgb() or a name), or a { \"$token\": ... } reference."
+                },
+                "description": "Colours by role or slot name. Roles and the names each is looked up by: primary (primary, brand, accent1, accent); secondary (secondary, accent2); accent (accent, tertiary, accent3, accent2); background (background, bg, lt1, surface); surface (surface, lt2, background, lt1); text (text, foreground, fg, dk1); mutedText (mutedText, muted, secondaryText, dk2); border (border, line, outline, dk2); positive (positive, success, good); negative (negative, error, danger, bad); link (link, hlink)."
+              },
+              "palette": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "A CSS colour (hex, rgb() or a name), or a { \"$token\": ... } reference."
+                },
+                "minItems": 1,
+                "description": "Ordered colours for series, categories and swatches. Default: primary, secondary, accent, then accent1–accent6."
+              },
+              "fonts": {
+                "type": "object",
+                "properties": {
+                  "heading": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "CSS font family for headings and titles."
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "CSS font family for body text and labels."
+                  },
+                  "mono": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "CSS font family for code and figures."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "Font families."
+              },
+              "logo": {
+                "type": "object",
+                "properties": {
+                  "svg": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The logo as one <svg> element."
+                  },
+                  "aspect": {
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "description": "Width divided by height."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The logo. Agents place it as given and never redraw it."
+              }
+            },
+            "additionalProperties": false
+          },
+          "checks": [
+            {
+              "id": "palette-only",
+              "description": "Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "tolerance": {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 20,
+                    "description": "How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2."
+                  },
+                  "allowNeutrals": {
+                    "type": "boolean",
+                    "description": "Allow greys, black and white that are not in the palette. Default true."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "min-contrast",
+              "description": "Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "ratio": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 21,
+                    "description": "Minimum ratio for body text. Default 4.5 (WCAG AA)."
+                  },
+                  "largeRatio": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 21,
+                    "description": "Minimum ratio for large text. Default 3."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "distinguishable",
+              "description": "Series and category colours are far enough apart to tell apart.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "minDistance": {
+                    "type": "number",
+                    "minimum": 1,
+                    "maximum": 50,
+                    "description": "Least OKLab distance × 100 between two series colours. Default 10."
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            {
+              "id": "fonts-allowed",
+              "description": "Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.",
+              "options": {
+                "type": "object",
+                "properties": {
+                  "fonts": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1,
+                    "description": "Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's."
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          ],
+          "example": {
+            "name": "Acme",
+            "colors": {
+              "primary": "#0b5fff",
+              "secondary": "#ff6a00",
+              "accent": "#12a150",
+              "text": "#1a1a1a",
+              "mutedText": "#5c5c5c",
+              "background": "#ffffff",
+              "border": "#d9d9d9"
+            },
+            "fonts": {
+              "heading": "Inter",
+              "body": "Inter"
+            },
+            "checks": [
+              "palette-only",
+              "min-contrast",
+              "fonts-allowed"
+            ]
+          }
+        },
+        "text": "<style_domain id=\"brand\" file=\"brand.json\">\nBrand: The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.\n\nWhere it goes: brand.json in the skill folder, or under a \"brand:\" key in the SKILL.md frontmatter (not both). Every domain a skill covers reads its brand.\nA variant can build on another skill with \"extends: <skill>\" in its frontmatter and give only the fields that differ; objects merge field by field, lists and values replace.\n\nChecks it can turn on in \"checks\" (an id, or { \"id\": ..., options }):\n- palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\n- min-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\n- distinguishable: Series and category colours are far enough apart to tell apart.\n- fonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\n\nExample:\n{\n  \"name\": \"Acme\",\n  \"colors\": {\n    \"primary\": \"#0b5fff\",\n    \"secondary\": \"#ff6a00\",\n    \"accent\": \"#12a150\",\n    \"text\": \"#1a1a1a\",\n    \"mutedText\": \"#5c5c5c\",\n    \"background\": \"#ffffff\",\n    \"border\": \"#d9d9d9\"\n  },\n  \"fonts\": {\n    \"heading\": \"Inter\",\n    \"body\": \"Inter\"\n  },\n  \"checks\": [\n    \"palette-only\",\n    \"min-contrast\",\n    \"fonts-allowed\"\n  ]\n}\n\nSchema:\n{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Brand house-style profile (brand.json)\",\"description\":\"The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.\",\"type\":\"object\",\"properties\":{\"$schema\":{\"type\":\"string\",\"description\":\"Path or URL of this schema, for editors. Ignored when the profile loads.\"},\"name\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Display name of the brand.\"},\"colors\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour (hex, rgb() or a name), or a { \\\"$token\\\": ... } reference.\"},\"description\":\"Colours by role or slot name. Roles and the names each is looked up by: primary (primary, brand, accent1, accent); secondary (secondary, accent2); accent (accent, tertiary, accent3, accent2); background (background, bg, lt1, surface); surface (surface, lt2, background, lt1); text (text, foreground, fg, dk1); mutedText (mutedText, muted, secondaryText, dk2); border (border, line, outline, dk2); positive (positive, success, good); negative (negative, error, danger, bad); link (link, hlink).\"},\"palette\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour (hex, rgb() or a name), or a { \\\"$token\\\": ... } reference.\"},\"minItems\":1,\"description\":\"Ordered colours for series, categories and swatches. Default: primary, secondary, accent, then accent1–accent6.\"},\"fonts\":{\"type\":\"object\",\"properties\":{\"heading\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for headings and titles.\"},\"body\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for body text and labels.\"},\"mono\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for code and figures.\"}},\"additionalProperties\":false,\"description\":\"Font families.\"},\"logo\":{\"type\":\"object\",\"properties\":{\"svg\":{\"type\":\"string\",\"minLength\":1,\"description\":\"The logo as one <svg> element.\"},\"aspect\":{\"type\":\"number\",\"exclusiveMinimum\":0,\"description\":\"Width divided by height.\"}},\"additionalProperties\":false,\"description\":\"The logo. Agents place it as given and never redraw it.\"},\"checks\":{\"type\":\"array\",\"description\":\"Checks to run in check_<domain>_style: an id, or an object with the id and its options.\",\"items\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"palette-only\",\"min-contrast\",\"distinguishable\",\"fonts-allowed\"],\"description\":\"palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\\nmin-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\\ndistinguishable: Series and category colours are far enough apart to tell apart.\\nfonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\"},{\"type\":\"object\",\"description\":\"Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\",\"properties\":{\"id\":{\"const\":\"palette-only\"},\"tolerance\":{\"type\":\"number\",\"minimum\":0,\"maximum\":20,\"description\":\"How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2.\"},\"allowNeutrals\":{\"type\":\"boolean\",\"description\":\"Allow greys, black and white that are not in the palette. Default true.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\",\"properties\":{\"id\":{\"const\":\"min-contrast\"},\"ratio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for body text. Default 4.5 (WCAG AA).\"},\"largeRatio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for large text. Default 3.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Series and category colours are far enough apart to tell apart.\",\"properties\":{\"id\":{\"const\":\"distinguishable\"},\"minDistance\":{\"type\":\"number\",\"minimum\":1,\"maximum\":50,\"description\":\"Least OKLab distance × 100 between two series colours. Default 10.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\",\"properties\":{\"id\":{\"const\":\"fonts-allowed\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's.\"}},\"required\":[\"id\"],\"additionalProperties\":false}]}}},\"additionalProperties\":false}\n</style_domain>"
+      }
+    ]
+  },
+  {
+    "name": "a locked layer keeps its fields and its copy; a required layer keeps its skills on",
+    "layers": [
+      {
+        "id": "org",
+        "locked": true,
+        "files": {
+          "house/SKILL.md": "---\nname: house\ndescription: Locked org style.\n---\n\nOrg rules.\n",
+          "house/rich-text.json": "{\"headingCase\":\"sentence\",\"terms\":[{\"avoid\":\"synergy\"}]}"
+        }
+      },
+      {
+        "id": "team",
+        "required": true,
+        "files": {
+          "team/SKILL.md": "---\nname: team\ndescription: Team style.\n---\n\nTeam rules.\n",
+          "team/rich-text.json": "{\"dateFormat\":\"iso\",\"quotes\":\"curly\"}"
+        }
+      },
+      {
+        "id": "user",
+        "files": {
+          "house/SKILL.md": "---\nname: house\ndescription: User copy of house.\n---\n\nIgnored.\n",
+          "mine/SKILL.md": "---\nname: mine\ndescription: Mine.\n---\n\nMy rules.\n",
+          "mine/rich-text.json": "{\"headingCase\":\"title\",\"dateFormat\":\"day-month-year\",\"maxHeadingLevel\":3}"
+        },
+        "state": {
+          "team": {
+            "enabled": false
+          }
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "house",
+          "file": "SKILL.md"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "house",
+              "description": "Locked org style.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "The user layer's copy is ignored: the org layer is locked."
+              ]
+            },
+            {
+              "name": "team",
+              "description": "Team style.",
+              "layer": "team",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "The user layer cannot switch it off: the team layer requires it."
+              ]
+            },
+            {
+              "name": "mine",
+              "description": "Mine.",
+              "layer": "user",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "house",
+              "description": "Locked org style.",
+              "layer": "org"
+            },
+            {
+              "name": "team",
+              "description": "Team style.",
+              "layer": "team"
+            },
+            {
+              "name": "mine",
+              "description": "Mine.",
+              "layer": "user"
+            }
+          ],
+          "profile": {
+            "headingCase": "sentence",
+            "terms": [
+              {
+                "avoid": "synergy"
+              }
+            ],
+            "dateFormat": "day-month-year",
+            "quotes": "curly",
+            "maxHeadingLevel": 3
+          },
+          "sources": {
+            "headingCase": "org",
+            "terms": "org",
+            "dateFormat": "user",
+            "quotes": "team",
+            "maxHeadingLevel": "user"
+          },
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": [
+            {
+              "skill": "house",
+              "layer": "org",
+              "message": "The user layer's copy is ignored: the org layer is locked."
+            },
+            {
+              "skill": "team",
+              "layer": "team",
+              "message": "The user layer cannot switch it off: the team layer requires it."
+            },
+            {
+              "skill": "mine",
+              "layer": "user",
+              "message": "\"headingCase\" is locked by the org layer, so this skill's value is ignored."
+            }
+          ]
+        },
+        "text": "<style_skill name=\"house\" layer=\"org\">\nOrg rules.\n</style_skill>\n\n<style_skill name=\"team\" layer=\"team\">\nTeam rules.\n</style_skill>\n\n<style_skill name=\"mine\" layer=\"user\">\nMy rules.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"headingCase\": \"sentence\",\n  \"terms\": [\n    {\n      \"avoid\": \"synergy\"\n    }\n  ],\n  \"dateFormat\": \"day-month-year\",\n  \"quotes\": \"curly\",\n  \"maxHeadingLevel\": 3\n}"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "name": "house",
+          "file": "SKILL.md",
+          "files": [
+            "SKILL.md",
+            "rich-text.json"
+          ]
+        },
+        "text": "---\nname: house\ndescription: Locked org style.\n---\n\nOrg rules.\n"
+      }
+    ]
+  },
+  {
+    "name": "state: off, order, one-of-a-kind groups and scopes",
+    "scope": "report",
+    "layers": [
+      {
+        "id": "org",
+        "files": {
+          "plain/SKILL.md": "---\nname: plain\ndescription: Plain look.\ngroup: look\n---\n\nPlain.\n",
+          "plain/rich-text.json": "{\"quotes\":\"straight\"}",
+          "fancy/SKILL.md": "---\nname: fancy\ndescription: Fancy look.\ngroup: look\n---\n\nFancy.\n",
+          "fancy/rich-text.json": "{\"quotes\":\"curly\"}",
+          "reports/SKILL.md": "---\nname: reports\ndescription: Only in reports.\n---\n\nReport rules.\n",
+          "reports/rich-text.json": "{\"maxHeadingLevel\":2}",
+          "slides/SKILL.md": "---\nname: slides\ndescription: Only in slides.\n---\n\nSlide rules.\n",
+          "slides/rich-text.json": "{\"maxHeadingLevel\":1}",
+          "zz-first/SKILL.md": "---\nname: zz-first\ndescription: Ordered first.\n---\n\nFirst.\n",
+          "off/SKILL.md": "---\nname: off\ndescription: Switched off.\n---\n\nOff.\n"
+        },
+        "state": {
+          "plain": {
+            "order": 2
+          },
+          "zz-first": {
+            "order": -1
+          },
+          "reports": {
+            "scope": [
+              "report"
+            ]
+          },
+          "slides": {
+            "scope": [
+              "slides"
+            ]
+          },
+          "off": {
+            "enabled": false
+          }
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "zz-first",
+              "description": "Ordered first.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": -1,
+              "issues": []
+            },
+            {
+              "name": "fancy",
+              "description": "Fancy look.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "group": "look",
+              "issues": [],
+              "chosen": true
+            },
+            {
+              "name": "off",
+              "description": "Switched off.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": false,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "reports",
+              "description": "Only in reports.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "scope": [
+                "report"
+              ],
+              "issues": []
+            },
+            {
+              "name": "plain",
+              "description": "Plain look.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 2,
+              "group": "look",
+              "issues": [],
+              "chosen": false
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "zz-first",
+              "description": "Ordered first.",
+              "layer": "org"
+            },
+            {
+              "name": "fancy",
+              "description": "Fancy look.",
+              "layer": "org"
+            },
+            {
+              "name": "reports",
+              "description": "Only in reports.",
+              "layer": "org"
+            }
+          ],
+          "profile": {
+            "quotes": "curly",
+            "maxHeadingLevel": 2
+          },
+          "sources": {
+            "quotes": "org",
+            "maxHeadingLevel": "org"
+          },
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": []
+        },
+        "text": "<style_skill name=\"zz-first\" layer=\"org\">\nFirst.\n</style_skill>\n\n<style_skill name=\"fancy\" layer=\"org\">\nFancy.\n</style_skill>\n\n<style_skill name=\"reports\" layer=\"org\">\nReport rules.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"quotes\": \"curly\",\n  \"maxHeadingLevel\": 2\n}"
+      }
+    ]
+  },
+  {
+    "name": "extends: a chain, a cycle, a missing base and a bad value",
+    "layers": [
+      {
+        "id": "org",
+        "files": {
+          "base/SKILL.md": "---\nname: base\ndescription: The base.\n---\n\nBase prose.\n",
+          "base/rich-text.json": "{\"headingCase\":\"title\",\"terms\":[{\"avoid\":\"utilize\",\"use\":\"use\"}],\"checks\":[\"heading-case\"]}",
+          "mid/SKILL.md": "---\nname: mid\ndescription: Builds on base.\nextends: base\n---\n\nMid prose.\n",
+          "mid/rich-text.json": "{\"quotes\":\"curly\"}",
+          "leaf/SKILL.md": "---\nname: leaf\ndescription: Builds on mid.\nextends: mid\n---\n\nLeaf prose.\n",
+          "leaf/rich-text.json": "{\"headingCase\":\"sentence\"}",
+          "loop-a/SKILL.md": "---\nname: loop-a\ndescription: A loop.\nextends: loop-b\n---\n\nA.\n",
+          "loop-a/rich-text.json": "{\"quotes\":\"straight\"}",
+          "loop-b/SKILL.md": "---\nname: loop-b\ndescription: B loop.\nextends: loop-a\n---\n\nB.\n",
+          "orphan/SKILL.md": "---\nname: orphan\ndescription: Missing base.\nextends: nowhere\n---\n\nOrphan.\n",
+          "orphan/rich-text.json": "{\"quotes\":\"straight\"}",
+          "odd/SKILL.md": "---\nname: odd\ndescription: Bad extends.\nextends: [base]\n---\n\nOdd.\n"
+        },
+        "state": {
+          "base": {
+            "enabled": false
+          },
+          "mid": {
+            "enabled": false
+          }
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "base",
+              "description": "The base.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": false,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "leaf",
+              "description": "Builds on mid.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": [],
+              "inherits": [
+                "mid",
+                "base"
+              ]
+            },
+            {
+              "name": "loop-a",
+              "description": "A loop.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "Its profiles are left out: \"extends\" goes round in a circle: loop-a → loop-b → loop-a."
+              ],
+              "inherits": [
+                "loop-b"
+              ]
+            },
+            {
+              "name": "loop-b",
+              "description": "B loop.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "Its profiles are left out: \"extends\" goes round in a circle: loop-b → loop-a → loop-b."
+              ],
+              "inherits": [
+                "loop-a"
+              ]
+            },
+            {
+              "name": "mid",
+              "description": "Builds on base.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": false,
+              "order": 0,
+              "issues": [],
+              "inherits": [
+                "base"
+              ]
+            },
+            {
+              "name": "odd",
+              "description": "Bad extends.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "\"extends\" must be the name of another style skill (or null), not [\"base\"]; its profiles are read without a base."
+              ]
+            },
+            {
+              "name": "orphan",
+              "description": "Missing base.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "Its profiles are left out: it extends \"nowhere\", which no layer holds; the skills are \"base\", \"leaf\", \"loop-a\", \"loop-b\", \"mid\", \"odd\"."
+              ]
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "leaf",
+              "description": "Builds on mid.",
+              "layer": "org",
+              "inherits": [
+                "mid",
+                "base"
+              ]
+            },
+            {
+              "name": "loop-a",
+              "description": "A loop.",
+              "layer": "org",
+              "inherits": [
+                "loop-b"
+              ]
+            },
+            {
+              "name": "loop-b",
+              "description": "B loop.",
+              "layer": "org",
+              "inherits": [
+                "loop-a"
+              ]
+            },
+            {
+              "name": "odd",
+              "description": "Bad extends.",
+              "layer": "org"
+            },
+            {
+              "name": "orphan",
+              "description": "Missing base.",
+              "layer": "org"
+            }
+          ],
+          "profile": {
+            "headingCase": "sentence",
+            "terms": [
+              {
+                "avoid": "utilize",
+                "use": "use"
+              }
+            ],
+            "checks": [
+              "heading-case"
+            ],
+            "quotes": "curly"
+          },
+          "sources": {
+            "headingCase": "org",
+            "terms": "org (from base)",
+            "checks": "org (from base)",
+            "quotes": "org (from mid)"
+          },
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": [
+            {
+              "skill": "loop-a",
+              "layer": "org",
+              "message": "Its profiles are left out: \"extends\" goes round in a circle: loop-a → loop-b → loop-a."
+            },
+            {
+              "skill": "loop-b",
+              "layer": "org",
+              "message": "Its profiles are left out: \"extends\" goes round in a circle: loop-b → loop-a → loop-b."
+            },
+            {
+              "skill": "odd",
+              "layer": "org",
+              "message": "\"extends\" must be the name of another style skill (or null), not [\"base\"]; its profiles are read without a base."
+            },
+            {
+              "skill": "orphan",
+              "layer": "org",
+              "message": "Its profiles are left out: it extends \"nowhere\", which no layer holds; the skills are \"base\", \"leaf\", \"loop-a\", \"loop-b\", \"mid\", \"odd\"."
+            }
+          ]
+        },
+        "text": "<style_skill name=\"leaf\" layer=\"org\">\nLeaf prose.\n</style_skill>\n\n<style_skill name=\"loop-a\" layer=\"org\">\nA.\n</style_skill>\n\n<style_skill name=\"loop-b\" layer=\"org\">\nB.\n</style_skill>\n\n<style_skill name=\"odd\" layer=\"org\">\nOdd.\n</style_skill>\n\n<style_skill name=\"orphan\" layer=\"org\">\nOrphan.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"headingCase\": \"sentence\",\n  \"terms\": [\n    {\n      \"avoid\": \"utilize\",\n      \"use\": \"use\"\n    }\n  ],\n  \"checks\": [\n    \"heading-case\"\n  ],\n  \"quotes\": \"curly\"\n}"
+      }
+    ]
+  },
+  {
+    "name": "design tokens, a brand with its derived profile, swatches and $brand.checks",
+    "tokens": {
+      "brand/primary": "#0b5fff",
+      "brand/text": "#1a1a1a",
+      "brand/text@Dark": "#f5f5f5",
+      "type/body": "Inter"
+    },
+    "layers": [
+      {
+        "id": "org",
+        "files": {
+          "brand/SKILL.md": "---\nname: brand\ndescription: Acme brand.\n---\n\nUse the brand colours.\n",
+          "brand/brand.json": "{\"name\":\"Acme\",\"colors\":{\"primary\":{\"$token\":\"brand/primary\"},\"text\":{\"$token\":\"brand/text\",\"mode\":\"Dark\"},\"background\":\"#ffffff\"},\"palette\":[\"#0b5fff\",\"#ff6a00\"],\"fonts\":{\"heading\":\"Georgia\",\"body\":{\"$token\":\"type/body\"}},\"checks\":[\"palette-only\",\"fonts-allowed\"]}",
+          "tokens-bad/SKILL.md": "---\nname: tokens-bad\ndescription: A missing token.\n---\n\nBad.\n",
+          "tokens-bad/rich-text.json": "{\"quotes\":{\"$token\":\"nope\"},\"headingCase\":\"sentence\"}",
+          "tokens-shape/SKILL.md": "---\nname: tokens-shape\ndescription: A malformed reference.\n---\n\nBad.\n",
+          "tokens-shape/rich-text.json": "{\"quotes\":{\"$token\":\"brand/primary\",\"extra\":1}}"
+        }
+      },
+      {
+        "id": "user",
+        "files": {
+          "mine/SKILL.md": "---\nname: mine\ndescription: My palette.\n---\n\nMine.\n",
+          "mine/rich-text.json": "{\"palette\":[\"#123456\",\"#0B5FFF\"]}"
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "brand"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "brand",
+              "description": "Acme brand.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "brand"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "tokens-bad",
+              "description": "A missing token.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "rich-text.json is left out: quotes: \"nope\" is not a design token here."
+              ]
+            },
+            {
+              "name": "tokens-shape",
+              "description": "A malformed reference.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "rich-text.json is left out: quotes: a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }."
+              ]
+            },
+            {
+              "name": "mine",
+              "description": "My palette.",
+              "layer": "user",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "brand",
+              "description": "Acme brand.",
+              "layer": "org"
+            },
+            {
+              "name": "tokens-bad",
+              "description": "A missing token.",
+              "layer": "org"
+            },
+            {
+              "name": "tokens-shape",
+              "description": "A malformed reference.",
+              "layer": "org"
+            },
+            {
+              "name": "mine",
+              "description": "My palette.",
+              "layer": "user"
+            }
+          ],
+          "profile": {
+            "fonts": [
+              "Georgia",
+              "Inter"
+            ],
+            "palette": [
+              "#123456",
+              "#0B5FFF"
+            ]
+          },
+          "sources": {
+            "fonts": "org (brand)",
+            "palette": "user",
+            "$brand.checks": "org"
+          },
+          "swatches": {
+            "colors": [
+              {
+                "color": "#123456",
+                "label": "palette 1"
+              },
+              {
+                "color": "#0B5FFF",
+                "label": "palette 2"
+              },
+              {
+                "color": "#ff6a00",
+                "label": "brand 2"
+              },
+              {
+                "color": "#ffffff",
+                "label": "background"
+              },
+              {
+                "color": "#f5f5f5",
+                "label": "text"
+              }
+            ],
+            "fonts": [
+              "Georgia",
+              "Inter"
+            ]
+          },
+          "issues": [
+            {
+              "skill": "tokens-bad",
+              "layer": "org",
+              "message": "rich-text.json is left out: quotes: \"nope\" is not a design token here."
+            },
+            {
+              "skill": "tokens-shape",
+              "layer": "org",
+              "message": "rich-text.json is left out: quotes: a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }."
+            }
+          ],
+          "brand": {
+            "name": "Acme",
+            "colors": {
+              "primary": "#0b5fff",
+              "text": "#f5f5f5",
+              "background": "#ffffff"
+            },
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "fonts": {
+              "heading": "Georgia",
+              "body": "Inter"
+            },
+            "checks": [
+              "palette-only",
+              "fonts-allowed"
+            ]
+          }
+        },
+        "text": "<style_skill name=\"brand\" layer=\"org\">\nUse the brand colours.\n</style_skill>\n\n<style_skill name=\"tokens-bad\" layer=\"org\">\nBad.\n</style_skill>\n\n<style_skill name=\"tokens-shape\" layer=\"org\">\nBad.\n</style_skill>\n\n<style_skill name=\"mine\" layer=\"user\">\nMine.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"fonts\": [\n    \"Georgia\",\n    \"Inter\"\n  ],\n  \"palette\": [\n    \"#123456\",\n    \"#0B5FFF\"\n  ]\n}\n\nBrand (brand.json; place the logo as given, never redraw it):\n{\n  \"name\": \"Acme\",\n  \"colors\": {\n    \"primary\": \"#0b5fff\",\n    \"text\": \"#f5f5f5\",\n    \"background\": \"#ffffff\"\n  },\n  \"palette\": [\n    \"#0b5fff\",\n    \"#ff6a00\"\n  ],\n  \"fonts\": {\n    \"heading\": \"Georgia\",\n    \"body\": \"Inter\"\n  },\n  \"checks\": [\n    \"palette-only\",\n    \"fonts-allowed\"\n  ]\n}"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "brand",
+          "skills": [
+            {
+              "name": "brand",
+              "description": "Acme brand.",
+              "layer": "org"
+            },
+            {
+              "name": "tokens-bad",
+              "description": "A missing token.",
+              "layer": "org"
+            },
+            {
+              "name": "tokens-shape",
+              "description": "A malformed reference.",
+              "layer": "org"
+            },
+            {
+              "name": "mine",
+              "description": "My palette.",
+              "layer": "user"
+            }
+          ],
+          "profile": {
+            "name": "Acme",
+            "colors": {
+              "primary": "#0b5fff",
+              "text": "#f5f5f5",
+              "background": "#ffffff"
+            },
+            "palette": [
+              "#0b5fff",
+              "#ff6a00"
+            ],
+            "fonts": {
+              "heading": "Georgia",
+              "body": "Inter"
+            },
+            "checks": [
+              "palette-only",
+              "fonts-allowed"
+            ]
+          },
+          "sources": {
+            "name": "org",
+            "colors.primary": "org",
+            "colors.text": "org",
+            "colors.background": "org",
+            "palette": "org",
+            "fonts.heading": "org",
+            "fonts.body": "org",
+            "checks": "org"
+          },
+          "swatches": {
+            "colors": [
+              {
+                "color": "#0b5fff",
+                "label": "palette 1"
+              },
+              {
+                "color": "#ff6a00",
+                "label": "palette 2"
+              }
+            ],
+            "fonts": []
+          },
+          "issues": [
+            {
+              "skill": "tokens-bad",
+              "layer": "org",
+              "message": "rich-text.json is left out: quotes: \"nope\" is not a design token here."
+            },
+            {
+              "skill": "tokens-shape",
+              "layer": "org",
+              "message": "rich-text.json is left out: quotes: a token reference is { \"$token\": \"<variable name or id>\", \"mode\"?: \"<mode>\" }."
+            }
+          ]
+        },
+        "text": "<style_skill name=\"brand\" layer=\"org\">\nUse the brand colours.\n</style_skill>\n\n<style_skill name=\"tokens-bad\" layer=\"org\">\nBad.\n</style_skill>\n\n<style_skill name=\"tokens-shape\" layer=\"org\">\nBad.\n</style_skill>\n\n<style_skill name=\"mine\" layer=\"user\">\nMine.\n</style_skill>\n\nMerged brand profile:\n{\n  \"name\": \"Acme\",\n  \"colors\": {\n    \"primary\": \"#0b5fff\",\n    \"text\": \"#f5f5f5\",\n    \"background\": \"#ffffff\"\n  },\n  \"palette\": [\n    \"#0b5fff\",\n    \"#ff6a00\"\n  ],\n  \"fonts\": {\n    \"heading\": \"Georgia\",\n    \"body\": \"Inter\"\n  },\n  \"checks\": [\n    \"palette-only\",\n    \"fonts-allowed\"\n  ]\n}"
+      }
+    ]
+  },
+  {
+    "name": "frontmatter: profiles under a key, unknown domains, broken YAML and bad files",
+    "layers": [
+      {
+        "id": "org",
+        "files": {
+          "inline/SKILL.md": "---\nname: inline\ndescription: >\n  A profile kept in\n  the frontmatter.\ndomains: [rich-text, chart]\nrich-text:\n  headingCase: upper\n  terms:\n    - avoid: \"leverage\"\n      use: use\n    - { avoid: synergy, note: 'jargon' }\n---\n\nInline prose.\n",
+          "both/SKILL.md": "---\nname: both\ndescription: File and frontmatter\nrich-text: { quotes: curly }\n---\nBody.\n",
+          "both/rich-text.json": "{\"quotes\":\"straight\"}",
+          "broken/SKILL.md": "---\nname: broken\ndescription: \"unclosed\ndomains: [rich-text]\ngroup: look\n---\nBroken prose.\n",
+          "badprofile/SKILL.md": "---\nname: badprofile\ndescription: An invalid profile.\n---\n\nBad.\n",
+          "badprofile/rich-text.json": "{\"headingCase\":\"shouty\",\"maxHeadingLevel\":9,\"checks\":[\"heading-case\",{\"id\":\"terms\",\"extra\":true},7]}",
+          "notobject/SKILL.md": "---\nname: notobject\ndescription: A profile that is a list.\n---\n\nList.\n",
+          "notobject/rich-text.json": "[1, 2]",
+          "outside/SKILL.md": "---\nname: outside\ndescription: A profile for a domain it leaves out.\ndomains: [brand]\n---\n\nOut.\n",
+          "outside/rich-text.json": "{\"quotes\":\"curly\"}",
+          "Bad_Name/SKILL.md": "---\nname: Bad_Name\ndescription: Invalid name.\n---\n\nBad.\n",
+          "files/SKILL.md": "---\nname: files\ndescription: Odd files.\n---\n\nFiles.\n",
+          "files/.hidden.md": "hidden",
+          "files/image.png": "not text",
+          "files/a/b/c/d/e/deep.md": "too deep",
+          "files/notes.md": "Notes."
+        }
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "files",
+          "file": "notes.md"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "files",
+          "file": "missing.md"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "files",
+          "file": "../escape.md"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "files",
+          "file": "image.png"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "nobody",
+          "file": "SKILL.md"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [
+            {
+              "name": "badprofile",
+              "description": "An invalid profile.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "rich-text.json is left out: /headingCase: Expected one of \"sentence\", \"title\", \"upper\", got \"shouty\". /maxHeadingLevel: Must be <= 6. checks[1] (terms)/extra: Unknown property \"extra\". checks[2]: expected a check id or { \"id\": ..., options }."
+              ]
+            },
+            {
+              "name": "both",
+              "description": "File and frontmatter",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "The frontmatter \"rich-text\" profile is ignored: rich-text.json is used."
+              ]
+            },
+            {
+              "name": "broken",
+              "description": "\"unclosed",
+              "layer": "org",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "group": "look",
+              "issues": [
+                "SKILL.md frontmatter line 3: an unclosed double quote; quotes must close on the same line."
+              ],
+              "chosen": true
+            },
+            {
+              "name": "files",
+              "description": "Odd files.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": []
+            },
+            {
+              "name": "inline",
+              "description": "A profile kept in the frontmatter.\n",
+              "layer": "org",
+              "domains": [
+                "rich-text"
+              ],
+              "profiles": [
+                "rich-text"
+              ],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "It names an unknown domain \"chart\"; the domains here are rich-text, brand."
+              ]
+            },
+            {
+              "name": "notobject",
+              "description": "A profile that is a list.",
+              "layer": "org",
+              "domains": [
+                "rich-text",
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "rich-text.json must hold a JSON object."
+              ]
+            },
+            {
+              "name": "outside",
+              "description": "A profile for a domain it leaves out.",
+              "layer": "org",
+              "domains": [
+                "brand"
+              ],
+              "profiles": [],
+              "enabled": true,
+              "order": 0,
+              "issues": [
+                "rich-text.json is left out: the skill's domains do not include rich-text."
+              ]
+            }
+          ],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [
+            {
+              "name": "badprofile",
+              "description": "An invalid profile.",
+              "layer": "org"
+            },
+            {
+              "name": "both",
+              "description": "File and frontmatter",
+              "layer": "org"
+            },
+            {
+              "name": "broken",
+              "description": "\"unclosed",
+              "layer": "org"
+            },
+            {
+              "name": "files",
+              "description": "Odd files.",
+              "layer": "org"
+            },
+            {
+              "name": "inline",
+              "description": "A profile kept in the frontmatter.\n",
+              "layer": "org"
+            },
+            {
+              "name": "notobject",
+              "description": "A profile that is a list.",
+              "layer": "org"
+            }
+          ],
+          "profile": {
+            "quotes": "straight",
+            "headingCase": "upper",
+            "terms": [
+              {
+                "avoid": "leverage",
+                "use": "use"
+              },
+              {
+                "avoid": "synergy",
+                "note": "jargon"
+              }
+            ]
+          },
+          "sources": {
+            "quotes": "org",
+            "headingCase": "org",
+            "terms": "org"
+          },
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": [
+            {
+              "skill": "Bad_Name",
+              "message": "\"Bad_Name\" is not a valid skill name (lowercase letters, digits and hyphens, at most 64)."
+            },
+            {
+              "skill": "badprofile",
+              "layer": "org",
+              "message": "rich-text.json is left out: /headingCase: Expected one of \"sentence\", \"title\", \"upper\", got \"shouty\". /maxHeadingLevel: Must be <= 6. checks[1] (terms)/extra: Unknown property \"extra\". checks[2]: expected a check id or { \"id\": ..., options }."
+            },
+            {
+              "skill": "both",
+              "layer": "org",
+              "message": "The frontmatter \"rich-text\" profile is ignored: rich-text.json is used."
+            },
+            {
+              "skill": "broken",
+              "layer": "org",
+              "message": "SKILL.md frontmatter line 3: an unclosed double quote; quotes must close on the same line."
+            },
+            {
+              "skill": "inline",
+              "layer": "org",
+              "message": "It names an unknown domain \"chart\"; the domains here are rich-text, brand."
+            },
+            {
+              "skill": "notobject",
+              "layer": "org",
+              "message": "rich-text.json must hold a JSON object."
+            }
+          ]
+        },
+        "text": "<style_skill name=\"badprofile\" layer=\"org\">\nBad.\n</style_skill>\n\n<style_skill name=\"both\" layer=\"org\">\nBody.\n</style_skill>\n\n<style_skill name=\"broken\" layer=\"org\">\nBroken prose.\n</style_skill>\n\n<style_skill name=\"files\" layer=\"org\">\nFiles.\n</style_skill>\n\n<style_skill name=\"inline\" layer=\"org\">\nInline prose.\n</style_skill>\n\n<style_skill name=\"notobject\" layer=\"org\">\nList.\n</style_skill>\n\nMerged rich-text profile:\n{\n  \"quotes\": \"straight\",\n  \"headingCase\": \"upper\",\n  \"terms\": [\n    {\n      \"avoid\": \"leverage\",\n      \"use\": \"use\"\n    },\n    {\n      \"avoid\": \"synergy\",\n      \"note\": \"jargon\"\n    }\n  ]\n}"
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "name": "files",
+          "file": "notes.md",
+          "files": [
+            "SKILL.md",
+            "notes.md"
+          ]
+        },
+        "text": "Notes."
+      },
+      {
+        "isError": true,
+        "error": "\"files\" has no file \"missing.md\"; its files are \"SKILL.md\", \"notes.md\"."
+      },
+      {
+        "isError": true,
+        "error": "\"../escape.md\" must not contain empty, \".\" or \"..\" parts. Read one of the files get_style_file lists."
+      },
+      {
+        "isError": true,
+        "error": "\"image.png\" is not a text file type agents can read (md, json, yaml, svg, ...). Read one of the files get_style_file lists."
+      },
+      {
+        "isError": true,
+        "error": "There is no house-style skill \"nobody\"; the skills are \"badprofile\", \"both\", \"broken\", \"files\", \"inline\", \"notobject\", \"outside\"."
+      }
+    ]
+  },
+  {
+    "name": "no house style",
+    "layers": [
+      {
+        "id": "org",
+        "files": {}
+      }
+    ],
+    "calls": [
+      {
+        "tool": "list_styles",
+        "args": {}
+      },
+      {
+        "tool": "get_style",
+        "args": {
+          "domain": "rich-text"
+        }
+      },
+      {
+        "tool": "get_style_file",
+        "args": {
+          "name": "house",
+          "file": "SKILL.md"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "isError": false,
+        "structuredContent": {
+          "skills": [],
+          "domains": [
+            "rich-text",
+            "brand"
+          ]
+        }
+      },
+      {
+        "isError": false,
+        "structuredContent": {
+          "domain": "rich-text",
+          "skills": [],
+          "profile": {},
+          "sources": {},
+          "swatches": {
+            "colors": [],
+            "fonts": []
+          },
+          "issues": []
+        },
+        "text": "No house style applies to rich-text."
+      },
+      {
+        "isError": true,
+        "error": "There is no house-style skill \"house\"; none are installed."
+      }
+    ]
+  }
+]
