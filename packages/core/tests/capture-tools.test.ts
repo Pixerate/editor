@@ -322,6 +322,68 @@ describe('canvas capture', () => {
 		expect(clone.querySelector('.react-flow__selection')).toBeNull();
 	});
 
+	it('frames layers drawn outside the viewport with the nodes and re-frames them', async () => {
+		document.body.innerHTML = `
+			<div class="svelte-flow" id="flow">
+				<div class="paint-layer" id="paint"><div style="transform: translate(10px, 20px) scale(2)"><canvas></canvas></div></div>
+				<div class="svelte-flow__renderer"><div class="svelte-flow__viewport" style="transform: translate(10px, 20px) scale(2)">
+					<div class="svelte-flow__nodes"><div class="svelte-flow__node">A</div></div>
+				</div></div>
+				<svg class="ink-layer" id="ink" style="position: absolute; z-index: 20"><g transform="translate(10, 20) scale(2)"><path d="M0 0L5 5"></path><g class="agent-presence"></g></g></svg>
+				<div class="svelte-flow__panel">toolbar</div>
+			</div>`;
+		const el = document.getElementById('flow')!;
+		Object.defineProperties(el, { clientWidth: { value: 800 }, clientHeight: { value: 600 } });
+		let inkBounds: { x: number; y: number; width: number; height: number } | null = { x: 900, y: 400, width: 100, height: 100 };
+		const calls: RasterizeElementOptions[] = [];
+		const registry = new ToolRegistry();
+		registry.register(
+			createCanvasCaptureToolProvider({
+				element: el,
+				getViewport: () => ({ x: 10, y: 20, zoom: 2 }),
+				getNodes: () => nodes,
+				layers: () => [
+					{ element: document.getElementById('paint'), bounds: () => ({ x: -200, y: -100, width: 50, height: 50 }) },
+					{ element: () => document.getElementById('ink'), bounds: () => inkBounds },
+					{ element: null, bounds: () => ({ x: 0, y: 0, width: 0, height: 0 }) }
+				],
+				rasterize: async (_el, options) => {
+					calls.push(options);
+					return PNG;
+				}
+			})
+		);
+
+		// Content is the union of the nodes and the layers' bounds; empty bounds are ignored.
+		const content = await registry.callTool('capture_view', { region: 'content', padding: 0 });
+		expect(content.structuredContent).toMatchObject({ rect: { x: -200, y: -100, width: 1200, height: 600 } });
+		inkBounds = null;
+		const withoutInk = await registry.callTool('capture_view', { region: 'content', padding: 0, maxEdge: 600 });
+		expect(withoutInk.structuredContent).toMatchObject({ rect: { x: -200, y: -100, width: 600, height: 400 } });
+
+		// The re-framed clone keeps both layers, under and over the viewport, in this frame.
+		const clone = el.cloneNode(true) as HTMLElement;
+		for (const panel of Array.from(clone.querySelectorAll('.svelte-flow__panel'))) panel.remove();
+		calls[calls.length - 1].prepare!(clone);
+		const children = Array.from(clone.children) as HTMLElement[];
+		expect(children.map((c) => c.className || (c.firstElementChild as Element | null)?.getAttribute('class'))).toEqual([
+			'paint-layer',
+			'svelte-flow__renderer',
+			'ink-layer'
+		]);
+		const [paintWrapper, , inkWrapper] = children;
+		// Undo the live viewport (10, 20) × 2, then frame the rect at scale 1 (rect -200, -100).
+		expect(paintWrapper.style.transform).toBe('translate(200px, 100px) scale(0.5) translate(-10px, -20px)');
+		expect(paintWrapper.style.transformOrigin).toBe('0 0');
+		expect(inkWrapper.style.zIndex).toBe('20');
+		expect(paintWrapper.querySelector('img, canvas')).not.toBeNull();
+		expect(inkWrapper.querySelector('path')).not.toBeNull();
+		// Overlays inside a layer are left out like the rest.
+		expect(inkWrapper.querySelector('.agent-presence')).toBeNull();
+		expect(clone.querySelector('.svelte-flow__panel')).toBeNull();
+		document.body.innerHTML = '';
+	});
+
 	it('refuses to capture an unmounted canvas', async () => {
 		const registry = new ToolRegistry();
 		registry.register(createCanvasCaptureToolProvider({ element: null, getViewport: () => ({ x: 0, y: 0, zoom: 1 }), getNodes: () => nodes }));

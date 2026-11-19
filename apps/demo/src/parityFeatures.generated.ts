@@ -2662,8 +2662,8 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#533)"
       },
       {
-        "feature": "Screenshot Capture for Agents (`capture_view`: viewport, content, selection, canvas nodes by id or a rect, PNG or JPEG, with the rect and scale to map image pixels back; overlays such as selection boxes and agent cursors left out unless asked; canvas, image editor and any DOM element)",
-        "core": "`createCaptureTool`, `createElementCaptureSurface` (`/tools`), `createCanvasCaptureToolProvider` (`/canvas`), `capture_view` in `createImageEditorToolProvider`",
+        "feature": "Screenshot Capture for Agents (`capture_view`: viewport, content, selection, canvas nodes by id or a rect, PNG or JPEG, with the rect and scale to map image pixels back; overlays such as selection boxes and agent cursors left out unless asked; canvas `layers` such as ink and paint drawn outside the flow's viewport join `content` and re-framed captures; canvas, image editor and any DOM element)",
+        "core": "`createCaptureTool`, `createElementCaptureSurface` (`/tools`), `createCanvasCaptureToolProvider` / `createCanvasCaptureSurface` with `layers` (`/canvas`), `capture_view` in `createImageEditorToolProvider`",
         "react": "`useCanvasCapture`",
         "svelte": "`createCanvasCapture`",
         "swift": "Planned (#533)"

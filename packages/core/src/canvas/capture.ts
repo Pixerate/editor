@@ -8,6 +8,7 @@ import {
 } from '../tools/capture.js';
 import {
 	CAPTURE_EXCLUDE_SELECTOR,
+	cloneElementWithStyles,
 	CAPTURE_OVERLAY_SELECTORS,
 	rasterizeElement,
 	type RasterizeElementOptions
@@ -20,6 +21,22 @@ export interface CanvasCaptureViewport {
 	x: number;
 	y: number;
 	zoom: number;
+}
+
+/**
+ * Something drawn on the canvas outside the flow's viewport element, such as an ink or paint
+ * layer that follows the viewport with its own transform. Its strokes count as content and are
+ * drawn in re-framed captures.
+ */
+export interface CanvasCaptureLayer {
+	/**
+	 * The layer's element, or a getter: an untransformed box (usually `inset: 0` over the flow)
+	 * whose content follows the live viewport (screen = flow × zoom + (x, y), relative to the
+	 * flow's root element), as xyflow's viewport does.
+	 */
+	element: HTMLElement | SVGElement | null | undefined | (() => HTMLElement | SVGElement | null | undefined);
+	/** What the layer draws, in flow coordinates, or `null` when it is empty. */
+	bounds: () => Rect | null;
 }
 
 export interface CanvasCaptureSurfaceOptions<TNode extends CanvasNode = CanvasNode> {
@@ -37,6 +54,13 @@ export interface CanvasCaptureSurfaceOptions<TNode extends CanvasNode = CanvasNo
 	chromeSelectors?: readonly string[];
 	/** Left out unless `includeOverlays` (default `CANVAS_CAPTURE_OVERLAY_SELECTORS`). */
 	overlaySelectors?: readonly string[];
+	/**
+	 * Layers drawn outside the viewport element (ink, paint), or a getter (re-read on every call).
+	 * Their bounds join the nodes' in `content`, and every region but `viewport` draws them,
+	 * in their order relative to the viewport element. `viewport` draws the root as it is, so
+	 * it shows them only when they are inside it.
+	 */
+	layers?: readonly CanvasCaptureLayer[] | (() => readonly CanvasCaptureLayer[]);
 	/** Fill behind the canvas (default: the root element's computed background). */
 	background?: string;
 	/** Largest output pixels per canvas unit (default 2). */
@@ -112,6 +136,13 @@ export function createCanvasCaptureSurface<TNode extends CanvasNode = CanvasNode
 	const rectsOf = (nodes: readonly TNode[], pick: (n: TNode) => boolean) =>
 		nodes.filter(pick).map((n) => nodeRect(n, nodes)).filter((r): r is Rect => !!r && r.width > 0 && r.height > 0);
 	const viewportSelector = options.viewportSelector ?? CANVAS_CAPTURE_VIEWPORT_SELECTOR;
+	const getLayers = () => (typeof options.layers === 'function' ? options.layers() : options.layers) ?? [];
+	const layerElement = (layer: CanvasCaptureLayer) =>
+		(typeof layer.element === 'function' ? layer.element() : layer.element) ?? null;
+	const layerRects = () =>
+		getLayers()
+			.map((layer) => layer.bounds())
+			.filter((r): r is Rect => !!r && r.width > 0 && r.height > 0);
 
 	const viewport = (): CaptureRect | null => {
 		const el = getElement();
@@ -123,7 +154,7 @@ export function createCanvasCaptureSurface<TNode extends CanvasNode = CanvasNode
 	return {
 		units: 'canvas units',
 		viewport,
-		content: () => unionCaptureRects(rectsOf(options.getNodes(), () => true)),
+		content: () => unionCaptureRects([...rectsOf(options.getNodes(), () => true), ...layerRects()]),
 		selection: () => {
 			const nodes = options.getNodes();
 			const selected = (n: TNode) => !!n.selected && !n.hidden;
@@ -155,6 +186,27 @@ export function createCanvasCaptureSurface<TNode extends CanvasNode = CanvasNode
 			}
 			// Re-frame: draw only the viewport's subtree with a transform that puts the rect at the top left.
 			const zoom = request.scale;
+			const liveViewport = options.getViewport();
+			const liveViewportEl = el.querySelector(viewportSelector);
+			const rootBox = el.getBoundingClientRect();
+			// Layers inside the viewport element are already drawn with it.
+			const layers = getLayers()
+				.map(layerElement)
+				.filter((layer): layer is HTMLElement | SVGElement => !!layer && layer.isConnected && !liveViewportEl?.contains(layer))
+				.map((layer) => {
+					const box = layer.getBoundingClientRect();
+					return {
+						clone: cloneElementWithStyles(layer, exclude),
+						left: box.left - rootBox.left,
+						top: box.top - rootBox.top,
+						width: box.width,
+						height: box.height,
+						// The wrapper's transform makes a stacking context, so it takes the layer's z-index.
+						zIndex: layer.ownerDocument.defaultView?.getComputedStyle(layer).zIndex ?? 'auto',
+						// DOCUMENT_POSITION_FOLLOWING: the viewport comes after the layer, so the layer is under it.
+						below: !!liveViewportEl && !!(layer.compareDocumentPosition(liveViewportEl) & 4)
+					};
+				});
 			return rasterize(el, {
 				...common,
 				width: request.width,
@@ -166,10 +218,35 @@ export function createCanvasCaptureSurface<TNode extends CanvasNode = CanvasNode
 					vpEl.style.transform = `translate(${-request.rect.x * zoom}px, ${-request.rect.y * zoom}px) scale(${zoom})`;
 					vpEl.style.transformOrigin = '0 0';
 					// Background patterns and screen-space layers follow the live viewport, not this frame.
+					let top: HTMLElement = vpEl;
 					for (let node: HTMLElement | null = vpEl; node && node !== clone; node = node.parentElement) {
 						for (const sibling of Array.from(node.parentElement?.children ?? [])) {
 							if (sibling !== node) sibling.remove();
 						}
+						if (node.parentElement === clone) top = node;
+					}
+					// Layers follow the live viewport too: undo it, then apply this frame's.
+					if (!(liveViewport.zoom > 0)) return;
+					const frame = `translate(${-request.rect.x * zoom}px, ${-request.rect.y * zoom}px) scale(${zoom / liveViewport.zoom}) translate(${-liveViewport.x}px, ${-liveViewport.y}px)`;
+					for (const layer of layers) {
+						const wrapper = clone.ownerDocument.createElement('div');
+						wrapper.setAttribute(
+							'style',
+							`position: absolute; left: 0; top: 0; width: ${el.clientWidth}px; height: ${el.clientHeight}px; overflow: visible; pointer-events: none; z-index: ${layer.zIndex}; transform-origin: 0 0; transform: ${frame};`
+						);
+						const style = layer.clone.style;
+						style.position = 'absolute';
+						style.left = `${layer.left}px`;
+						style.top = `${layer.top}px`;
+						style.right = 'auto';
+						style.bottom = 'auto';
+						style.width = `${layer.width}px`;
+						style.height = `${layer.height}px`;
+						style.margin = '0';
+						style.transform = 'none';
+						wrapper.appendChild(layer.clone);
+						if (layer.below && top.parentElement === clone) clone.insertBefore(wrapper, top);
+						else clone.appendChild(wrapper);
 					}
 				}
 			});

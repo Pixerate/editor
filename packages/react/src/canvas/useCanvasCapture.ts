@@ -16,7 +16,8 @@ export interface UseCanvasCaptureOptions<TNode extends CanvasNode = CanvasNode>
 /**
  * The `capture_view` agent tool for a React Flow canvas: screenshots of the viewport, all
  * content, the selection, nodes by id or a rect in canvas units. Register the result with
- * `useAgentToolProvider`. The provider stays the same object across renders (it reads the
+ * `useAgentToolProvider`. Pass `layers` for ink or paint drawn outside the flow's viewport, so
+ * `content` frames their strokes too. The provider stays the same object across renders (it reads the
  * latest options on each call) and changes only with `id` / `namespace`.
  *
  * ```tsx
@@ -40,6 +41,10 @@ export function useCanvasCapture<TNode extends CanvasNode = CanvasNode>(options:
 			},
 			getViewport: () => latest().getViewport(),
 			getNodes: () => latest().getNodes(),
+			layers: () => {
+				const layers = latest().layers;
+				return (typeof layers === 'function' ? layers() : layers) ?? [];
+			},
 			getNodeRect: (node, nodes) => (latest().getNodeRect ?? canvasNodeCaptureRect)(node, nodes),
 			rasterize: (element, raster) => (latest().rasterize ?? rasterizeElement)(element, raster)
 		});

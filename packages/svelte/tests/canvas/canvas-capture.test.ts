@@ -32,4 +32,22 @@ describe('createCanvasCapture', () => {
 		expect(empty.content[0]).toMatchObject({ text: expect.stringMatching(/surface is empty/) });
 		pane.remove();
 	});
+
+	it('frames layers drawn outside the viewport with the nodes', async () => {
+		const pane = document.createElement('div');
+		pane.className = 'svelte-flow';
+		document.body.appendChild(pane);
+		const capture = createCanvasCapture({
+			element: () => pane,
+			getViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+			getNodes: () => [],
+			layers: () => [{ element: null, bounds: () => ({ x: -40, y: 10, width: 80, height: 20 }) }],
+			rasterize: async () => 'data:image/png;base64,QUJD'
+		});
+		const registry = new ToolRegistry();
+		registry.register(capture);
+		const content = await registry.callTool('capture_view', { region: 'content', padding: 0 });
+		expect(content.structuredContent).toMatchObject({ rect: { x: -40, y: 10, width: 80, height: 20 } });
+		pane.remove();
+	});
 });
