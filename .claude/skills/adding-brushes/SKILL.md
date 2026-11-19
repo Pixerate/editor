@@ -91,24 +91,48 @@ Then copy the facets that differ from engine defaults into the preset.
 
 A facet is a new field on `Brush`: what it means, how it's checked, stored, edited, painted,
 refused by hosts that can't paint it, ported and explained. Recent examples to copy the shape of:
-`ghost` (#685), `thermochromic` and `fluorescence` (#641), `culture` (#717).
+`thermochromic` and `fluorescence` (#692), `culture` (#717). `grep -rn culture
+packages/core/src/brushes` lists every place a facet appears.
 
-| Where | What |
-| --- | --- |
-| `brushes/types.ts` | The field, documented with units and ranges. |
-| `brushes/schema.ts` | Its JSON Schema with a `description` on every property (agents read these through `create_brush`). |
-| `brushes/normalize.ts`, `migrate.ts` | Clamp and default it; migrate stored files if the format changes. |
-| `brushes/patch.ts` | Patchable by `update_brush` (`BRUSH_PATCH_PROPERTIES`; unsettable if it can be removed). |
-| `brushes/resolve.ts` | Map it to the engine, and to a `family` if it defines a new one (`resolveFamily`). |
-| `brushes/profiles.ts` | Each host's support (full, ignored with a warning, refused with a fix) and the `checkBrush` line. |
-| `brushes/ui.ts`, `preview.ts` | The brush editor's controls (scoped by host) and, if it changes how a stroke reads, preview colours. |
-| `paint-editor/*`, `paint/*` | The engine that paints it, with its own tests. |
-| React and Svelte `BrushPanel` | The same controls in both (AGENTS.md section 3). |
-| `packages/swift/Sources/PixeratePaint/Brushes/*`, `Editor/Brushes.swift` | The Swift port, matching TS results and pixels. |
-| Generated files | Rebuild core, `node scripts/export-contracts.mjs`, `node scripts/record-conformance.mjs`, `pnpm gen:swift`. Commit the diffs. |
-| `parity/features.json` | Its row, then `node scripts/parity.mjs`. |
-| Skills and docs | A row in `pixerate-brushes`'s facet table, `pixerate-paint-editor/references/brush-facets.md` (and its own reference file if it's big), `pixerate-brushes-design`'s decision table if it changes how a request is met, and `docs/paint-editor.md`. |
-| A preset | At least one, as above, so agents can find and base on it. |
+Facets are listed in the same order in several places (the schema's properties, `normalize.ts`,
+`migrate.ts`'s `ORDER`, `patch.ts`): put the new one at the same spot in each, before `colour`.
+
+| Where | What | Caught if missed? |
+| --- | --- | --- |
+| `brushes/types.ts` | The facet's interface, documented with units and ranges, and the field on `Brush`. | typecheck |
+| `brushes/schema.ts` | Its JSON Schema (a `description` on every property: agents read these through `create_brush`), in `BRUSH_JSON_SCHEMA`'s properties and `BRUSH_FACET_SCHEMAS`. | no |
+| `brushes/normalize.ts` | Add it to the key-order list in `ordered()` (a facet missing there is dropped from every normalized brush), clamp it, and drop it where it can't apply (tools, object marks) with a `problems` line. | only through a preset |
+| `brushes/migrate.ts` | `ORDER`, and a migration if stored files change. | only through a preset |
+| `brushes/patch.ts` | `UNSETTABLE_BRUSH_FACETS`, so `update_brush` can remove it. | no |
+| `brushes/resolve.ts` | `BRUSH_FIELDS` entries mapping each key to the engine (with the engines it applies to), and `resolveFamily` if it defines a family. | only through a preset |
+| `brushes/profiles.ts` | The `BrushHostProfile` field (missing means `none`), each profile's value, the `feature(...)` line in `checkBrush`, and the `degrade` case that deletes it. | no |
+| `brushes/contract.ts` | The same field in `BRUSH_PROFILE_JSON_SCHEMA` (`additionalProperties: false`). | `brush-contracts.test.ts` |
+| `brushes/ui.ts` | The brush editor's toggle and sliders (scoped by the profile), `setBrushEditorValue`'s toggle case, and its name in the refused-facet labels. For specialty paint, `specialty.ts` and the `SPECIALTY_*` tables instead. | no |
+| `brushes/preview.ts` | Only if it changes how a preview reads (`brushPreviewsOnDark`, preview colours). | no |
+| `paint-editor/brush-model.ts` | The engine field: `PaintBrush`, `PaintBrushInput` and `normalizePaintBrush`. Make it optional (present only when the facet is) unless every brush has it, or every resolved brush in the contracts changes. | only through a preset |
+| `paint-editor/*`, `paint/*` | The engine that paints it, with its own tests. | your tests |
+| React and Svelte | Nothing for the facet itself: `BrushEditor` in both renders `brushEditorSections` from `ui.ts`. A facet with editor-level settings (a panel like `CulturePanel`, paper or document state) needs that panel in both (AGENTS.md section 3). | no |
+| Swift | `Sources/PixeratePaint/Brushes/Normalize.swift`, `Migrate.swift`, `Resolve.swift`, `Profiles.swift`, `LibraryTools.swift`, and the engine field in `Editor/Brushes.swift`; then the engine. | partly, see below |
+| Generated files | Rebuild core, then `node scripts/export-contracts.mjs`, `node scripts/record-conformance.mjs` and `pnpm gen:swift`. Commit every diff. | yes |
+| `parity/features.json` | Its row, then `node scripts/parity.mjs`. | no |
+| Skills and docs | A row in `pixerate-brushes`'s facet table, `pixerate-paint-editor/references/brush-facets.md` (and its own reference file if it's big), `pixerate-brushes-design`'s decision table if it changes how a request is met, and `docs/paint-editor.md`. | no |
+| A preset | At least one, as above, so agents can find and base on it. It's also what makes the tests see the facet. | |
+
+**What the tests catch, and what they don't.**
+- Expect these generated diffs: brushes `brush.schema.json`, `profile.schema.json`, `profiles.json`,
+  `tools.json` and `editor-sections.json`; paint `tools.json`; and `paint/fixtures/ghost.json`
+  (an error message there lists every facet). Add a preset and `presets.json`, `resolved.json`,
+  `checks.json`, the manifest and `dry-brush-presets.json` change too. Swift's
+  `PaintToolArguments.swift` comes from `pnpm gen:swift`; `swift-generated.test.ts` fails without it.
+- **Until a preset uses the facet, almost nothing fails.** The TS facet can be half-wired (missing
+  from `ordered()`, `resolve.ts` or the engine model) and all tests pass. Add the preset early.
+- **Swift checks resolve and normalize only.** With a preset, `BrushModelTests` fails until
+  Swift's `Normalize`, `Migrate`, `Resolve` and engine model know the facet. Nothing compares
+  Swift's `checkBrush` with `checks.json`, and Swift has no brush editor sections. Port
+  `Profiles.swift` by reading `profiles.ts`; no test will tell you it's missing.
+- No test checks the schema descriptions, `patch.ts`, the editor controls, the parity row or
+  the skills. Check them by hand: `create_brush` and `update_brush` (with `unset`) on the new
+  facet, `check_brush` on every host, and the brush editor in the demo.
 
 ## Checks before pushing
 
@@ -130,7 +154,9 @@ swift build && swift test
   shows; agents (and the eval) judge brushes by their facets and their preview.
 - **Hosts you didn't mean.** A new dry dab preset also appears in canvas, vector and image
   editor lists. Check each host's preview, or give it something those hosts refuse.
-- **Stale contracts.** Editing `presets.ts` without re-running the export script fails
+- **Stale contracts.** Editing `presets.ts` or a facet without re-running the export script fails
   `brush-contracts.test.ts` and the Swift CI job.
+- **Timing tests under load.** A full `pnpm test` on a busy machine can fail budget tests
+  (`chart-particles`, `paint-authored-effects`); rerun those files alone before chasing them.
 - **A preset only people can find.** If no skill mentions it, an agent only meets it through
   `list_brush_presets`, by medium or family. Say in the skills when it is the right base.
