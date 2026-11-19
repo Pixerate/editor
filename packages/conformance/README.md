@@ -108,6 +108,21 @@ controller's state with the default options (id prefix `ve-`, no viewport cullin
 part of the contract, and lays out text with the metric shaper (`createMetricTextShaper`).
 Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
 
+### `domains/text-proposals`
+
+The text change feed, text proposals and their agent tools (#890), from `textProposalContracts()`
+in `@pixerate/editor/tools`. Ported to Swift in `PixerateCore` (`TextProposalTests`).
+
+- `manifest.json`: the domain, `formatVersion` and the other files.
+- `tools.json`: `propose_text_edit`, `list_text_proposals`, `accept_text_proposal` and
+  `reject_text_proposal` as an MCP tool list.
+- `scenarios.json`: a text with an undo history, the typing burst length and an optional
+  read-only reason, then steps: `type`, `replace`, `select`, `call` (a tool, with the calling
+  agent's id as `actor`), `reject`, `clear`, `undo`, `redo`, `pause` (fires the burst timer) and
+  `endGesture`. After each step the feed is checked and the proposals synced; `expected` records
+  the text, the feed's changes (with `commit` as its kind), the outcomes, the pending proposals
+  and the result. Time counts up from 1 on every `now()` call; proposal ids are `p1`, `p2`, …
+
 ### `domains/style`
 
 The style resolver and its read tools (#890), from `styleContracts()` in `@pixerate/editor/tools`,

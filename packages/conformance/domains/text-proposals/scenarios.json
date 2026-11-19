@@ -1,0 +1,1641 @@
+[
+  {
+    "name": "a house-style fix proposed, the person types before it, and it is accepted as one step by the agent",
+    "text": "We utilize the tool.",
+    "steps": [
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 3,
+          "to": 10,
+          "replacement": "use",
+          "expected": "utilize",
+          "check": "terms",
+          "rationale": "The house term."
+        },
+        "actor": "jazz"
+      },
+      {
+        "op": "type",
+        "at": 0,
+        "text": "So "
+      },
+      {
+        "op": "type",
+        "at": 3,
+        "text": "w"
+      },
+      {
+        "op": "pause"
+      },
+      {
+        "op": "call",
+        "tool": "list_text_proposals",
+        "args": {}
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "p1"
+        }
+      },
+      {
+        "op": "undo"
+      },
+      {
+        "op": "redo"
+      }
+    ],
+    "expected": [
+      {
+        "text": "We utilize the tool.",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 3,
+            "to": 10,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 3,
+            "to": 10,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz"
+          }
+        }
+      },
+      {
+        "text": "So We utilize the tool.",
+        "changes": [
+          {
+            "seq": 1,
+            "origin": "user",
+            "edit": {
+              "from": 0,
+              "to": 0,
+              "removed": "",
+              "inserted": "So "
+            },
+            "selection": {
+              "before": {
+                "from": 20,
+                "to": 20
+              },
+              "after": {
+                "from": 3,
+                "to": 3
+              }
+            },
+            "boundary": "word",
+            "inGesture": true,
+            "length": 23,
+            "at": 2
+          }
+        ],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 6,
+            "to": 13,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ]
+      },
+      {
+        "text": "So wWe utilize the tool.",
+        "changes": [
+          {
+            "seq": 2,
+            "origin": "user",
+            "edit": {
+              "from": 3,
+              "to": 3,
+              "removed": "",
+              "inserted": "w"
+            },
+            "selection": {
+              "before": {
+                "from": 3,
+                "to": 3
+              },
+              "after": {
+                "from": 4,
+                "to": 4
+              }
+            },
+            "inGesture": true,
+            "length": 24,
+            "at": 3
+          }
+        ],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 7,
+            "to": 14,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ]
+      },
+      {
+        "text": "So wWe utilize the tool.",
+        "changes": [
+          {
+            "seq": 3,
+            "origin": "user",
+            "inGesture": false,
+            "gestureEnded": true,
+            "length": 24,
+            "at": 4
+          }
+        ],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 7,
+            "to": 14,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ]
+      },
+      {
+        "text": "So wWe utilize the tool.",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 7,
+            "to": 14,
+            "original": "utilize",
+            "replacement": "use",
+            "title": "Replace \"utilize\" with \"use\"",
+            "rationale": "The house term.",
+            "check": "terms",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposals": [
+              {
+                "id": "p1",
+                "from": 7,
+                "to": 14,
+                "original": "utilize",
+                "replacement": "use",
+                "title": "Replace \"utilize\" with \"use\"",
+                "rationale": "The house term.",
+                "check": "terms",
+                "origin": "agent:jazz",
+                "createdAt": "1970-01-01T00:00:00.001Z"
+              }
+            ],
+            "readOnly": null
+          }
+        }
+      },
+      {
+        "text": "So wWe use the tool.",
+        "changes": [
+          {
+            "seq": 4,
+            "origin": "agent:jazz",
+            "edit": {
+              "from": 7,
+              "to": 14,
+              "removed": "utilize",
+              "inserted": "use"
+            },
+            "selection": {
+              "before": {
+                "from": 4,
+                "to": 4
+              },
+              "after": {
+                "from": 10,
+                "to": 10
+              }
+            },
+            "inGesture": false,
+            "length": 20,
+            "at": 6,
+            "commit": "execute"
+          }
+        ],
+        "outcomes": [
+          {
+            "id": "p1",
+            "outcome": "accepted"
+          }
+        ],
+        "proposals": [],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 7,
+            "to": 10,
+            "text": "use",
+            "historyLabel": "Replace \"utilize\" with \"use\"",
+            "origin": "agent:jazz"
+          }
+        }
+      },
+      {
+        "text": "So wWe utilize the tool.",
+        "changes": [
+          {
+            "seq": 5,
+            "origin": "user",
+            "edit": {
+              "from": 7,
+              "to": 10,
+              "removed": "use",
+              "inserted": "utilize"
+            },
+            "selection": {
+              "before": {
+                "from": 10,
+                "to": 10
+              },
+              "after": {
+                "from": 14,
+                "to": 14
+              }
+            },
+            "inGesture": true,
+            "length": 24,
+            "at": 7,
+            "commit": "undo"
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "So wWe use the tool.",
+        "changes": [
+          {
+            "seq": 6,
+            "origin": "user",
+            "edit": {
+              "from": 7,
+              "to": 14,
+              "removed": "utilize",
+              "inserted": "use"
+            },
+            "selection": {
+              "before": {
+                "from": 14,
+                "to": 14
+              },
+              "after": {
+                "from": 10,
+                "to": 10
+              }
+            },
+            "inGesture": true,
+            "length": 20,
+            "at": 8,
+            "commit": "redo"
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      }
+    ]
+  },
+  {
+    "name": "editing a proposal’s text drops it as stale; wrapping it in syntax re-anchors it",
+    "text": "Alpha beta gamma delta.",
+    "steps": [
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 6,
+          "to": 10,
+          "replacement": "BETA"
+        },
+        "actor": "jazz"
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 11,
+          "to": 16,
+          "replacement": "GAMMA",
+          "title": "Shout gamma"
+        },
+        "actor": "jazz"
+      },
+      {
+        "op": "replace",
+        "from": 6,
+        "to": 10,
+        "text": "bet"
+      },
+      {
+        "op": "replace",
+        "from": 10,
+        "to": 15,
+        "text": "**gamma**"
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "p2"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "p1"
+        }
+      }
+    ],
+    "expected": [
+      {
+        "text": "Alpha beta gamma delta.",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 6,
+            "to": 10,
+            "original": "beta",
+            "replacement": "BETA",
+            "title": "Replace \"beta\" with \"BETA\"",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 6,
+            "to": 10,
+            "original": "beta",
+            "replacement": "BETA",
+            "title": "Replace \"beta\" with \"BETA\"",
+            "origin": "agent:jazz"
+          }
+        }
+      },
+      {
+        "text": "Alpha beta gamma delta.",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 6,
+            "to": 10,
+            "original": "beta",
+            "replacement": "BETA",
+            "title": "Replace \"beta\" with \"BETA\"",
+            "origin": "agent:jazz",
+            "createdAt": 1
+          },
+          {
+            "id": "p2",
+            "from": 11,
+            "to": 16,
+            "original": "gamma",
+            "replacement": "GAMMA",
+            "title": "Shout gamma",
+            "origin": "agent:jazz",
+            "createdAt": 2
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p2",
+            "from": 11,
+            "to": 16,
+            "original": "gamma",
+            "replacement": "GAMMA",
+            "title": "Shout gamma",
+            "origin": "agent:jazz"
+          }
+        }
+      },
+      {
+        "text": "Alpha bet gamma delta.",
+        "changes": [
+          {
+            "seq": 1,
+            "origin": "user",
+            "edit": {
+              "from": 9,
+              "to": 10,
+              "removed": "a",
+              "inserted": ""
+            },
+            "selection": {
+              "before": {
+                "from": 23,
+                "to": 23
+              },
+              "after": {
+                "from": 9,
+                "to": 9
+              }
+            },
+            "inGesture": true,
+            "length": 22,
+            "at": 3
+          }
+        ],
+        "outcomes": [
+          {
+            "id": "p1",
+            "outcome": "stale"
+          }
+        ],
+        "proposals": [
+          {
+            "id": "p2",
+            "from": 10,
+            "to": 15,
+            "original": "gamma",
+            "replacement": "GAMMA",
+            "title": "Shout gamma",
+            "origin": "agent:jazz",
+            "createdAt": 2
+          }
+        ]
+      },
+      {
+        "text": "Alpha bet **gamma** delta.",
+        "changes": [
+          {
+            "seq": 2,
+            "origin": "user",
+            "edit": {
+              "from": 10,
+              "to": 15,
+              "removed": "gamma",
+              "inserted": "**gamma**"
+            },
+            "selection": {
+              "before": {
+                "from": 9,
+                "to": 9
+              },
+              "after": {
+                "from": 19,
+                "to": 19
+              }
+            },
+            "inGesture": true,
+            "length": 26,
+            "at": 5
+          }
+        ],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p2",
+            "from": 12,
+            "to": 17,
+            "original": "gamma",
+            "replacement": "GAMMA",
+            "title": "Shout gamma",
+            "origin": "agent:jazz",
+            "createdAt": 2
+          }
+        ]
+      },
+      {
+        "text": "Alpha bet **GAMMA** delta.",
+        "changes": [
+          {
+            "seq": 3,
+            "origin": "agent:jazz",
+            "edit": {
+              "from": 12,
+              "to": 17,
+              "removed": "gamma",
+              "inserted": "GAMMA"
+            },
+            "selection": {
+              "before": {
+                "from": 19,
+                "to": 19
+              },
+              "after": {
+                "from": 17,
+                "to": 17
+              }
+            },
+            "inGesture": false,
+            "gestureEnded": true,
+            "length": 26,
+            "at": 7,
+            "commit": "execute"
+          }
+        ],
+        "outcomes": [
+          {
+            "id": "p2",
+            "outcome": "accepted"
+          }
+        ],
+        "proposals": [],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p2",
+            "from": 12,
+            "to": 17,
+            "text": "GAMMA",
+            "historyLabel": "Shout gamma",
+            "origin": "agent:jazz"
+          }
+        }
+      },
+      {
+        "text": "Alpha bet **GAMMA** delta.",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [],
+        "result": {
+          "isError": true,
+          "error": "No text proposal \"p1\". There are no pending proposals. Call list_text_proposals for ids; a proposal is dropped when the text it would replace is edited."
+        }
+      }
+    ]
+  },
+  {
+    "name": "overlapping proposals: accepting one leaves the other stale; reject and clear by origin",
+    "text": "One two three four",
+    "steps": [
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 0,
+          "to": 7,
+          "replacement": "1 2"
+        },
+        "actor": "a"
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 4,
+          "to": 13,
+          "replacement": "2 3"
+        },
+        "actor": "b"
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 14,
+          "to": 18,
+          "replacement": "4"
+        },
+        "actor": "b"
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 18,
+          "to": 18,
+          "replacement": "!"
+        },
+        "actor": "a"
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "p1"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "reject_text_proposal",
+        "args": {
+          "proposalId": "p3"
+        }
+      },
+      {
+        "op": "clear",
+        "origin": "agent:a"
+      },
+      {
+        "op": "call",
+        "tool": "list_text_proposals",
+        "args": {}
+      }
+    ],
+    "expected": [
+      {
+        "text": "One two three four",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 7,
+            "original": "One two",
+            "replacement": "1 2",
+            "title": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 0,
+            "to": 7,
+            "original": "One two",
+            "replacement": "1 2",
+            "title": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a"
+          }
+        }
+      },
+      {
+        "text": "One two three four",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 7,
+            "original": "One two",
+            "replacement": "1 2",
+            "title": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a",
+            "createdAt": 1
+          },
+          {
+            "id": "p2",
+            "from": 4,
+            "to": 13,
+            "original": "two three",
+            "replacement": "2 3",
+            "title": "Replace \"two three\" with \"2 3\"",
+            "origin": "agent:b",
+            "createdAt": 2
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p2",
+            "from": 4,
+            "to": 13,
+            "original": "two three",
+            "replacement": "2 3",
+            "title": "Replace \"two three\" with \"2 3\"",
+            "origin": "agent:b"
+          }
+        }
+      },
+      {
+        "text": "One two three four",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 7,
+            "original": "One two",
+            "replacement": "1 2",
+            "title": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a",
+            "createdAt": 1
+          },
+          {
+            "id": "p2",
+            "from": 4,
+            "to": 13,
+            "original": "two three",
+            "replacement": "2 3",
+            "title": "Replace \"two three\" with \"2 3\"",
+            "origin": "agent:b",
+            "createdAt": 2
+          },
+          {
+            "id": "p3",
+            "from": 14,
+            "to": 18,
+            "original": "four",
+            "replacement": "4",
+            "title": "Replace \"four\" with \"4\"",
+            "origin": "agent:b",
+            "createdAt": 3
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p3",
+            "from": 14,
+            "to": 18,
+            "original": "four",
+            "replacement": "4",
+            "title": "Replace \"four\" with \"4\"",
+            "origin": "agent:b"
+          }
+        }
+      },
+      {
+        "text": "One two three four",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 7,
+            "original": "One two",
+            "replacement": "1 2",
+            "title": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a",
+            "createdAt": 1
+          },
+          {
+            "id": "p2",
+            "from": 4,
+            "to": 13,
+            "original": "two three",
+            "replacement": "2 3",
+            "title": "Replace \"two three\" with \"2 3\"",
+            "origin": "agent:b",
+            "createdAt": 2
+          },
+          {
+            "id": "p3",
+            "from": 14,
+            "to": 18,
+            "original": "four",
+            "replacement": "4",
+            "title": "Replace \"four\" with \"4\"",
+            "origin": "agent:b",
+            "createdAt": 3
+          },
+          {
+            "id": "p4",
+            "from": 18,
+            "to": 18,
+            "original": "",
+            "replacement": "!",
+            "title": "Insert \"!\"",
+            "origin": "agent:a",
+            "createdAt": 4
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p4",
+            "from": 18,
+            "to": 18,
+            "original": "",
+            "replacement": "!",
+            "title": "Insert \"!\"",
+            "origin": "agent:a"
+          }
+        }
+      },
+      {
+        "text": "1 2 three four",
+        "changes": [
+          {
+            "seq": 1,
+            "origin": "agent:a",
+            "edit": {
+              "from": 0,
+              "to": 7,
+              "removed": "One two",
+              "inserted": "1 2"
+            },
+            "selection": {
+              "before": {
+                "from": 18,
+                "to": 18
+              },
+              "after": {
+                "from": 3,
+                "to": 3
+              }
+            },
+            "inGesture": false,
+            "length": 14,
+            "at": 7,
+            "commit": "execute"
+          }
+        ],
+        "outcomes": [
+          {
+            "id": "p2",
+            "outcome": "stale"
+          },
+          {
+            "id": "p1",
+            "outcome": "accepted"
+          }
+        ],
+        "proposals": [
+          {
+            "id": "p3",
+            "from": 10,
+            "to": 14,
+            "original": "four",
+            "replacement": "4",
+            "title": "Replace \"four\" with \"4\"",
+            "origin": "agent:b",
+            "createdAt": 3
+          },
+          {
+            "id": "p4",
+            "from": 14,
+            "to": 14,
+            "original": "",
+            "replacement": "!",
+            "title": "Insert \"!\"",
+            "origin": "agent:a",
+            "createdAt": 4
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 0,
+            "to": 3,
+            "text": "1 2",
+            "historyLabel": "Replace \"One two\" with \"1 2\"",
+            "origin": "agent:a"
+          }
+        }
+      },
+      {
+        "text": "1 2 three four",
+        "changes": [],
+        "outcomes": [
+          {
+            "id": "p3",
+            "outcome": "rejected"
+          }
+        ],
+        "proposals": [
+          {
+            "id": "p4",
+            "from": 14,
+            "to": 14,
+            "original": "",
+            "replacement": "!",
+            "title": "Insert \"!\"",
+            "origin": "agent:a",
+            "createdAt": 4
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p3",
+            "title": "Replace \"four\" with \"4\"",
+            "rejected": true
+          }
+        }
+      },
+      {
+        "text": "1 2 three four",
+        "changes": [],
+        "outcomes": [
+          {
+            "id": "p4",
+            "outcome": "cleared"
+          }
+        ],
+        "proposals": [],
+        "result": [
+          "p4"
+        ]
+      },
+      {
+        "text": "1 2 three four",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposals": [],
+            "readOnly": null
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "bad proposals and a read-only text",
+    "text": "Hello world",
+    "readOnly": "The note is locked.",
+    "steps": [
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 6,
+          "to": 99,
+          "replacement": "x"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 6,
+          "to": 11,
+          "replacement": "there",
+          "expected": "earth"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 6,
+          "to": 11,
+          "replacement": "world"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "propose_text_edit",
+        "args": {
+          "from": 0,
+          "to": 0,
+          "replacement": "Oh, "
+        }
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "p1"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "accept_text_proposal",
+        "args": {
+          "proposalId": "nope"
+        }
+      },
+      {
+        "op": "call",
+        "tool": "list_text_proposals",
+        "args": {}
+      }
+    ],
+    "expected": [
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [],
+        "result": {
+          "isError": true,
+          "error": "The range 6–99 is not in the text, which is 11 UTF-16 code units long; from and to must be whole numbers with 0 ≤ from ≤ to ≤ 11."
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [],
+        "result": {
+          "isError": true,
+          "error": "The text at 6–11 is \"world\", not \"earth\": it changed since you read it. Read the text again and propose with the new range."
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [],
+        "result": {
+          "isError": true,
+          "error": "The replacement is the text already at 6–11, so the proposal would change nothing."
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 0,
+            "original": "",
+            "replacement": "Oh, ",
+            "title": "Insert \"Oh, \"",
+            "origin": "agent:anonymous",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposalId": "p1",
+            "from": 0,
+            "to": 0,
+            "original": "",
+            "replacement": "Oh, ",
+            "title": "Insert \"Oh, \"",
+            "origin": "agent:anonymous"
+          }
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 0,
+            "original": "",
+            "replacement": "Oh, ",
+            "title": "Insert \"Oh, \"",
+            "origin": "agent:anonymous",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": true,
+          "error": "The note is locked."
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 0,
+            "original": "",
+            "replacement": "Oh, ",
+            "title": "Insert \"Oh, \"",
+            "origin": "agent:anonymous",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": true,
+          "error": "No text proposal \"nope\". Pending proposals: p1. Call list_text_proposals for ids; a proposal is dropped when the text it would replace is edited."
+        }
+      },
+      {
+        "text": "Hello world",
+        "changes": [],
+        "outcomes": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "from": 0,
+            "to": 0,
+            "original": "",
+            "replacement": "Oh, ",
+            "title": "Insert \"Oh, \"",
+            "origin": "agent:anonymous",
+            "createdAt": 1
+          }
+        ],
+        "result": {
+          "isError": false,
+          "structuredContent": {
+            "proposals": [
+              {
+                "id": "p1",
+                "from": 0,
+                "to": 0,
+                "original": "",
+                "replacement": "Oh, ",
+                "title": "Insert \"Oh, \"",
+                "origin": "agent:anonymous",
+                "createdAt": "1970-01-01T00:00:00.001Z"
+              }
+            ],
+            "readOnly": null
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "the feed: word and line boundaries, selection, a burst ended by the host, whole-word replacements and surrogate pairs",
+    "text": "Hi",
+    "burstMs": 500,
+    "steps": [
+      {
+        "op": "type",
+        "at": 2,
+        "text": " "
+      },
+      {
+        "op": "type",
+        "at": 3,
+        "text": "there"
+      },
+      {
+        "op": "type",
+        "at": 8,
+        "text": "\n"
+      },
+      {
+        "op": "select",
+        "from": 0,
+        "to": 2
+      },
+      {
+        "op": "endGesture"
+      },
+      {
+        "op": "endGesture"
+      },
+      {
+        "op": "replace",
+        "from": 3,
+        "to": 8,
+        "text": "theirs"
+      },
+      {
+        "op": "type",
+        "at": 0,
+        "text": "😀"
+      },
+      {
+        "op": "replace",
+        "from": 0,
+        "to": 2,
+        "text": "😃"
+      },
+      {
+        "op": "type",
+        "at": 2,
+        "text": "a"
+      },
+      {
+        "op": "type",
+        "at": 3,
+        "text": "a"
+      },
+      {
+        "op": "pause"
+      }
+    ],
+    "expected": [
+      {
+        "text": "Hi ",
+        "changes": [
+          {
+            "seq": 1,
+            "origin": "user",
+            "edit": {
+              "from": 2,
+              "to": 2,
+              "removed": "",
+              "inserted": " "
+            },
+            "selection": {
+              "before": {
+                "from": 2,
+                "to": 2
+              },
+              "after": {
+                "from": 3,
+                "to": 3
+              }
+            },
+            "boundary": "word",
+            "inGesture": true,
+            "length": 3,
+            "at": 1
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi there",
+        "changes": [
+          {
+            "seq": 2,
+            "origin": "user",
+            "edit": {
+              "from": 3,
+              "to": 3,
+              "removed": "",
+              "inserted": "there"
+            },
+            "selection": {
+              "before": {
+                "from": 3,
+                "to": 3
+              },
+              "after": {
+                "from": 8,
+                "to": 8
+              }
+            },
+            "inGesture": true,
+            "length": 8,
+            "at": 2
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi there\n",
+        "changes": [
+          {
+            "seq": 3,
+            "origin": "user",
+            "edit": {
+              "from": 8,
+              "to": 8,
+              "removed": "",
+              "inserted": "\n"
+            },
+            "selection": {
+              "before": {
+                "from": 8,
+                "to": 8
+              },
+              "after": {
+                "from": 9,
+                "to": 9
+              }
+            },
+            "boundary": "line",
+            "inGesture": true,
+            "length": 9,
+            "at": 3
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi there\n",
+        "changes": [
+          {
+            "seq": 4,
+            "origin": "user",
+            "selection": {
+              "before": {
+                "from": 9,
+                "to": 9
+              },
+              "after": {
+                "from": 0,
+                "to": 2
+              }
+            },
+            "inGesture": true,
+            "length": 9,
+            "at": 4
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi there\n",
+        "changes": [
+          {
+            "seq": 5,
+            "origin": "user",
+            "inGesture": false,
+            "gestureEnded": true,
+            "length": 9,
+            "at": 5
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi there\n",
+        "changes": [],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "Hi theirs\n",
+        "changes": [
+          {
+            "seq": 6,
+            "origin": "user",
+            "edit": {
+              "from": 3,
+              "to": 8,
+              "removed": "there",
+              "inserted": "theirs"
+            },
+            "selection": {
+              "before": {
+                "from": 0,
+                "to": 2
+              },
+              "after": {
+                "from": 9,
+                "to": 9
+              }
+            },
+            "inGesture": true,
+            "length": 10,
+            "at": 6
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "😀Hi theirs\n",
+        "changes": [
+          {
+            "seq": 7,
+            "origin": "user",
+            "edit": {
+              "from": 0,
+              "to": 0,
+              "removed": "",
+              "inserted": "😀"
+            },
+            "selection": {
+              "before": {
+                "from": 9,
+                "to": 9
+              },
+              "after": {
+                "from": 2,
+                "to": 2
+              }
+            },
+            "inGesture": true,
+            "length": 12,
+            "at": 7
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "😃Hi theirs\n",
+        "changes": [
+          {
+            "seq": 8,
+            "origin": "user",
+            "edit": {
+              "from": 0,
+              "to": 4,
+              "removed": "😀Hi",
+              "inserted": "😃Hi"
+            },
+            "inGesture": true,
+            "length": 12,
+            "at": 8
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "😃aHi theirs\n",
+        "changes": [
+          {
+            "seq": 9,
+            "origin": "user",
+            "edit": {
+              "from": 2,
+              "to": 2,
+              "removed": "",
+              "inserted": "a"
+            },
+            "selection": {
+              "before": {
+                "from": 2,
+                "to": 2
+              },
+              "after": {
+                "from": 3,
+                "to": 3
+              }
+            },
+            "inGesture": true,
+            "length": 13,
+            "at": 9
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "😃aaHi theirs\n",
+        "changes": [
+          {
+            "seq": 10,
+            "origin": "user",
+            "edit": {
+              "from": 3,
+              "to": 3,
+              "removed": "",
+              "inserted": "a"
+            },
+            "selection": {
+              "before": {
+                "from": 3,
+                "to": 3
+              },
+              "after": {
+                "from": 4,
+                "to": 4
+              }
+            },
+            "inGesture": true,
+            "length": 14,
+            "at": 10
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "😃aaHi theirs\n",
+        "changes": [
+          {
+            "seq": 11,
+            "origin": "user",
+            "inGesture": false,
+            "gestureEnded": true,
+            "length": 14,
+            "at": 11
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      }
+    ]
+  },
+  {
+    "name": "no bursts",
+    "text": "abc",
+    "burstMs": 0,
+    "steps": [
+      {
+        "op": "type",
+        "at": 3,
+        "text": "d"
+      },
+      {
+        "op": "pause"
+      },
+      {
+        "op": "replace",
+        "from": 0,
+        "to": 4,
+        "text": ""
+      }
+    ],
+    "expected": [
+      {
+        "text": "abcd",
+        "changes": [
+          {
+            "seq": 1,
+            "origin": "user",
+            "edit": {
+              "from": 3,
+              "to": 3,
+              "removed": "",
+              "inserted": "d"
+            },
+            "selection": {
+              "before": {
+                "from": 3,
+                "to": 3
+              },
+              "after": {
+                "from": 4,
+                "to": 4
+              }
+            },
+            "inGesture": false,
+            "length": 4,
+            "at": 1
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "abcd",
+        "changes": [],
+        "outcomes": [],
+        "proposals": []
+      },
+      {
+        "text": "",
+        "changes": [
+          {
+            "seq": 2,
+            "origin": "user",
+            "edit": {
+              "from": 0,
+              "to": 4,
+              "removed": "abcd",
+              "inserted": ""
+            },
+            "selection": {
+              "before": {
+                "from": 4,
+                "to": 4
+              },
+              "after": {
+                "from": 0,
+                "to": 0
+              }
+            },
+            "inGesture": false,
+            "length": 0,
+            "at": 2
+          }
+        ],
+        "outcomes": [],
+        "proposals": []
+      }
+    ]
+  }
+]

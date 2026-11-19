@@ -25,11 +25,15 @@ public struct MarkdownTextChange: Equatable, Sendable {
     public var selection: NSRange
     /// The undo step's name (`Format Text`, `Replace Text`…).
     public var actionName: String
+    /// Who makes the change (`agent:<id>` for an accepted proposal), for the host's undo history
+    /// and change feed; nil when the host decides (an agent tool call, the person).
+    public var origin: String?
 
-    public init(edits: [MarkdownTextEdit], selection: NSRange, actionName: String) {
+    public init(edits: [MarkdownTextEdit], selection: NSRange, actionName: String, origin: String? = nil) {
         self.edits = edits
         self.selection = selection
         self.actionName = actionName
+        self.origin = origin
     }
 
     /// The text after the change.
@@ -75,6 +79,8 @@ public final class MarkdownTextBuffer: MarkdownTextHost {
     }
     /// The names of the undo steps, oldest first.
     public var undoActionNames: [String] { undoStack.map(\.name) }
+    /// The origin of each undo step (`MarkdownTextChange.origin`; nil when the change named none), oldest first.
+    public var undoOrigins: [String?] { undoStack.map(\.origin) }
     public var canUndo: Bool { !undoStack.isEmpty }
     public var canRedo: Bool { !redoStack.isEmpty }
 
@@ -82,6 +88,7 @@ public final class MarkdownTextBuffer: MarkdownTextHost {
         var name: String
         var text: String
         var selection: NSRange
+        var origin: String?
     }
 
     private var undoStack: [Step] = []
@@ -99,7 +106,7 @@ public final class MarkdownTextBuffer: MarkdownTextHost {
 
     public func apply(_ change: MarkdownTextChange) throws {
         if let reason = readOnlyReason { throw MarkdownToolError(reason) }
-        undoStack.append(Step(name: change.actionName, text: markdown, selection: selectedRange))
+        undoStack.append(Step(name: change.actionName, text: markdown, selection: selectedRange, origin: change.origin))
         redoStack.removeAll()
         markdown = change.applied(to: markdown)
         selectedRange = change.selection
@@ -109,7 +116,7 @@ public final class MarkdownTextBuffer: MarkdownTextHost {
     @discardableResult
     public func undo() -> String? {
         guard let step = undoStack.popLast() else { return nil }
-        redoStack.append(Step(name: step.name, text: markdown, selection: selectedRange))
+        redoStack.append(Step(name: step.name, text: markdown, selection: selectedRange, origin: step.origin))
         markdown = step.text
         selectedRange = step.selection
         return step.name
@@ -119,7 +126,7 @@ public final class MarkdownTextBuffer: MarkdownTextHost {
     @discardableResult
     public func redo() -> String? {
         guard let step = redoStack.popLast() else { return nil }
-        undoStack.append(Step(name: step.name, text: markdown, selection: selectedRange))
+        undoStack.append(Step(name: step.name, text: markdown, selection: selectedRange, origin: step.origin))
         markdown = step.text
         selectedRange = step.selection
         return step.name

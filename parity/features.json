@@ -2628,14 +2628,14 @@
           "core": "`createTextProposals` & `createTextProposalToolProvider` (`/tools`)",
           "react": "`useTextProposals`",
           "svelte": "`createTextProposalState`",
-          "swift": "Planned (#890)"
+          "swift": "Ported (#890) in PixerateCore: `TextProposals`, `createTextProposalToolProvider`; on a Markdown host `createMarkdownTextProposals` (one `apply` step recording the proposer)"
         },
         {
           "feature": "Text Change Feed (#890: the range that changed in a text, what it held and what replaced it, the selection, who made it (`user` or `agent:<id>` from the history or the host), word and line boundaries, and when a typing burst ends)",
           "core": "`createTextChangeFeed`, `diffText` (`/tools`)",
           "react": "`useTextChangeFeed`",
           "svelte": "`createTextChangeWatcher`",
-          "swift": "Planned (#890)"
+          "swift": "Ported (#890) in PixerateCore: `TextChangeFeed`, `diffText`; on a Markdown host `createMarkdownTextChangeFeed`"
         },
         {
           "feature": "Canvas & Prompt Agent Tools (one strict tool per operation, created ids returned, ids checked against the snapshot)",

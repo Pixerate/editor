@@ -1,0 +1,9 @@
+{
+  "domain": "text-proposals",
+  "formatVersion": 1,
+  "description": "The text change feed, text proposals and their agent tools, as step-by-step scenarios over a text with an undo history: typing, replacing, selecting, tool calls (actor = agent id), undo / redo, a pause that fires the burst timer, the host ending a gesture. After each step the feed is checked and proposals synced; each step records the text, the feed changes (commit as its kind), outcomes, pending proposals and the tool result. Time counts up from 1 per now() call; proposal ids are p1, p2, ….",
+  "files": [
+    "tools.json",
+    "scenarios.json"
+  ]
+}
