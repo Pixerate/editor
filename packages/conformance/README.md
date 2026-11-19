@@ -112,7 +112,7 @@ Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
 
 House style on Markdown source (#890), from `markdownStyleContracts()` in `@pixerate/editor/tools`:
 the document (`rich-text`) checks run on the prose of a Markdown text, with positions as UTF-16
-offsets of the source. Not yet ported to Swift.
+offsets of the source. Ported to Swift in `PixerateMarkdown` / `PixerateMarkdownTools` (`MarkdownStyleTests`).
 
 - `manifest.json`: the domain, `formatVersion` and the checks it covers.
 - `cases.json`: each case's Markdown `source` and resolved `rich-text.json` `profile` (its `checks`

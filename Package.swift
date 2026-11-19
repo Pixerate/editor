@@ -58,7 +58,7 @@ let package = Package(
         // Agent tools for a Markdown text (#609), with the web Markdown tools' names, schemas and
         // results: the rich-text tools, the format commands through `createCommandToolProvider`, and
         // text mechanics. A separate target, so the engine keeps no dependency on PixerateCore.
-        .target(name: "PixerateMarkdownTools", dependencies: ["PixerateMarkdown", "PixerateCore"], path: "packages/swift/Sources/PixerateMarkdownTools", swiftSettings: settings),
+        .target(name: "PixerateMarkdownTools", dependencies: ["PixerateMarkdown", "PixerateCore", "PixerateRaster"], path: "packages/swift/Sources/PixerateMarkdownTools", swiftSettings: settings),
         // The vector editor's path operations (`canvas/pathops`, `curveFit`, `shapeGeometry` and
         // `polygonBoolean` in the TS core): Bézier maths, curve booleans, stroke outlines, the planar
         // map, Pathfinder and curve fitting, bit-exact with the TS. Foundation only.
@@ -117,7 +117,7 @@ let package = Package(
         ),
         .testTarget(
             name: "PixerateMarkdownToolsTests",
-            dependencies: ["PixerateMarkdownTools", "PixerateMarkdown", "PixerateCore"],
+            dependencies: ["PixerateMarkdownTools", "PixerateMarkdown", "PixerateCore", "PixerateRaster", "PixerateContracts"],
             path: "packages/swift/Tests/PixerateMarkdownToolsTests",
             swiftSettings: settings
         ),

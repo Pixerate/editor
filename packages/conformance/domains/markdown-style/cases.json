@@ -180,9 +180,9 @@
         {
           "kind": "heading",
           "level": 1,
-          "text": "Setext Heading Here￼",
+          "text": "Setext Heading Here",
           "from": 0,
-          "to": 39
+          "to": 19
         },
         {
           "kind": "heading",
@@ -220,10 +220,10 @@
         {
           "check": "heading-case",
           "severity": "warning",
-          "message": "Heading \"Setext Heading Here￼\" is not in sentence case; write \"Setext heading here￼\".",
+          "message": "Heading \"Setext Heading Here\" is not in sentence case; write \"Setext heading here\".",
           "from": 7,
           "to": 19,
-          "replacement": "heading here￼"
+          "replacement": "heading here"
         },
         {
           "check": "heading-case",
@@ -273,7 +273,7 @@
           "replacement": "”"
         }
       ],
-      "fixed": "Setext heading here￼\n===================\n\n#### Too deep\n\n- First item\n- Second item\n  continues here\n- [ ] A task\n\n> She said “hello” to me\n"
+      "fixed": "Setext heading here\n===================\n\n#### Too deep\n\n- First item\n- Second item\n  continues here\n- [ ] A task\n\n> She said “hello” to me\n"
     }
   },
   {
@@ -363,6 +363,372 @@
         }
       ],
       "fixed": "# Planning **for** Q3 _next_ steps\n"
+    }
+  },
+  {
+    "name": "the reader: footnotes, alerts, nested quotes and lists, tasks, indented code, HTML and tables in lists",
+    "source": "Intro with a note[^1] and \\*escaped\\* text\nthat wraps \"here\".\n\n> [!NOTE]\n> An \"alert\" line.\n\n> Outer quote\n> > Inner \"quote\"\n\n1. First \"step\"\n   continued\n   - nested \"item\"\n2. [x] Done task\n\n    indented \"code\"\n\n<div>\n\"html\"\n</div>\n\n- | a | b |\n  |---|---|\n  | \"c\" | d |\n\n[^1]: The \"footnote\" text.\n\nTitle Here ##\n=\n\n### Closing Hashes ###\n",
+    "profile": {
+      "headingCase": "sentence",
+      "quotes": "curly",
+      "listItemEnd": "period",
+      "checks": [
+        "heading-case",
+        "quotes",
+        "list-punctuation"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Intro with a note and *escaped* text that wraps \"here\".",
+          "from": 0,
+          "to": 61
+        },
+        {
+          "kind": "quote",
+          "text": "An \"alert\" line.",
+          "from": 75,
+          "to": 91
+        },
+        {
+          "kind": "quote",
+          "text": "Outer quote",
+          "from": 95,
+          "to": 106
+        },
+        {
+          "kind": "quote",
+          "text": "Inner \"quote\"",
+          "from": 111,
+          "to": 124
+        },
+        {
+          "kind": "listItem",
+          "text": "First \"step\" continued",
+          "from": 129,
+          "to": 154
+        },
+        {
+          "kind": "listItem",
+          "text": "nested \"item\"",
+          "from": 160,
+          "to": 173
+        },
+        {
+          "kind": "listItem",
+          "text": "Done task",
+          "from": 181,
+          "to": 190
+        },
+        {
+          "kind": "other",
+          "text": "The \"footnote\" text.",
+          "from": 279,
+          "to": 299
+        },
+        {
+          "kind": "heading",
+          "level": 1,
+          "text": "Title Here ##",
+          "from": 301,
+          "to": 314
+        },
+        {
+          "kind": "heading",
+          "level": 3,
+          "text": "Closing Hashes",
+          "from": 322,
+          "to": 336
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Title Here ##\" is not in sentence case; write \"Title here ##\".",
+          "from": 307,
+          "to": 311,
+          "replacement": "here"
+        },
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"Closing Hashes\" is not in sentence case; write \"Closing hashes\".",
+          "from": 330,
+          "to": 336,
+          "replacement": "hashes"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"Intro with a note and *escaped* text that wraps \"here\".\".",
+          "from": 54,
+          "to": 55,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"Intro with a note and *escaped* text that wraps \"here\".\".",
+          "from": 59,
+          "to": 60,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"An \"alert\" line.\".",
+          "from": 78,
+          "to": 79,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"An \"alert\" line.\".",
+          "from": 84,
+          "to": 85,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"Inner \"quote\"\".",
+          "from": 117,
+          "to": 118,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"Inner \"quote\"\".",
+          "from": 123,
+          "to": 124,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"First \"step\" continued\".",
+          "from": 135,
+          "to": 136,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"First \"step\" continued\".",
+          "from": 140,
+          "to": 141,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"nested \"item\"\".",
+          "from": 167,
+          "to": 168,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"nested \"item\"\".",
+          "from": 172,
+          "to": 173,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"The \"footnote\" text.\".",
+          "from": 283,
+          "to": 284,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"The \"footnote\" text.\".",
+          "from": 292,
+          "to": 293,
+          "replacement": "”"
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"First \"step\" continued\" has no full stop; house list items end with one.",
+          "from": 154,
+          "to": 154,
+          "replacement": "."
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"nested \"item\"\" has no full stop; house list items end with one.",
+          "from": 173,
+          "to": 173,
+          "replacement": "."
+        },
+        {
+          "check": "list-punctuation",
+          "severity": "info",
+          "message": "List item \"Done task\" has no full stop; house list items end with one.",
+          "from": 190,
+          "to": 190,
+          "replacement": "."
+        }
+      ],
+      "fixed": "Intro with a note[^1] and \\*escaped\\* text\nthat wraps “here”.\n\n> [!NOTE]\n> An “alert” line.\n\n> Outer quote\n> > Inner “quote”\n\n1. First “step”\n   continued.\n   - nested “item”.\n2. [x] Done task.\n\n    indented \"code\"\n\n<div>\n\"html\"\n</div>\n\n- | a | b |\n  |---|---|\n  | \"c\" | d |\n\n[^1]: The “footnote” text.\n\nTitle here ##\n=\n\n### Closing hashes ###\n"
+    }
+  },
+  {
+    "name": "reference links, autolinks, inline HTML and math with dollars",
+    "source": "See [the \"guide\"][g], <https://example.com/\"x\"> and <span>\"inline\"</span>. It costs $5 and $10, while $x$ is \"math\".\n\n[g]: https://example.com\n\n$$\n\"display\"\n$$\n",
+    "profile": {
+      "quotes": "curly",
+      "checks": [
+        "quotes"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".",
+          "from": 0,
+          "to": 116
+        }
+      ],
+      "findings": [
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 9,
+          "to": 10,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 15,
+          "to": 16,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 58,
+          "to": 59,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 65,
+          "to": 66,
+          "replacement": "”"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use “ instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 109,
+          "to": 110,
+          "replacement": "“"
+        },
+        {
+          "check": "quotes",
+          "severity": "info",
+          "message": "Use ” instead of \" in \"See the \"guide\", ￼ and ￼\"inline\"￼. It costs ￼ is \"math\".\".",
+          "from": 114,
+          "to": 115,
+          "replacement": "”"
+        }
+      ],
+      "fixed": "See [the “guide”][g], <https://example.com/\"x\"> and <span>”inline”</span>. It costs $5 and $10, while $x$ is “math”.\n\n[g]: https://example.com\n\n$$\n\"display\"\n$$\n"
+    }
+  },
+  {
+    "name": "title case with small words and proper nouns, upper case, terms with notes and deletions",
+    "source": "# a tour of the github api for beginners\n\n## Notes on Acme\n\nPlease Click Here to basically start.\n",
+    "profile": {
+      "headingCase": "title",
+      "properNouns": [
+        "GitHub",
+        "API",
+        "Acme"
+      ],
+      "terms": [
+        {
+          "avoid": "click here",
+          "note": "link text says where it goes"
+        },
+        {
+          "avoid": "basically",
+          "use": ""
+        }
+      ],
+      "checks": [
+        "heading-case",
+        "terms"
+      ]
+    },
+    "expected": {
+      "blocks": [
+        {
+          "kind": "heading",
+          "level": 1,
+          "text": "a tour of the github api for beginners",
+          "from": 2,
+          "to": 40
+        },
+        {
+          "kind": "heading",
+          "level": 2,
+          "text": "Notes on Acme",
+          "from": 45,
+          "to": 58
+        },
+        {
+          "kind": "paragraph",
+          "text": "Please Click Here to basically start.",
+          "from": 60,
+          "to": 97
+        }
+      ],
+      "findings": [
+        {
+          "check": "heading-case",
+          "severity": "warning",
+          "message": "Heading \"a tour of the github api for beginners\" is not in title case; write \"A Tour of the GitHub API for Beginners\".",
+          "from": 2,
+          "to": 40,
+          "replacement": "A Tour of the GitHub API for Beginners"
+        },
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"Click Here\" (link text says where it goes).",
+          "from": 67,
+          "to": 77
+        },
+        {
+          "check": "terms",
+          "severity": "warning",
+          "message": "Avoid \"basically\"; write \"\".",
+          "from": 81,
+          "to": 90,
+          "replacement": ""
+        }
+      ],
+      "fixed": "# A Tour of the GitHub API for Beginners\n\n## Notes on Acme\n\nPlease Click Here to  start.\n"
     }
   },
   {

@@ -101,6 +101,15 @@ describe('markdown house-style findings', () => {
 		expect(applyMarkdownStyleEdits(source, markdownStyleEdits(findings).edits)).toBe('- Ship **now**.\n- Run `make`.\n- See [docs](#d).\n');
 	});
 
+	it('reads a setext heading without its underline, and never writes an atom into the source', () => {
+		expect(markdownStyleState('Title Here ##\n=\n').blocks.map((b) => b.text)).toEqual(['Title Here ##']);
+		const source = '# Install the `npm` Package\n\n## `make` Builds It All\n';
+		const findings = markdownStyleFindings(source, { headingCase: 'sentence', checks: ['heading-case'] });
+		const fixed = applyMarkdownStyleEdits(source, markdownStyleEdits(findings).edits);
+		expect(fixed).toBe('# Install the `npm` package\n\n## `make` builds it all\n');
+		expect(fixed).not.toContain(MARKDOWN_STYLE_ATOM);
+	});
+
 	it('leaves a fix uncertain when it would have to change syntax', () => {
 		// "click **here**" → "tap" changes length across `**`: no certain replacement.
 		const source = 'Please click **here** now.';

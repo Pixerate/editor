@@ -85,10 +85,10 @@ const headingLevel = (source: string, block: MarkdownProseBlock): number => {
 	return atx ? atx[1].length : 1;
 };
 
-/** The end of an ATX heading's text, before a closing run of `#`s. */
+/** The end of a heading's text: before an ATX heading's closing run of `#`s, or a setext heading's underline. */
 const endOfHeadingText = (source: string, block: MarkdownProseBlock): number => {
 	const line = source.slice(block.from, block.to);
-	if (line.includes('\n')) return block.to;
+	if (line.includes('\n')) return block.from + line.lastIndexOf('\n');
 	const closing = /(?:^|[ \t]+)#+[ \t]*$/.exec(line);
 	return closing ? block.from + closing.index : block.to;
 };
@@ -195,15 +195,18 @@ export function narrowMarkdownStyleTarget(source: string, state: RichTextStyleSt
 		const s = block.segments[seg];
 		chars.push({ ch: block.text[i], pos: s && s.offset <= i ? s.pos + (i - s.offset) : null });
 	}
-	const first = chars.findIndex((c) => c.pos !== null && c.pos >= target.from);
+	// A target from the block's start or to its end takes in the spaces and atoms the reader put there.
+	const first = target.from <= block.segments[0].pos ? 0 : chars.findIndex((c) => c.pos !== null && c.pos >= target.from);
 	let last = -1;
-	for (let i = chars.length - 1; i >= 0; i--) {
-		const pos = chars[i].pos;
-		if (pos !== null && pos < target.to) {
-			last = i;
-			break;
+	if (target.to >= textEnd) last = chars.length - 1;
+	else
+		for (let i = chars.length - 1; i >= 0; i--) {
+			const pos = chars[i].pos;
+			if (pos !== null && pos < target.to) {
+				last = i;
+				break;
+			}
 		}
-	}
 	if (first < 0 || last < first) return target;
 	const picked = chars.slice(first, last + 1);
 	const original = picked.map((c) => c.ch).join('');
@@ -231,6 +234,7 @@ export function narrowMarkdownStyleTarget(source: string, state: RichTextStyleSt
 		if (middle.length !== insert.length || middle.some((c, i) => c.pos === null && insert[i] !== c.ch)) return uncertain();
 	}
 	const real = middle.filter((c) => c.pos !== null) as { ch: string; pos: number }[];
+	if (!real.length) return uncertain();
 	const from = real[0].pos;
 	const to = real[real.length - 1].pos + 1;
 	const contiguous = real.every((c, i) => i === 0 || c.pos === real[i - 1].pos + 1) && real.length === middle.length;
@@ -306,7 +310,9 @@ export function markdownStyleEdits(findings: readonly MarkdownStyleFinding[]): {
 	let overlapping = 0;
 	let end = -1;
 	for (const t of certain) {
-		if (t.from < end || (t.from === end && t.from === t.to && edits.length && edits[edits.length - 1].to === t.from)) {
+		const prev = edits[edits.length - 1];
+		// Two insertions at one place would land in an unknown order; an insertion right after a replacement is fine.
+		if (t.from < end || (prev && t.from === t.to && prev.from === prev.to && prev.from === t.from)) {
 			overlapping++;
 			continue;
 		}
