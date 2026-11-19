@@ -27,6 +27,7 @@ export * from './text-mechanics-contracts.js';
 export * from './text-mechanics-tools.js';
 export * from './markdown-style.js';
 export * from './markdown-style-contracts.js';
+export * from './style-contracts.js';
 export * from './text-changes.js';
 export * from './text-proposals.js';
 export * from './text-proposal-tools.js';

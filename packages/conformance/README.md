@@ -108,6 +108,20 @@ controller's state with the default options (id prefix `ve-`, no viewport cullin
 part of the contract, and lays out text with the metric shaper (`createMetricTextShaper`).
 Generation runs `fakeVectorArtGenerator`, a fixed SVG from the prompt.
 
+### `domains/style`
+
+The style resolver and its read tools (#890), from `styleContracts()` in `@pixerate/editor/tools`,
+with the `rich-text` and `brand` domains. Ported to Swift in `PixerateCore` (`StyleResolverTests`).
+
+- `manifest.json`: the domain, `formatVersion` and the other files.
+- `tools.json`: `list_styles`, `get_style`, `get_style_file` and `get_style_schema` as an MCP tool list.
+- `domains.json`: for each domain, its id, title and what `get_style_schema` returns (the
+  `<style_domain>` text and the structured result), which a port serves as it is.
+- `scenarios.json`: layers of memory stores (files keyed `<skill>/<file>`, state per skill,
+  `locked` and `required`), optional design tokens (`name` or `name@mode`, others unknown), the
+  tools' scope, the calls and what each returned: the structured result, the text for the tools
+  that write their own, or the error message.
+
 ### `domains/markdown-style`
 
 House style on Markdown source (#890), from `markdownStyleContracts()` in `@pixerate/editor/tools`:

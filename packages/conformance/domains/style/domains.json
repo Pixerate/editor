@@ -1,0 +1,438 @@
+[
+  {
+    "id": "rich-text",
+    "title": "Documents",
+    "text": "<style_domain id=\"rich-text\" file=\"rich-text.json\">\nDocuments: How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.\n\nWhere it goes: rich-text.json in the skill folder, or under a \"rich-text:\" key in the SKILL.md frontmatter (not both). It applies when the skill's frontmatter \"domains\" includes rich-text, or names none.\nA variant can build on another skill with \"extends: <skill>\" in its frontmatter and give only the fields that differ; objects merge field by field, lists and values replace.\n\nChecks it can turn on in \"checks\" (an id, or { \"id\": ..., options }):\n- heading-case: Headings use the house case (\"headingCase\": sentence, title or upper), keeping acronyms, words with digits and the profile's \"properNouns\".\n- heading-levels: Headings go no deeper than \"maxHeadingLevel\" (default 6) and never skip a level (a level 2 heading before any level 3).\n- list-punctuation: List items end the house way (\"listItemEnd\": \"none\", no full stop, or \"period\", a full stop).\n- quotes: Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\" ') as \"quotes\" says. Code is left alone.\n- terms: Words the house style avoids (\"terms\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\n- number-format: Numbers of five digits or more group thousands the house way (\"thousandsSeparator\": \",\", \".\", \" \", \"thin\" or \"none\"). Four-digit numbers (years) and code are left alone.\n- date-format: Dates are written the house way (\"dateFormat\": \"iso\" 2026-11-12, \"day-month-year\" 12 November 2026, or \"month-day-year\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\n- palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\n- min-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\n- distinguishable: Series and category colours are far enough apart to tell apart.\n- fonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\n\nExample:\n{\n  \"headingCase\": \"sentence\",\n  \"maxHeadingLevel\": 3,\n  \"properNouns\": [\n    \"Acme\",\n    \"GitHub\"\n  ],\n  \"listItemEnd\": \"none\",\n  \"quotes\": \"curly\",\n  \"terms\": [\n    {\n      \"avoid\": \"utilize\",\n      \"use\": \"use\"\n    },\n    {\n      \"avoid\": \"click here\",\n      \"note\": \"link text says where it goes\"\n    }\n  ],\n  \"thousandsSeparator\": \",\",\n  \"dateFormat\": \"day-month-year\",\n  \"checks\": [\n    \"heading-case\",\n    \"heading-levels\",\n    \"list-punctuation\",\n    \"quotes\",\n    \"terms\",\n    \"number-format\",\n    \"date-format\",\n    \"fonts-allowed\"\n  ]\n}\n\nSchema:\n{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Documents house-style profile (rich-text.json)\",\"description\":\"How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.\",\"type\":\"object\",\"properties\":{\"$schema\":{\"type\":\"string\",\"description\":\"Path or URL of this schema, for editors. Ignored when the profile loads.\"},\"headingCase\":{\"type\":\"string\",\"enum\":[\"sentence\",\"title\",\"upper\"],\"description\":\"Case for headings: \\\"sentence\\\" (Only the first word), \\\"title\\\" (Major Words Capitalised) or \\\"upper\\\".\"},\"maxHeadingLevel\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":6,\"description\":\"Deepest heading level allowed (default 6).\"},\"properNouns\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"description\":\"Names written exactly as given in any heading case, e.g. \\\"GitHub\\\", \\\"Pixerate\\\".\"},\"listItemEnd\":{\"type\":\"string\",\"enum\":[\"none\",\"period\"],\"description\":\"How list items end: no full stop, or a full stop.\"},\"quotes\":{\"type\":\"string\",\"enum\":[\"curly\",\"straight\"],\"description\":\"Quotation marks and apostrophes: curly (“ ” ‘ ’) or straight (\\\" ').\"},\"terms\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"avoid\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Word or phrase to avoid (whole words, any case).\"},\"use\":{\"type\":\"string\",\"description\":\"What to write instead (empty: delete it).\"},\"note\":{\"type\":\"string\",\"description\":\"Why, shown with the finding.\"}},\"required\":[\"avoid\"],\"additionalProperties\":false},\"description\":\"Banned or replaced words and phrases.\"},\"thousandsSeparator\":{\"type\":\"string\",\"enum\":[\",\",\".\",\" \",\"thin\",\"none\"],\"description\":\"Thousands separator for numbers of five digits or more (\\\"thin\\\": a narrow no-break space).\"},\"dateFormat\":{\"type\":\"string\",\"enum\":[\"iso\",\"day-month-year\",\"month-day-year\"],\"description\":\"How to write dates: 2026-11-12, 12 November 2026 or November 12, 2026.\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"description\":\"Font families allowed in text (for fonts-allowed). Default: the brand fonts.\"},\"palette\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour, or a { \\\"$token\\\": ... } reference.\"},\"description\":\"Text and highlight colours allowed (for palette-only). Default: the brand palette and roles.\"},\"checks\":{\"type\":\"array\",\"description\":\"Checks to run in check_<domain>_style: an id, or an object with the id and its options.\",\"items\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"heading-case\",\"heading-levels\",\"list-punctuation\",\"quotes\",\"terms\",\"number-format\",\"date-format\",\"palette-only\",\"min-contrast\",\"distinguishable\",\"fonts-allowed\"],\"description\":\"heading-case: Headings use the house case (\\\"headingCase\\\": sentence, title or upper), keeping acronyms, words with digits and the profile's \\\"properNouns\\\".\\nheading-levels: Headings go no deeper than \\\"maxHeadingLevel\\\" (default 6) and never skip a level (a level 2 heading before any level 3).\\nlist-punctuation: List items end the house way (\\\"listItemEnd\\\": \\\"none\\\", no full stop, or \\\"period\\\", a full stop).\\nquotes: Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\\\" ') as \\\"quotes\\\" says. Code is left alone.\\nterms: Words the house style avoids (\\\"terms\\\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\\nnumber-format: Numbers of five digits or more group thousands the house way (\\\"thousandsSeparator\\\": \\\",\\\", \\\".\\\", \\\" \\\", \\\"thin\\\" or \\\"none\\\"). Four-digit numbers (years) and code are left alone.\\ndate-format: Dates are written the house way (\\\"dateFormat\\\": \\\"iso\\\" 2026-11-12, \\\"day-month-year\\\" 12 November 2026, or \\\"month-day-year\\\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\\npalette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\\nmin-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\\ndistinguishable: Series and category colours are far enough apart to tell apart.\\nfonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\"},{\"type\":\"object\",\"description\":\"Headings use the house case (\\\"headingCase\\\": sentence, title or upper), keeping acronyms, words with digits and the profile's \\\"properNouns\\\".\",\"properties\":{\"id\":{\"const\":\"heading-case\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Headings go no deeper than \\\"maxHeadingLevel\\\" (default 6) and never skip a level (a level 2 heading before any level 3).\",\"properties\":{\"id\":{\"const\":\"heading-levels\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"List items end the house way (\\\"listItemEnd\\\": \\\"none\\\", no full stop, or \\\"period\\\", a full stop).\",\"properties\":{\"id\":{\"const\":\"list-punctuation\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\\\" ') as \\\"quotes\\\" says. Code is left alone.\",\"properties\":{\"id\":{\"const\":\"quotes\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Words the house style avoids (\\\"terms\\\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone.\",\"properties\":{\"id\":{\"const\":\"terms\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Numbers of five digits or more group thousands the house way (\\\"thousandsSeparator\\\": \\\",\\\", \\\".\\\", \\\" \\\", \\\"thin\\\" or \\\"none\\\"). Four-digit numbers (years) and code are left alone.\",\"properties\":{\"id\":{\"const\":\"number-format\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Dates are written the house way (\\\"dateFormat\\\": \\\"iso\\\" 2026-11-12, \\\"day-month-year\\\" 12 November 2026, or \\\"month-day-year\\\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous.\",\"properties\":{\"id\":{\"const\":\"date-format\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\",\"properties\":{\"id\":{\"const\":\"palette-only\"},\"tolerance\":{\"type\":\"number\",\"minimum\":0,\"maximum\":20,\"description\":\"How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2.\"},\"allowNeutrals\":{\"type\":\"boolean\",\"description\":\"Allow greys, black and white that are not in the palette. Default true.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\",\"properties\":{\"id\":{\"const\":\"min-contrast\"},\"ratio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for body text. Default 4.5 (WCAG AA).\"},\"largeRatio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for large text. Default 3.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Series and category colours are far enough apart to tell apart.\",\"properties\":{\"id\":{\"const\":\"distinguishable\"},\"minDistance\":{\"type\":\"number\",\"minimum\":1,\"maximum\":50,\"description\":\"Least OKLab distance × 100 between two series colours. Default 10.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\",\"properties\":{\"id\":{\"const\":\"fonts-allowed\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's.\"}},\"required\":[\"id\"],\"additionalProperties\":false}]}}},\"additionalProperties\":false}\n</style_domain>",
+    "structuredContent": {
+      "domain": "rich-text",
+      "file": "rich-text.json",
+      "description": "How documents read: heading case and depth, list item endings, quotation marks, preferred terms, number and date formats, and the fonts and text colours allowed. Findings target ranges that replace_range accepts, with the replacement when the fix is certain.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "headingCase": {
+            "type": "string",
+            "enum": [
+              "sentence",
+              "title",
+              "upper"
+            ],
+            "description": "Case for headings: \"sentence\" (Only the first word), \"title\" (Major Words Capitalised) or \"upper\"."
+          },
+          "maxHeadingLevel": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6,
+            "description": "Deepest heading level allowed (default 6)."
+          },
+          "properNouns": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Names written exactly as given in any heading case, e.g. \"GitHub\", \"Pixerate\"."
+          },
+          "listItemEnd": {
+            "type": "string",
+            "enum": [
+              "none",
+              "period"
+            ],
+            "description": "How list items end: no full stop, or a full stop."
+          },
+          "quotes": {
+            "type": "string",
+            "enum": [
+              "curly",
+              "straight"
+            ],
+            "description": "Quotation marks and apostrophes: curly (“ ” ‘ ’) or straight (\" ')."
+          },
+          "terms": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "avoid": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Word or phrase to avoid (whole words, any case)."
+                },
+                "use": {
+                  "type": "string",
+                  "description": "What to write instead (empty: delete it)."
+                },
+                "note": {
+                  "type": "string",
+                  "description": "Why, shown with the finding."
+                }
+              },
+              "required": [
+                "avoid"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Banned or replaced words and phrases."
+          },
+          "thousandsSeparator": {
+            "type": "string",
+            "enum": [
+              ",",
+              ".",
+              " ",
+              "thin",
+              "none"
+            ],
+            "description": "Thousands separator for numbers of five digits or more (\"thin\": a narrow no-break space)."
+          },
+          "dateFormat": {
+            "type": "string",
+            "enum": [
+              "iso",
+              "day-month-year",
+              "month-day-year"
+            ],
+            "description": "How to write dates: 2026-11-12, 12 November 2026 or November 12, 2026."
+          },
+          "fonts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Font families allowed in text (for fonts-allowed). Default: the brand fonts."
+          },
+          "palette": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A CSS colour, or a { \"$token\": ... } reference."
+            },
+            "description": "Text and highlight colours allowed (for palette-only). Default: the brand palette and roles."
+          }
+        },
+        "additionalProperties": false
+      },
+      "checks": [
+        {
+          "id": "heading-case",
+          "description": "Headings use the house case (\"headingCase\": sentence, title or upper), keeping acronyms, words with digits and the profile's \"properNouns\"."
+        },
+        {
+          "id": "heading-levels",
+          "description": "Headings go no deeper than \"maxHeadingLevel\" (default 6) and never skip a level (a level 2 heading before any level 3)."
+        },
+        {
+          "id": "list-punctuation",
+          "description": "List items end the house way (\"listItemEnd\": \"none\", no full stop, or \"period\", a full stop)."
+        },
+        {
+          "id": "quotes",
+          "description": "Quotation marks and apostrophes are curly (“ ” ‘ ’) or straight (\" ') as \"quotes\" says. Code is left alone."
+        },
+        {
+          "id": "terms",
+          "description": "Words the house style avoids (\"terms\": { avoid, use?, note? }) do not appear, matched as whole words in any case. Code is left alone."
+        },
+        {
+          "id": "number-format",
+          "description": "Numbers of five digits or more group thousands the house way (\"thousandsSeparator\": \",\", \".\", \" \", \"thin\" or \"none\"). Four-digit numbers (years) and code are left alone."
+        },
+        {
+          "id": "date-format",
+          "description": "Dates are written the house way (\"dateFormat\": \"iso\" 2026-11-12, \"day-month-year\" 12 November 2026, or \"month-day-year\" November 12, 2026). Numeric dates with slashes are flagged as ambiguous."
+        },
+        {
+          "id": "palette-only",
+          "description": "Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 20,
+                "description": "How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2."
+              },
+              "allowNeutrals": {
+                "type": "boolean",
+                "description": "Allow greys, black and white that are not in the palette. Default true."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "min-contrast",
+          "description": "Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).",
+          "options": {
+            "type": "object",
+            "properties": {
+              "ratio": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 21,
+                "description": "Minimum ratio for body text. Default 4.5 (WCAG AA)."
+              },
+              "largeRatio": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 21,
+                "description": "Minimum ratio for large text. Default 3."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "distinguishable",
+          "description": "Series and category colours are far enough apart to tell apart.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "minDistance": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "Least OKLab distance × 100 between two series colours. Default 10."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "fonts-allowed",
+          "description": "Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "fonts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      ],
+      "example": {
+        "headingCase": "sentence",
+        "maxHeadingLevel": 3,
+        "properNouns": [
+          "Acme",
+          "GitHub"
+        ],
+        "listItemEnd": "none",
+        "quotes": "curly",
+        "terms": [
+          {
+            "avoid": "utilize",
+            "use": "use"
+          },
+          {
+            "avoid": "click here",
+            "note": "link text says where it goes"
+          }
+        ],
+        "thousandsSeparator": ",",
+        "dateFormat": "day-month-year",
+        "checks": [
+          "heading-case",
+          "heading-levels",
+          "list-punctuation",
+          "quotes",
+          "terms",
+          "number-format",
+          "date-format",
+          "fonts-allowed"
+        ]
+      }
+    }
+  },
+  {
+    "id": "brand",
+    "title": "Brand",
+    "text": "<style_domain id=\"brand\" file=\"brand.json\">\nBrand: The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.\n\nWhere it goes: brand.json in the skill folder, or under a \"brand:\" key in the SKILL.md frontmatter (not both). Every domain a skill covers reads its brand.\nA variant can build on another skill with \"extends: <skill>\" in its frontmatter and give only the fields that differ; objects merge field by field, lists and values replace.\n\nChecks it can turn on in \"checks\" (an id, or { \"id\": ..., options }):\n- palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\n- min-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\n- distinguishable: Series and category colours are far enough apart to tell apart.\n- fonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\n\nExample:\n{\n  \"name\": \"Acme\",\n  \"colors\": {\n    \"primary\": \"#0b5fff\",\n    \"secondary\": \"#ff6a00\",\n    \"accent\": \"#12a150\",\n    \"text\": \"#1a1a1a\",\n    \"mutedText\": \"#5c5c5c\",\n    \"background\": \"#ffffff\",\n    \"border\": \"#d9d9d9\"\n  },\n  \"fonts\": {\n    \"heading\": \"Inter\",\n    \"body\": \"Inter\"\n  },\n  \"checks\": [\n    \"palette-only\",\n    \"min-contrast\",\n    \"fonts-allowed\"\n  ]\n}\n\nSchema:\n{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"title\":\"Brand house-style profile (brand.json)\",\"description\":\"The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.\",\"type\":\"object\",\"properties\":{\"$schema\":{\"type\":\"string\",\"description\":\"Path or URL of this schema, for editors. Ignored when the profile loads.\"},\"name\":{\"type\":\"string\",\"minLength\":1,\"description\":\"Display name of the brand.\"},\"colors\":{\"type\":\"object\",\"additionalProperties\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour (hex, rgb() or a name), or a { \\\"$token\\\": ... } reference.\"},\"description\":\"Colours by role or slot name. Roles and the names each is looked up by: primary (primary, brand, accent1, accent); secondary (secondary, accent2); accent (accent, tertiary, accent3, accent2); background (background, bg, lt1, surface); surface (surface, lt2, background, lt1); text (text, foreground, fg, dk1); mutedText (mutedText, muted, secondaryText, dk2); border (border, line, outline, dk2); positive (positive, success, good); negative (negative, error, danger, bad); link (link, hlink).\"},\"palette\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1,\"description\":\"A CSS colour (hex, rgb() or a name), or a { \\\"$token\\\": ... } reference.\"},\"minItems\":1,\"description\":\"Ordered colours for series, categories and swatches. Default: primary, secondary, accent, then accent1–accent6.\"},\"fonts\":{\"type\":\"object\",\"properties\":{\"heading\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for headings and titles.\"},\"body\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for body text and labels.\"},\"mono\":{\"type\":\"string\",\"minLength\":1,\"description\":\"CSS font family for code and figures.\"}},\"additionalProperties\":false,\"description\":\"Font families.\"},\"logo\":{\"type\":\"object\",\"properties\":{\"svg\":{\"type\":\"string\",\"minLength\":1,\"description\":\"The logo as one <svg> element.\"},\"aspect\":{\"type\":\"number\",\"exclusiveMinimum\":0,\"description\":\"Width divided by height.\"}},\"additionalProperties\":false,\"description\":\"The logo. Agents place it as given and never redraw it.\"},\"checks\":{\"type\":\"array\",\"description\":\"Checks to run in check_<domain>_style: an id, or an object with the id and its options.\",\"items\":{\"anyOf\":[{\"type\":\"string\",\"enum\":[\"palette-only\",\"min-contrast\",\"distinguishable\",\"fonts-allowed\"],\"description\":\"palette-only: Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\\nmin-contrast: Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\\ndistinguishable: Series and category colours are far enough apart to tell apart.\\nfonts-allowed: Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\"},{\"type\":\"object\",\"description\":\"Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.\",\"properties\":{\"id\":{\"const\":\"palette-only\"},\"tolerance\":{\"type\":\"number\",\"minimum\":0,\"maximum\":20,\"description\":\"How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2.\"},\"allowNeutrals\":{\"type\":\"boolean\",\"description\":\"Allow greys, black and white that are not in the palette. Default true.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).\",\"properties\":{\"id\":{\"const\":\"min-contrast\"},\"ratio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for body text. Default 4.5 (WCAG AA).\"},\"largeRatio\":{\"type\":\"number\",\"minimum\":1,\"maximum\":21,\"description\":\"Minimum ratio for large text. Default 3.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Series and category colours are far enough apart to tell apart.\",\"properties\":{\"id\":{\"const\":\"distinguishable\"},\"minDistance\":{\"type\":\"number\",\"minimum\":1,\"maximum\":50,\"description\":\"Least OKLab distance × 100 between two series colours. Default 10.\"}},\"required\":[\"id\"],\"additionalProperties\":false},{\"type\":\"object\",\"description\":\"Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.\",\"properties\":{\"id\":{\"const\":\"fonts-allowed\"},\"fonts\":{\"type\":\"array\",\"items\":{\"type\":\"string\",\"minLength\":1},\"minItems\":1,\"description\":\"Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's.\"}},\"required\":[\"id\"],\"additionalProperties\":false}]}}},\"additionalProperties\":false}\n</style_domain>",
+    "structuredContent": {
+      "domain": "brand",
+      "file": "brand.json",
+      "description": "The brand every editor shares: colours by role (primary, text, background, Office slots such as accent1 and dk1), an ordered palette, fonts and a logo, and shared checks to run wherever a domain can be checked against it. Each domain derives its own starting style from it; a domain profile refines that.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Display name of the brand."
+          },
+          "colors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A CSS colour (hex, rgb() or a name), or a { \"$token\": ... } reference."
+            },
+            "description": "Colours by role or slot name. Roles and the names each is looked up by: primary (primary, brand, accent1, accent); secondary (secondary, accent2); accent (accent, tertiary, accent3, accent2); background (background, bg, lt1, surface); surface (surface, lt2, background, lt1); text (text, foreground, fg, dk1); mutedText (mutedText, muted, secondaryText, dk2); border (border, line, outline, dk2); positive (positive, success, good); negative (negative, error, danger, bad); link (link, hlink)."
+          },
+          "palette": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "description": "A CSS colour (hex, rgb() or a name), or a { \"$token\": ... } reference."
+            },
+            "minItems": 1,
+            "description": "Ordered colours for series, categories and swatches. Default: primary, secondary, accent, then accent1–accent6."
+          },
+          "fonts": {
+            "type": "object",
+            "properties": {
+              "heading": {
+                "type": "string",
+                "minLength": 1,
+                "description": "CSS font family for headings and titles."
+              },
+              "body": {
+                "type": "string",
+                "minLength": 1,
+                "description": "CSS font family for body text and labels."
+              },
+              "mono": {
+                "type": "string",
+                "minLength": 1,
+                "description": "CSS font family for code and figures."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Font families."
+          },
+          "logo": {
+            "type": "object",
+            "properties": {
+              "svg": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The logo as one <svg> element."
+              },
+              "aspect": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Width divided by height."
+              }
+            },
+            "additionalProperties": false,
+            "description": "The logo. Agents place it as given and never redraw it."
+          }
+        },
+        "additionalProperties": false
+      },
+      "checks": [
+        {
+          "id": "palette-only",
+          "description": "Every colour comes from the house palette or a brand colour role (within a small tolerance). Neutrals (greys, black, white) are allowed unless allowNeutrals is false.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "tolerance": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 20,
+                "description": "How far a colour may be from a palette colour, in OKLab distance × 100 (1 is barely visible). Default 2."
+              },
+              "allowNeutrals": {
+                "type": "boolean",
+                "description": "Allow greys, black and white that are not in the palette. Default true."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "min-contrast",
+          "description": "Text has at least the WCAG contrast ratio against what it sits on (default 4.5, or 3 for large text: 24 px, or 18.66 px bold).",
+          "options": {
+            "type": "object",
+            "properties": {
+              "ratio": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 21,
+                "description": "Minimum ratio for body text. Default 4.5 (WCAG AA)."
+              },
+              "largeRatio": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 21,
+                "description": "Minimum ratio for large text. Default 3."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "distinguishable",
+          "description": "Series and category colours are far enough apart to tell apart.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "minDistance": {
+                "type": "number",
+                "minimum": 1,
+                "maximum": 50,
+                "description": "Least OKLab distance × 100 between two series colours. Default 10."
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        {
+          "id": "fonts-allowed",
+          "description": "Every font is one the house style names: the check's fonts option, else the profile's fonts list, else the brand's heading, body and mono fonts. Generic families (sans-serif, system-ui, ...) are allowed.",
+          "options": {
+            "type": "object",
+            "properties": {
+              "fonts": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "description": "Allowed font families (case-insensitive). Default: the profile's fonts, else the brand's."
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      ],
+      "example": {
+        "name": "Acme",
+        "colors": {
+          "primary": "#0b5fff",
+          "secondary": "#ff6a00",
+          "accent": "#12a150",
+          "text": "#1a1a1a",
+          "mutedText": "#5c5c5c",
+          "background": "#ffffff",
+          "border": "#d9d9d9"
+        },
+        "fonts": {
+          "heading": "Inter",
+          "body": "Inter"
+        },
+        "checks": [
+          "palette-only",
+          "min-contrast",
+          "fonts-allowed"
+        ]
+      }
+    }
+  }
+]
