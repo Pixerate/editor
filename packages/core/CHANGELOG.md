@@ -1,5 +1,17 @@
 # @pixerate/editor
 
+## 0.340.0
+
+### Minor Changes
+
+- c515484: The style resolver in Swift (#890): `PixerateCore` ports `createStyleResolver` (`StyleResolver` over `StyleLayer`s of `StyleStore`s, `MemoryStyleStore`; locked and required layers, skill state, one-of-a-kind groups, scopes, `extends`, `$token` references through a `StyleTokenSource`, profiles in frontmatter and file limits), the strict frontmatter YAML reader (`parseYaml`, `parseFrontmatter`), `HouseStyle(resolved:)` for the domains' check tools, and `createStyleToolProvider` with `list_styles`, `get_style`, `get_style_file` and `get_style_schema`. Profile migrations and the authoring and choice tools are not ported.
+
+  `@pixerate/conformance` has a new `style` domain (`styleContracts()` in `@pixerate/editor/tools`): the read tools as recorded calls over layered memory stores, and what `get_style_schema` returns for each domain.
+
+- 1236765: The text change feed and text proposals in Swift (#890): `PixerateCore` ports `createTextChangeFeed` (`TextChangeFeed`, `diffText`, `textChangeBoundary`), `createTextProposals` (`TextProposals`) and `createTextProposalToolProvider` (`propose_text_edit`, `list_text_proposals`, `accept_text_proposal`, `reject_text_proposal`). `PixerateMarkdownTools` puts them on a Markdown host (`createMarkdownTextProposals`, `createMarkdownTextChangeFeed`), and `MarkdownTextChange` gains an `origin`, which `MarkdownTextBuffer` records (`undoOrigins`), so an accepted proposal is one step made by its proposer.
+
+  `@pixerate/conformance` has a new `text-proposals` domain (`textProposalContracts()` in `@pixerate/editor/tools`): the feed, proposals and their tools as step scenarios.
+
 ## 0.339.1
 
 ### Patch Changes
