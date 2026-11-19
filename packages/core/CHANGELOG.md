@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.340.1
+
+### Patch Changes
+
+- db57a7f: `pixerate-brushes-design` now says how to read a tip's roundness from a sample stroke: square, cut-off ends and a serrated edge mean a low roundness, rounded ends a round tip. It no longer says the stroke's width changes with direction, which the sample S-curve doesn't show.
+
 ## 0.340.0
 
 ### Minor Changes
