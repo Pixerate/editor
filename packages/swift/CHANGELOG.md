@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.82.0
+
+### Minor Changes
+
+- 4e6da10: PixerateMarkdown: port HTML paste sourceURL and Confluence / Jira media placeholders from Swash, and add activeLink and URL normalization helpers.
+
 ## 0.81.0
 
 ### Minor Changes
