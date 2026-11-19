@@ -1,0 +1,126 @@
+[
+  {
+    "name": "propose_text_edit",
+    "title": "Propose a text edit",
+    "description": "Suggests replacing a range of the text without changing it: the person sees the suggestion and accepts or dismisses it, so use it for edits they did not ask for (a house-style fix, a clearer phrase). Take the range from a read or check tool (check_rich_text_style, check_text_mechanics, find_text) and pass the text you read there as expected. The proposal follows the text as the person keeps writing and is dropped if they edit what it would replace. Returns the proposal id, its range, the text it replaces and its title. Follow with accept_text_proposal only when the person asked for it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Start of the range to replace, as a UTF-16 offset into the text."
+        },
+        "to": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "End of the range (exclusive UTF-16 offset); equal to from to insert."
+        },
+        "replacement": {
+          "type": "string",
+          "description": "The text to put there; empty to delete the range."
+        },
+        "expected": {
+          "type": "string",
+          "description": "The text you read at from..to. The proposal is refused if the text there is different now. Default: not checked."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What the suggestion does, in a few words, e.g. \"Use the house term\". Shown to the person and the undo step name once accepted. Default: Replace \"…\" with \"…\"."
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Why, in one sentence, e.g. the style rule it follows. Shown beside the suggestion."
+        },
+        "check": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The check id behind it (terms, heading-case, contractions, ...), when it comes from a check. Default none."
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "replacement"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Propose a text edit",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_text_proposals",
+    "title": "List text proposals",
+    "description": "Lists the pending text proposals (suggested replacements not yet in the text): id, current range (it moves as the person writes), the text it replaces, the replacement, title, rationale, check and who proposed it, and whether accepting is allowed. Proposals whose text the person edited are gone. Call before accept_text_proposal or reject_text_proposal.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "List text proposals",
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "accept_text_proposal",
+    "title": "Accept a text proposal",
+    "description": "Applies a pending text proposal as one undo step, recorded as made by whoever proposed it, and drops it from the pending list. Refuses, changing nothing, when the text is read-only or the text it would replace has changed (the proposal is then dropped). Returns the range the replacement now occupies, its text and the undo step name.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id of a pending text proposal, from propose_text_edit or list_text_proposals."
+        }
+      },
+      "required": [
+        "proposalId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Accept a text proposal",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "reject_text_proposal",
+    "title": "Reject a text proposal",
+    "description": "Dismisses a pending text proposal: the suggestion disappears and the text and its history are unchanged. Use it to withdraw a suggestion that no longer fits. Returns the dismissed proposal id and title.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "proposalId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Id of a pending text proposal, from propose_text_edit or list_text_proposals."
+        }
+      },
+      "required": [
+        "proposalId"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "title": "Reject a text proposal",
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  }
+]
