@@ -153,7 +153,7 @@ For a facet that a dab engine paints, a trial needed these, under
 | File | What |
 | --- | --- |
 | `Brushes/Normalize.swift` | `BRUSH_KEY_ORDER` and `UNSETTABLE_BRUSH_FACETS` (Swift's copies of the TS lists; its order differs from TS, so match the neighbour, not the index), and any clamp or drop `normalize.ts` does. |
-| `Brushes/Resolve.swift` | The field mapping (`f(...)` / `each(...)`) and the presence block, as in `resolve.ts`. Swift's engine lists aren't all the same as TS's (Swift's `DABS` has no `scraper`): use the engines `resolve.ts` names. |
+| `Brushes/Resolve.swift` | The field mapping (`f(...)` / `each(...)`) and the presence block, as in `resolve.ts`. Swift keeps its own copies of the engine lists (`ALL`, `DABS`, `FILM`…): keep them equal to TS's, and use the engines `resolve.ts` names. A mismatch only shows in a scenario that paints with that engine (#940). |
 | `Brushes/Profiles.swift` | The `BrushHostProfile` property, its `init` parameter, its value in each profile (`PAINT_PROFILE`…), the `feature(...)` line and the `degrade` case. |
 | `Editor/Brushes.swift` | The engine field on `PaintBrush`, its key in `json()` at the spot TS's resolved brush has it, and reading it in the engine normalize (with `null` removing it). |
 | `Editor/Engine.swift` and the rest | The same painting code. Match TS's arithmetic: TS stores into a `Float32Array` after double math, so write `Float(Double(buf[k]) * x)`. |
