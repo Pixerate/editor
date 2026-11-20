@@ -650,6 +650,8 @@ extension PaintEditorController {
             logged.insert(e.layerId)
             if e.kind == "clear" { cleared.insert(e.layerId) }
         }
+        // A pixel layer's edited strokes (#902) are edits of the log itself.
+        for (id, t) in next.strokeTails ?? OrderedMap() where t !== base.strokeTails?.get(id) { logged.insert(id) }
         let oldWet = Set((base.wetEvents ?? []).map(\.key))
         for e in next.wetEvents ?? [] where !oldWet.contains(e.key) && !preludeDry.contains(e.key) {
             guard let ids = e.layerId, !ids.isEmpty else {

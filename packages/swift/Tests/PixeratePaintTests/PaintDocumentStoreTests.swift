@@ -181,7 +181,8 @@ final class PaintDocumentStoreTests: XCTestCase {
         XCTAssertEqual(out["later"], ["png": .string("asset:\(extId)"), "again": [.string("asset:\(extId)")], "other": "asset:ext-380f6147-3a"])
         XCTAssertEqual(store.puts[2].id, "ext-380f6147-3a")
         XCTAssertEqual([store.puts[2].width, store.puts[2].height, store.puts[2].size], [1, 1, 70])
-        XCTAssertEqual(out.keys, ["later", "unloggedComplete", "format", "version", "width", "height", "dpi", "paper", "activeLayerId", "strokes", "guides", "swatches", "layers", "assets"])
+        // The painting's strokes stay editable on its pixel layer (#902): `strokeTails` follows `unloggedComplete`, as in TS.
+        XCTAssertEqual(out.keys, ["later", "unloggedComplete", "strokeTails", "format", "version", "width", "height", "dpi", "paper", "activeLayerId", "strokes", "guides", "swatches", "layers", "assets"])
 
         // Reopened through the store, it is the painting that was saved.
         let e = try PaintEditorController(width: 8, height: 8)

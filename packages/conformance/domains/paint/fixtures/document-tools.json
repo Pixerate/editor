@@ -117,6 +117,14 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@1": {
+                "base": null,
+                "ids": [
+                  "s1"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {

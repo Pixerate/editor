@@ -225,6 +225,12 @@ public final class PaintEditorModel {
         guard let id = controller.doc.activeLayerId else { return nil }
         return controller.doc.liveStrokes?.get(id)
     }
+    /// The active layer's editable strokes (#902): a stroke layer's strokes, or a pixel layer's
+    /// strokes since it was last flattened (`[]` when there are none); nil for a layer without strokes.
+    public var editableStrokes: [RecordedStroke]? {
+        track()
+        return controller.editableStrokes()
+    }
     /// The active layer's styles.
     public var layerEffects: LayerEffects? {
         track()

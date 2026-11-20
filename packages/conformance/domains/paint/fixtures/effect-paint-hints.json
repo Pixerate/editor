@@ -1103,6 +1103,14 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@2": {
+                "base": null,
+                "ids": [
+                  "s2"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {

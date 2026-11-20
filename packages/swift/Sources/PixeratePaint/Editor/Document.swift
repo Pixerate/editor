@@ -86,6 +86,9 @@ public final class PaintDocumentState {
     public var paintEvents: [PaintEvent]?
     /// Live stroke layers: each layer's strokes, bottom first (its pixels are drawn from them).
     public var liveStrokes: OrderedMap<String, [RecordedStroke]>?
+    /// Pixel layers' editable strokes (#902): the strokes painted since the layer's last flattening
+    /// point, kept editable over the pixels under them. See `StrokeTail` and `StrokeTails.swift`.
+    public var strokeTails: OrderedMap<String, StrokeTail>?
     /// Light paint: each layer's light channel (layers without light are missing).
     public var light: OrderedMap<String, TiledSurface>?
     /// UV-fluorescent ink: each layer's 4-channel RGBA fluorescence surface in layer space.
@@ -146,6 +149,7 @@ public final class PaintDocumentState {
         let d = PaintDocumentState(canvas: canvas, paper: paper, layers: layers, activeLayerId: activeLayerId, strokes: strokes)
         d.paintEvents = paintEvents
         d.liveStrokes = liveStrokes
+        d.strokeTails = strokeTails
         d.light = light
         d.fluor = fluor
         d.thermo = thermo

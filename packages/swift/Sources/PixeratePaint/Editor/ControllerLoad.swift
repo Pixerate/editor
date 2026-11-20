@@ -84,7 +84,7 @@ extension PaintEditorController {
             if let n = idNumber(m.id, "mag"), n >= nextMagnetId { nextMagnetId = n + 1 }
         }
         for (_, list) in state.liveStrokes ?? OrderedMap() { for s in list { bumpStrokeCounter(s.id) } }
-        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "unlogged", "unloggedComplete", "brushSources", "effectLayers", "paperEffect", "authoredEffects", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
+        for k in ["layerChannels", "light", "lightSpill", "ferro", "magnets", "lighting", "stickers", "liveStrokes", "strokeTails", "unlogged", "unloggedComplete", "brushSources", "effectLayers", "paperEffect", "authoredEffects", "fluor", "thermo", "heat", "uvLight", "age", "cultures"] {
             extensions[k] = nil
         }
         viewCompositor = createPaintCompositor()
@@ -357,6 +357,23 @@ extension PaintEditorController {
                     s.lastGrownAt = c.lastGrownAt
                 }
             }
+        }
+        if let raw = ext["strokeTails"]?.objectValue {
+            var tails = OrderedMap<String, StrokeTail>()
+            var logged: [String: String] = [:]
+            for s in state.strokes { logged[s.id] = s.layerId }
+            for (id, v) in raw {
+                guard let l = findLayer(state.layers, id)?.layer, l.isPixel else { continue }
+                do {
+                    let t = try strokeTailFromJSON(v)
+                    if let missing = t.ids.first(where: { logged[$0] != id }) { throw PaintEditorError("stroke \"\(missing)\" is not in the stroke log on that layer") }
+                    // As opened, the layer's pixels and light are what its strokes last drew.
+                    tails.set(id, StrokeTail(base: t.base, baseLight: t.baseLight, ids: t.ids, top: l.pixelSurface, topLight: state.light?.get(id)))
+                } catch {
+                    problems.append("The editable strokes of layer \"\(id)\" could not be read (\(errorMessage(error))); its strokes load baked into its pixels.")
+                }
+            }
+            if !tails.isEmpty { state = state.with { $0.strokeTails = tails } }
         }
         guard let raw = ext["layerChannels"]?.objectValue else { return state }
         var thick = OrderedMap<String, ThickChannels>()

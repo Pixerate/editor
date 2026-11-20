@@ -141,18 +141,19 @@ export class PaintGesture {
   }
 
   /**
-   * The Select stroke tool: pressing a stroke picks it, on whichever visible stroke layer painted it
-   * (the active layer first, then top-down), making that layer active; dragging moves it (one undo
+   * The Select stroke tool: pressing a stroke picks it, on whichever visible layer painted it with
+   * an editable stroke (a stroke layer, or a pixel layer since it was last flattened; the active
+   * layer first, then top-down), making that layer active; dragging moves it (one undo
    * step at the drop). Pressing where no stroke painted clears the pick.
    */
   private strokeDown(e: PaintPointerEvent): boolean {
     const p = this.doc(e);
     const s = this.controller.getState();
-    const live = s.document.liveStrokes ?? {};
     const active = s.document.activeLayerId;
-    const layers = this.controller.listLayers().filter((l) => l.visible && live[l.id]).map((l) => l.id);
+    // Stroke layers and pixel layers with strokes painted since they were last flattened (#902).
+    const layers = this.controller.listLayers().filter((l) => l.visible && this.controller.editableStrokes(l.id)?.length).map((l) => l.id);
     if (!layers.length) {
-      this.error = 'Pick a stroke layer in the Layers panel (or add one) to select its strokes.';
+      this.error = 'No visible layer has editable strokes: strokes painted since a layer was last flattened (by wet paint, a smudge, a fill or a filter) can be selected.';
       return false;
     }
     const order = active && layers.includes(active) ? [active, ...layers.filter((id) => id !== active)] : layers;
@@ -474,7 +475,8 @@ export function guideOverlay(controller: PaintEditorController, drag?: { id: str
     }
   }
   const layerId = s.document.activeLayerId;
-  const strokePicked = layerId && s.selectedStroke ? s.document.liveStrokes?.[layerId]?.some((x) => x.id === s.selectedStroke) : false;
+  // Any editable stroke of the layer: a stroke layer's, or a pixel layer's since it was last flattened (#902).
+  const strokePicked = layerId && s.selectedStroke ? Boolean(controller.editableStrokes(layerId)?.some((x) => x.id === s.selectedStroke)) : false;
   const area = strokePicked ? controller.liveStrokeArea(s.selectedStroke!) : null;
   if (area) {
     const dx = drag && drag.id === s.selectedStroke ? drag.dx : 0;

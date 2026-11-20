@@ -890,23 +890,26 @@ struct PaintLayerSchemeMark: View {
 }
 
 /**
- * The active stroke layer's strokes: pick one (here or with the Select stroke tool) to change its
- * brush, the sliders of `PaintUITables.sliders.stroke`, its colour or seed, move it up or down, or
- * delete it; or rasterize the layer. Shows nothing for other layers (`StrokePanel`).
+ * The active layer's editable strokes: a stroke layer's strokes, or a pixel layer's strokes since it
+ * was last flattened (#902). Pick one (here or with the Select stroke tool) to change its brush, the
+ * sliders of `PaintUITables.sliders.stroke`, its colour or seed, move it up or down, or delete it;
+ * or rasterize a stroke layer. Shows nothing for a layer without any (`StrokePanel`).
  */
 public struct PaintStrokePanel: View {
     let model: PaintEditorModel
     public init(model: PaintEditorModel) { self.model = model }
 
     public var body: some View {
-        if let strokes = model.liveStrokes {
+        let strokeLayer = model.liveStrokes != nil
+        if let strokes = model.editableStrokes, strokeLayer || !strokes.isEmpty {
             let index = strokes.firstIndex { $0.id == model.selectedStroke }
             let sel = index.map { strokes[$0] }
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    PanelHeading("Strokes (\(strokes.count))")
+                    PanelHeading("\(strokeLayer ? "Strokes" : "Editable strokes") (\(strokes.count))")
+                        .help(strokeLayer ? "" : "Strokes painted on this layer since it was last flattened (by wet paint, a smudge, a fill or a filter)")
                     Spacer()
-                    Button("Rasterize") { model.rasterizeStrokes() }.controlSize(.small)
+                    if strokeLayer { Button("Rasterize") { model.rasterizeStrokes() }.controlSize(.small) }
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.fixed(18), spacing: 4), count: 10), alignment: .leading, spacing: 4) {
                     ForEach(Array(strokes.enumerated()), id: \.element.id) { i, s in
@@ -939,6 +942,29 @@ public struct PaintStrokePanel: View {
             }
         }
     }
+}
+
+/// A model whose active layer has strokes painted on it: a pixel layer's editable strokes, or a stroke layer's (`strokeLayer`).
+@MainActor
+private func strokePanelPreviewModel(strokeLayer: Bool) -> PaintEditorModel {
+    let model = try! PaintEditorModel(controller: PaintEditorController(width: 160, height: 120))
+    let c = model.controller
+    if strokeLayer { _ = try? c.addLayer(type: "strokes") }
+    let colors = ["#2563eb", "#dc2626", "#16a34a"]
+    for (i, color) in colors.enumerated() {
+        let y = Double(30 + i * 30)
+        _ = try? c.paintStroke(PaintStrokeInit(color: color, brushId: "ink-pen", seed: i + 1), points: [PenPoint(x: 20, y: y, pressure: 0.5), PenPoint(x: 80, y: y + 10, pressure: 0.9), PenPoint(x: 140, y: y, pressure: 0.6)])
+    }
+    model.selectedStroke = c.editableStrokes()?.last?.id
+    return model
+}
+
+#Preview("Pixel layer: editable strokes") {
+    PaintStrokePanel(model: strokePanelPreviewModel(strokeLayer: false)).padding().frame(width: 280)
+}
+
+#Preview("Stroke layer") {
+    PaintStrokePanel(model: strokePanelPreviewModel(strokeLayer: true)).padding().frame(width: 280)
 }
 
 // MARK: - Layer styles

@@ -122,8 +122,9 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(a.data, b.data, "the gesture paints the same pixels as paint_stroke")
         XCTAssertNotEqual(a.data, try makeModel().controller.compositePixels().data, "the stroke changed pixels")
         var docA = model.controller.toJSON(), docB = other.controller.toJSON()
-        // Layer ids are made from the clock; compare the rest.
-        for k in ["layers", "activeLayerId", "assets"] { docA[k] = nil; docB[k] = nil }
+        // Layer ids are made from the clock; compare the rest (`strokeTails` is keyed by layer id: its values).
+        XCTAssertEqual(docA["strokeTails"]?.objectValue.map { o in o.keys.compactMap { o[$0] } }, docB["strokeTails"]?.objectValue.map { o in o.keys.compactMap { o[$0] } })
+        for k in ["layers", "activeLayerId", "assets", "strokeTails"] { docA[k] = nil; docB[k] = nil }
         var strokesA = docA["strokes"]?.arrayValue ?? [], strokesB = docB["strokes"]?.arrayValue ?? []
         for i in strokesA.indices { if var o = strokesA[i].objectValue { o["layerId"] = nil; strokesA[i] = .object(o) } }
         for i in strokesB.indices { if var o = strokesB[i].objectValue { o["layerId"] = nil; strokesB[i] = .object(o) } }
@@ -340,6 +341,32 @@ final class PaintEditorModelTests: XCTestCase {
         model.pointerUp(mouse(80, 50))
         XCTAssertFalse(model.pointerDown(mouse(10, 190)))
         XCTAssertNil(model.selectedStroke)
+    }
+
+    func testSelectStrokePicksAndMovesAPixelLayersEditableStroke() throws {
+        // #902: a pixel layer's strokes since it was last flattened are editable, panel and tool alike.
+        let model = try makeModel()
+        let c = model.controller
+        XCTAssertEqual(model.editableStrokes?.count, 0)
+        _ = try c.paintStroke(PaintStrokeInit(color: "#2563eb", brushId: "ink-pen", seed: 1), points: [PenPoint(x: 40, y: 50), PenPoint(x: 120, y: 50)])
+        _ = try c.paintStroke(PaintStrokeInit(color: "#dc2626", brushId: "ink-pen", seed: 2), points: [PenPoint(x: 40, y: 150), PenPoint(x: 120, y: 150)])
+        XCTAssertNil(model.liveStrokes, "not a stroke layer")
+        let strokes = try XCTUnwrap(model.editableStrokes)
+        XCTAssertEqual(strokes.count, 2)
+        model.tool = "stroke"
+        XCTAssertTrue(model.pointerDown(mouse(80, 150)))
+        XCTAssertEqual(model.selectedStroke, strokes[1].id)
+        model.pointerMove(mouse(90, 150))
+        model.pointerUp(mouse(90, 150))
+        XCTAssertEqual(model.editableStrokes?[1].points.first?.x, 50)
+        XCTAssertEqual(c.strokes[1].points.first?.x, 50, "the log holds the moved stroke")
+        model.updateSelectedStroke(seed: 9)
+        XCTAssertEqual(c.strokes[1].seed, 9)
+        // A smudge flattens the layer: nothing left to pick.
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "smudge", seed: 3), points: [PenPoint(x: 100, y: 30), PenPoint(x: 110, y: 90), PenPoint(x: 100, y: 150)])
+        XCTAssertEqual(model.editableStrokes?.count, 0)
+        XCTAssertFalse(model.pointerDown(mouse(80, 50)))
+        XCTAssertEqual(model.gesture.error, "No visible layer has editable strokes: strokes painted since a layer was last flattened (by wet paint, a smudge, a fill or a filter) can be selected.")
     }
 
     func testStrokeLayerEditsAndLayerStyles() throws {

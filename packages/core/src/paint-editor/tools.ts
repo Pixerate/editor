@@ -36,6 +36,7 @@ import { createPaintReplayTools } from './replay-tools';
 import { createMutationTools } from './mutation-tools';
 import { createPaintEvolutionTools } from './evolution-tools';
 import { samplePath } from './path-samples';
+import { BAKED_STROKE_REASON } from './stroke-tails';
 import type { PaintAgentCommand, PaintDirector } from './presence';
 import type { PresenceActorInfo } from '../animation/presence';
 
@@ -869,13 +870,13 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'list_strokes',
     title: 'List recorded strokes',
     description:
-      'Lists the recorded strokes, oldest first (every stroke is kept as data): id, layer, brush id and name, colour, point count, bounds, seed and whether it is live. With ids, also the points. Use the ids with replay_strokes. With live true, lists the strokes of stroke layers as they are now, bottom first: the ones update_stroke, edit_stroke_points, reorder_stroke and remove_strokes change.',
+      'Lists the recorded strokes, oldest first (every stroke is kept as data): id, layer, brush id and name, colour, point count, bounds, seed and whether it is live (editable now). With ids, also the points. Use the ids with replay_strokes. With live true, lists the strokes that can be edited now, bottom first per layer: every stroke of a stroke layer, and the strokes of a pixel layer painted since it was last flattened (by wet paint, a smudge, a fill, a filter or another change that can’t be redrawn); these are the ones update_stroke, edit_stroke_points, reorder_stroke and remove_strokes change. A stroke that is not live says why (notEditable).',
     inputSchema: {
       type: 'object',
       properties: {
         ids: { type: 'array', items: { type: 'string', description: 'Stroke id.' }, description: 'Only these strokes, with their points.' },
         last: { type: 'integer', minimum: 1, maximum: 1000, description: 'Only the most recent n strokes (default 100).' },
-        live: { type: 'boolean', description: 'Only the editable strokes of stroke layers, as they are now, bottom first (default false: the whole recorded history).' },
+        live: { type: 'boolean', description: 'Only the strokes that can be edited now (stroke layers, and pixel layers since they were last flattened), as they are now, bottom first (default false: the whole recorded history).' },
         layerId: { type: 'string', description: 'Only strokes of this layer.' },
       },
       additionalProperties: false,
@@ -884,24 +885,34 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     coordinates: { out: ['strokes[].bounds', 'strokes[].points[]'] },
     handler: ({ ids, last, live, layerId }) => {
       if (layerId !== undefined && !c.getLayer(layerId)) throw new Error(`Unknown layer "${layerId}". Call list_layers for the ids.`);
-      const liveAll = Object.values(c.document.liveStrokes ?? {}).flat();
-      const liveIds = new Set(liveAll.map((s) => s.id));
+      const liveAll = c.allEditableStrokes();
+      const editable = new Map(liveAll.map((s) => [s.id, s]));
       let all: readonly RecordedStroke[] = live ? liveAll : c.getStrokes();
       if (layerId !== undefined) all = all.filter((s) => s.layerId === layerId);
       const picked = ids ? all.filter((s) => ids.includes(s.id)) : all.slice(-(last ?? 100));
       if (ids) for (const id of ids) if (!all.some((s) => s.id === id)) throw new Error(`Unknown stroke "${id}". Call list_strokes without ids for the ids.`);
-      return { total: all.length, strokes: picked.map((s) => strokeSummary(s, Boolean(ids), live ? true : liveIds.has(s.id) && c.document.liveStrokes?.[s.layerId]?.includes(s) === true)) };
+      return {
+        total: all.length,
+        strokes: picked.map((s) => {
+          // A stroke layer's log keeps each stroke as first painted: only the one in its list now is live.
+          const isLive = live || (editable.has(s.id) && (c.document.liveStrokes?.[s.layerId] ? c.document.liveStrokes[s.layerId].includes(s) : true));
+          const sum = strokeSummary(s, Boolean(ids), isLive);
+          if (isLive) return sum;
+          const why = c.document.liveStrokes?.[s.layerId] ? 'An earlier version of a stroke layer’s stroke (the layer holds it as edited since); list_strokes {live: true} lists it as it is now.' : c.getLayer(s.layerId) ? BAKED_STROKE_REASON : 'Its layer was deleted.';
+          return { ...sum, notEditable: why };
+        }),
+      };
     },
   });
 
   add({
     name: 'stroke_at',
     title: 'Find the stroke at a point',
-    description: 'Returns the top-most stroke of a stroke layer that painted the pixel at a point (document pixels), or stroke null when none did, so you can pick one stroke among overlapping ones before update_stroke, edit_stroke_points or remove_strokes. Changes nothing.',
+    description: 'Returns the top-most editable stroke of a layer (a stroke layer, or a pixel layer’s strokes since it was last flattened) that painted the pixel at a point (document pixels), or stroke null when none did, so you can pick one stroke among overlapping ones before update_stroke, edit_stroke_points or remove_strokes. Changes nothing.',
     inputSchema: {
       type: 'object',
       properties: {
-        layerId: { type: 'string', description: 'Stroke layer id from list_layers (default the active layer).' },
+        layerId: { type: 'string', description: 'Layer id from list_layers (default the active layer).' },
         x: { type: 'number', description: 'Point x in document pixels.' },
         y: { type: 'number', description: 'Point y in document pixels.' },
       },
@@ -920,7 +931,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'update_stroke',
     title: 'Change a stroke',
     description:
-      'Changes a stroke on a stroke layer after it was painted: another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes a stroke layer cannot redraw (wet, impasto, sticker, smudge, blender, pick-up); erasers and light brushes are fine. One undo step. Returns the stroke and the area that changed.',
+      'Changes an editable stroke after it was painted (on a stroke layer, or on a pixel layer since it was last flattened): another brush preset (brushId, keeping the stroke size), brush settings (as set_brush takes), colour (replaces gradient paint), paint, or seed, then redraws the layer exactly. Ids come from list_strokes {live: true}. Refuses brushes that cannot be redrawn (wet, impasto, sticker, smudge, blender, pick-up); erasers and light brushes are fine. One undo step. Returns the stroke and the area that changed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -939,8 +950,8 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     handler: ({ id, ...update }) => {
       if (!Object.keys(update).length) throw new Error('Pass at least one change: brushId, brush, color, paint or seed.');
       if (update.brush) {
-        const stroke = Object.values(c.document.liveStrokes ?? {}).flat().find((s) => s.id === id);
-        if (!stroke) throw new Error(`Unknown stroke "${id}" on a stroke layer. Call list_strokes {live: true} for the ids.`);
+        const stroke = c.editableStroke(id);
+        if (!stroke) throw new Error(`Stroke "${id}" can't be edited now. Call list_strokes {live: true} for the ids of editable strokes.`);
         update.brush = c.brushChanges(update.brush as BrushPatch, (update.brushId as string | undefined) ?? stroke.brush);
       }
       const r = c.updateStroke(id, update);
@@ -952,7 +963,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     name: 'edit_stroke_points',
     title: 'Move or reshape a stroke',
     description:
-      'Replaces a stroke’s points (points, document pixels), or moves, scales, rotates or flips it (transform, about its centre unless origin is given; the brush size scales with it), then redraws its stroke layer exactly. Pass one of points or transform. One undo step. Returns the stroke with its points and the area that changed.',
+      'Replaces an editable stroke’s points (points, document pixels), or moves, scales, rotates or flips it (transform, about its centre unless origin is given; the brush size scales with it), then redraws its layer exactly. Pass one of points or transform. One undo step. Returns the stroke with its points and the area that changed.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -987,7 +998,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'reorder_stroke',
     title: 'Move a stroke up or down',
-    description: 'Moves a stroke to index in its stroke layer (0 = bottom, drawn first) and redraws the layer. One undo step. Returns the new order of ids, bottom first.',
+    description: 'Moves an editable stroke to index among its layer’s editable strokes (0 = bottom, drawn first) and redraws the layer. One undo step. Returns the new order of ids, bottom first.',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string', description: 'Stroke id from list_strokes {live: true}.' }, index: { type: 'integer', minimum: 0, description: 'New position, 0 = bottom.' } },
@@ -1001,7 +1012,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'remove_strokes',
     title: 'Delete strokes',
-    description: 'Deletes whole strokes from their stroke layers and redraws them (to erase part of a stroke, paint an eraser stroke on the layer, which stays editable). All checked first; one undo step. Returns the ids removed and the area that changed.',
+    description: 'Deletes whole editable strokes (on stroke layers, or on pixel layers since they were last flattened) and redraws their layers (to erase part of a stroke, paint an eraser stroke on the layer, which stays editable). All checked first; one undo step. Returns the ids removed and the area that changed.',
     inputSchema: {
       type: 'object',
       properties: { ids: { type: 'array', minItems: 1, items: { type: 'string', description: 'Stroke id.' }, description: 'Stroke ids from list_strokes {live: true}.' } },

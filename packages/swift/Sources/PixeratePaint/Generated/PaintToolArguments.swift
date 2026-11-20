@@ -949,7 +949,7 @@ public struct ListStrokesArguments: Sendable {
     public var ids: [String]?
     /// Only the most recent n strokes (default 100).
     public var last: Int?
-    /// Only the editable strokes of stroke layers, as they are now, bottom first (default false: the whole recorded history).
+    /// Only the strokes that can be edited now (stroke layers, and pixel layers since they were last flattened), as they are now, bottom first (default false: the whole recorded history).
     public var live: Bool?
     /// Only strokes of this layer.
     public var layerId: String?
@@ -965,7 +965,7 @@ public struct ListStrokesArguments: Sendable {
 
 /// Arguments of `stroke_at`.
 public struct StrokeAtArguments: Sendable {
-    /// Stroke layer id from list_layers (default the active layer).
+    /// Layer id from list_layers (default the active layer).
     public var layerId: String?
     /// Point x in document pixels.
     public var x: Double

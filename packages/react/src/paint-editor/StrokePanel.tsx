@@ -9,26 +9,33 @@ export interface StrokePanelProps {
 }
 
 /**
- * The active stroke layer's strokes: pick one (here, or with the Select stroke tool on the
- * canvas) to change its brush, size, opacity, flow, colour or seed, move it up or down, or delete
- * it. The layer redraws exactly; each change is one undo step. Shows nothing for other layers.
+ * The active layer's editable strokes: a stroke layer's strokes, or a pixel layer's strokes since
+ * it was last flattened (#902). Pick one (here, or with the Select stroke tool on the canvas) to
+ * change its brush, size, opacity, flow, colour or seed, move it up or down, or delete it. The
+ * layer redraws exactly; each change is one undo step. Shows nothing for a layer without any.
  */
 export const StrokePanel: React.FC<StrokePanelProps> = ({ controller, className }) => {
   const state = usePaintEditorState(controller);
   const [error, attempt] = useAttempt();
   const layerId = state.document.activeLayerId;
-  const strokes = layerId ? state.document.liveStrokes?.[layerId] : undefined;
-  if (!layerId || !strokes) return null;
+  const strokeLayer = Boolean(layerId && state.document.liveStrokes?.[layerId]);
+  // Read from the document the state holds (the controller's), so a change re-renders it.
+  const strokes = layerId && state.document ? controller.editableStrokes(layerId) : null;
+  if (!layerId || !strokes || (!strokeLayer && !strokes.length)) return null;
   const index = strokes.findIndex((s) => s.id === state.selectedStroke);
   const sel = index >= 0 ? strokes[index] : null;
   const brushes = state.brushes.filter((b) => !liveStrokeRefusal(b));
   return (
     <div className={`${panel} ${className ?? ''}`} data-testid="stroke-panel">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-slate-300">Strokes ({strokes.length})</span>
-        <button type="button" className={button} onClick={() => attempt(() => controller.rasterizeLiveStrokes(layerId))}>
-          Rasterize
-        </button>
+        <span className="font-medium text-slate-300" title={strokeLayer ? undefined : 'Strokes painted on this layer since it was last flattened (by wet paint, a smudge, a fill or a filter)'}>
+          {strokeLayer ? 'Strokes' : 'Editable strokes'} ({strokes.length})
+        </span>
+        {strokeLayer && (
+          <button type="button" className={button} onClick={() => attempt(() => controller.rasterizeLiveStrokes(layerId))}>
+            Rasterize
+          </button>
+        )}
       </div>
       <div className="flex max-h-24 flex-wrap gap-1 overflow-y-auto" role="listbox" aria-label="Strokes">
         {strokes.map((s, i) => (

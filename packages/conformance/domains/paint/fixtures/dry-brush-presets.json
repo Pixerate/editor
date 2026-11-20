@@ -2285,6 +2285,27 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@1": {
+                "base": {
+                  "pixels": "pixerate-asset:91m-1ux5fsghek",
+                  "rect": {
+                    "height": 512,
+                    "width": 512,
+                    "x": -256,
+                    "y": -256
+                  }
+                },
+                "ids": [
+                  "s10",
+                  "s11",
+                  "s12",
+                  "s13",
+                  "s14",
+                  "s15"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {

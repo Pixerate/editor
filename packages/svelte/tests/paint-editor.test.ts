@@ -4,7 +4,7 @@ import { mount, unmount, flushSync } from 'svelte';
 import { PaintEditorController, documentToScreen } from '@pixerate/editor/paint-editor';
 import { createFakeStickerProvider } from '@pixerate/editor/stickers';
 import { createBrushLibrary } from '@pixerate/editor/brushes';
-import { BrushPanel, ColorPanel, EvolutionPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, PathStrokePanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
+import { BrushPanel, ColorPanel, EvolutionPanel, PaintCanvas, PaintEditor, PaintLayersPanel, PaperPanel, PaintToolbar, WetPanel, PathStrokePanel, StrokePanel, createPaintDirector, createReactivePaintEditor } from '../src/paint-editor';
 import { stubBrushThumbnails } from './paint-thumbnails';
 
 let target: HTMLDivElement;
@@ -653,6 +653,24 @@ describe('stroke layers', () => {
     click(byText('Rasterize'));
     expect(target.querySelector('[data-testid="stroke-panel"]')).toBeNull();
     expect(c.getState().undoLabel).toBe('Rasterize stroke layer');
+  });
+
+  it('lists a pixel layer’s strokes since it was last flattened, editable, without Rasterize (#902)', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    show(StrokePanel, { controller: c });
+    expect(target.querySelector('[data-testid="stroke-panel"]')).toBeNull();
+    c.paintStroke({ points: [{ x: 20, y: 60 }, { x: 260, y: 60 }], brushId: 'ink-pen', color: '#2563eb' });
+    c.paintStroke({ points: [{ x: 20, y: 120 }, { x: 260, y: 120 }], brushId: 'ink-pen', color: '#dc2626' });
+    flushSync();
+    expect(target.querySelector('[data-testid="stroke-panel"]')?.textContent).toContain('Editable strokes (2)');
+    expect(byText('Rasterize')).toBeUndefined();
+    click(target.querySelectorAll('[data-testid="stroke-panel"] [role="option"]')[1]);
+    click(byText('New seed'));
+    const b = c.editableStrokes()![1];
+    expect(c.getStrokes()[1].seed).toBe(b.seed);
+    c.paintStroke({ points: [{ x: 100, y: 30 }, { x: 110, y: 90 }, { x: 100, y: 150 }], brushId: 'smudge' });
+    flushSync();
+    expect(target.querySelector('[data-testid="stroke-panel"]')).toBeNull();
   });
 });
 

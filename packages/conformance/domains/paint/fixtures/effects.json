@@ -913,6 +913,23 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@2": {
+                "base": {
+                  "pixels": "pixerate-asset:ou-1s1ip5ggba9",
+                  "rect": {
+                    "height": 256,
+                    "width": 256,
+                    "x": 0,
+                    "y": 0
+                  }
+                },
+                "ids": [
+                  "s1",
+                  "s2"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {

@@ -344,7 +344,7 @@ extension PaintEditorController {
 
     /// Where a stroke of a stroke layer painted (document pixels), for drawing its pick box; nil when unknown.
     public func liveStrokeArea(_ id: String) -> RasterRect? {
-        guard let s = (doc.liveStrokes ?? OrderedMap()).values.flatMap({ $0 }).first(where: { $0.id == id }) else { return nil }
+        guard let s = editableStroke(id) else { return nil }
         return strokeArea(s)
     }
 

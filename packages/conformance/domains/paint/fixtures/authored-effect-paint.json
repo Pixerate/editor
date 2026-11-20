@@ -663,6 +663,15 @@
                 "scale": 2
               }
             },
+            "strokeTails": {
+              "@1": {
+                "base": null,
+                "ids": [
+                  "s1",
+                  "s2"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {
