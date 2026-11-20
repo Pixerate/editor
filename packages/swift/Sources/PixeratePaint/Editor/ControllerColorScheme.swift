@@ -47,11 +47,14 @@ final class OpenedCheck {
     var replay: SchemeReplay?
     /// Bumped when the results come in.
     var revision = 0
+    /// The document saved its wet clock: the replay ends with the save's dry and wet areas are compared too (#883).
+    let exact: Bool
 
-    init(doc: PaintDocumentState, pending: [String], events: Set<Int>) {
+    init(doc: PaintDocumentState, pending: [String], events: Set<Int>, exact: Bool = false) {
         self.doc = doc
         self.pending = pending
         self.events = events
+        self.exact = exact
     }
 }
 
@@ -513,7 +516,7 @@ extension PaintEditorController {
      * or event names can't come from the log, so it is marked now in `d` (saved with the document);
      * one the log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
      */
-    func openLedger(_ d: PaintDocumentState, complete: Bool, wetLog: OpenedWetLog? = nil) {
+    func openLedger(_ d: PaintDocumentState, complete: Bool, wetLog: OpenedWetLog? = nil, savedClock: Bool = false) {
         openedCheck?.replay?.dispose()
         openedCheck = nil
         if complete || replayTarget { return }
@@ -544,10 +547,13 @@ extension PaintEditorController {
             }
         }
         if !unlogged.isEmpty { d.unlogged = unlogged }
-        // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`), but not the
-        // dry that ends it: an older document doesn't say how long its paint flowed on before it was saved.
-        let checked: PaintDocumentState = wetLog.map { log in d.with { $0.strokes = log.strokes; $0.wetEvents = Array(log.wetEvents.dropLast()) } } ?? d
-        if !pending.isEmpty { openedCheck = OpenedCheck(doc: checked, pending: pending, events: Set((d.paintEvents ?? []).map(\.key))) }
+        // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`). A document
+        // that saved its wet clock (`savedClock`) says when the save dried its paint: the dry that ends the log
+        // is replayed and wet areas compared exactly. An older one doesn't say how long its paint flowed on, so
+        // the dry is left out and paint still flowing at the end isn't compared (#883).
+        let exact = wetLog != nil && savedClock
+        let checked: PaintDocumentState = wetLog.map { log in d.with { $0.strokes = log.strokes; $0.wetEvents = exact ? log.wetEvents : Array(log.wetEvents.dropLast()) } } ?? d
+        if !pending.isEmpty { openedCheck = OpenedCheck(doc: checked, pending: pending, events: Set((d.paintEvents ?? []).map(\.key)), exact: exact) }
     }
 
     /**
@@ -584,8 +590,9 @@ extension PaintEditorController {
 
     /**
      * Runs the check of the opened layers to the end, if one has started: each layer compared with
-     * its opened pixels (`pixelsMatch`), leaving out paint the replay still has wet or drying, which
-     * flowed on after the last logged item for an unknown time before the save dried it.
+     * its opened pixels (`pixelsMatch`). For a document without its saved wet clock, paint the replay
+     * still has wet or drying is left out: it flowed on after the last logged item for an unknown time
+     * before the save dried it.
      */
     func runOpenedCheck() async {
         if !schemeNeeds().checking.isEmpty { startOpenedCheck() }
@@ -597,7 +604,7 @@ extension PaintEditorController {
             return
         }
         var results: [String: String?] = [:]
-        for id in check.pending { results[id] = checkOpenedLayer(r, check.doc, id) }
+        for id in check.pending { results[id] = checkOpenedLayer(r, check.doc, id, exact: check.exact) }
         r.dispose()
         check.replay = nil
         check.results = results
@@ -616,14 +623,14 @@ extension PaintEditorController {
     }
 
     /// nil when a replay of the opened log gives the layer's opened pixels, else why it is kept.
-    private func checkOpenedLayer(_ r: SchemeReplay, _ doc: PaintDocumentState, _ id: String) -> String? {
+    private func checkOpenedLayer(_ r: SchemeReplay, _ doc: PaintDocumentState, _ id: String, exact: Bool) -> String? {
         guard let l = findLayer(doc.layers, id)?.layer, l.isPixel else { return nil }
         let got = r.checkedLayer(id)
         let o = l.pixelOffset
         let opened = translateSurface(l.pixelSurface, Double(o.x), Double(o.y))
         var skip: RasterRect?
-        // Flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
-        if let f = got?.flowing { skip = RasterRect(x: f.x - WET_TILE, y: f.y - WET_TILE, width: f.width + 2 * WET_TILE, height: f.height + 2 * WET_TILE) }
+        // Without the saved clock, flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
+        if !exact, let f = got?.flowing { skip = RasterRect(x: f.x - WET_TILE, y: f.y - WET_TILE, width: f.width + 2 * WET_TILE, height: f.height + 2 * WET_TILE) }
         let replayed: TiledSurface = got?.surface ?? emptySurface(4)
         return pixelsMatch(opened, replayed, skip: skip) ? nil : CHECK_MISMATCH_REASON
     }

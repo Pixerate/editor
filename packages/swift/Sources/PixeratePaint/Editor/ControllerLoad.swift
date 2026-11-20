@@ -69,7 +69,7 @@ extension PaintEditorController {
         if let unlogged = readUnlogged(loaded.extensions["unlogged"], state.layers) { state.unlogged = unlogged }
         // The wet clock goes on from where the document's left it, and its log ends with the dry the save did (#720).
         let wetLog = openedWetLog(state, clock: wetClock)
-        openLedger(state, complete: loaded.extensions["unloggedComplete"] == .bool(true), wetLog: wetLog)
+        openLedger(state, complete: loaded.extensions["unloggedComplete"] == .bool(true), wetLog: wetLog, savedClock: wetClock != nil)
         if let wetLog {
             state.strokes = wetLog.strokes
             state.wetEvents = wetLog.wetEvents

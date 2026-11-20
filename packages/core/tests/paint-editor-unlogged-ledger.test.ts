@@ -202,6 +202,42 @@ describe('opening a document saved without marks', () => {
     c.dispose();
     d.dispose();
   }, 60000);
+
+  /** A wet stroke over pixels the log doesn't have (an ink stroke left out of it), flowing on before the save. */
+  async function importedUnderWet(): Promise<{ json: SerializedPaintDocument; layer: string }> {
+    const c = editor();
+    await c.wetReady();
+    const layer = c.getActiveLayer()!.id;
+    c.paintStroke({ points: wave(40, 6, 60, 90), brushId: 'ink-pen', color: '#ca8a04', seed: 2 });
+    c.paintStroke({ points: wave(40), brushId: 'watercolor-round', color: BLUE, seed: 3 });
+    await c.wetIdle();
+    await c.advanceWet({ steps: 30 });
+    const json = older(c.toJSON());
+    json.strokes = json.strokes!.filter((s) => (s as { seed?: number }).seed !== 2);
+    c.dispose();
+    return { json, layer };
+  }
+
+  it('compares wet paint exactly when the document saved its wet clock, so pixels under it are found (#883)', async () => {
+    const { json, layer } = await importedUnderWet();
+    expect((json as { wet?: { clock?: number } }).wet?.clock).toBeGreaterThan(0);
+    const d = editor('dark');
+    d.loadJSON(json);
+    const view = await d.colorSchemeViewReady();
+    expect(view.layers).toEqual([{ layerId: layer, name: expect.any(String), view: 'kept', reason: expect.stringMatching(/^Its pixels are not all in the stroke log \(opened from an older document/) }]);
+    d.dispose();
+  }, 60000);
+
+  it('leaves out paint still flowing when an older document saved no wet clock (#883)', async () => {
+    const { json, layer } = await importedUnderWet();
+    delete (json as { wet?: { clock?: number } }).wet!.clock;
+    const d = editor('dark');
+    d.loadJSON(json);
+    const view = await d.colorSchemeViewReady();
+    // The imported pixels lie under paint the replay still has flowing: not compared, so the layer is replayed.
+    expect(view.layers).toEqual([{ layerId: layer, name: expect.any(String), view: 'replay', state: 'ready' }]);
+    d.dispose();
+  }, 60000);
 });
 
 describe('pixelsMatch', () => {

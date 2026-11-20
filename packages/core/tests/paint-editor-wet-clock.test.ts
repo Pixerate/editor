@@ -163,13 +163,13 @@ describe('the clock a wet stroke ends at (pen-up)', () => {
 describe('wet flow after the last logged item', () => {
   const steps: Step[] = [{ kind: 'stroke', y: 40, color: BLUE, seed: 3 }, { kind: 'wait', steps: 6 }, { kind: 'stroke', y: 56, color: RED, seed: 5 }, { kind: 'wait', steps: 37 }];
 
-  it('saves the clock the paint was dried at, only when it is past the log', async () => {
+  it('saves the clock the paint was dried at whenever the log has wet paint', async () => {
     const c = editor();
     await c.wetReady();
     await paint(c, steps.slice(0, 3));
-    // Ending on a logged item: nothing new is written.
+    // Ending on a logged item: the clock is the log's latest, and still written, so the check of an opened document can rely on it (#883).
     const before = c.toJSON() as { wet?: { clock?: number } };
-    expect(before.wet?.clock).toBeUndefined();
+    expect(before.wet?.clock).toBe(c.getState().wet.clock);
     await c.advanceWet({ steps: 37 });
     const clock = c.getState().wet.clock;
     expect((c.toJSON() as { wet?: { clock?: number } }).wet).toEqual({ ...before.wet, clock });

@@ -964,6 +964,14 @@
               }
             },
             "version": 2,
+            "wet": {
+              "clock": 0,
+              "layers": {},
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
             "wetEvents": [
               {
                 "at": "0.25",
@@ -1634,6 +1642,14 @@
               }
             },
             "version": 2,
+            "wet": {
+              "clock": 0,
+              "layers": {},
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
             "wetEvents": [
               {
                 "at": "0.25",
