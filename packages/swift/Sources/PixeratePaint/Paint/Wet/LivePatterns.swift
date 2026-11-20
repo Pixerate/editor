@@ -412,7 +412,7 @@ public final class LivePatternField {
      * and give the same bits as one. `steppedTiles` then lists the tiles that had wet cells.
      */
     @discardableResult
-    public func step(_ wetSteps: Int, isWetCell: WetCellPredicate, canWakeTile: ((Int, Int) -> Bool)? = nil, wetTile: WetTileMask? = nil, threads: Int = Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)) -> Bool {
+    public func step(_ wetSteps: Int, isWetCell: WetCellPredicate, canWakeTile: ((Int, Int) -> Bool)? = nil, wetTile: WetTileMask? = nil, threads: Int = paintCoreCount()) -> Bool {
         steppedTiles = []
         if !enabled || tiles.isEmpty || wetSteps <= 0 { return false }
         let totalSubsteps = Swift.max(1, wetSteps) * PATTERN_SUBSTEPS

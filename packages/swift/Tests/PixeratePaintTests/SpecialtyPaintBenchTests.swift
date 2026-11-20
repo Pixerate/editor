@@ -16,10 +16,22 @@ import PixerateRaster
  * most `DISPLAY_TILES_PER_TICK` stale tiles, so the last frame may show some a few steps late).
  *
  * `SPECIALTY_BENCH_BRUSHES=a,b` picks the brushes, `SPECIALTY_BENCH_FRAMES` the frames (default
- * 90), `SPECIALTY_BENCH_GPU=off` keeps Metal out of the shading.
+ * 90), `SPECIALTY_BENCH_GPU=off` keeps Metal out of the shading, and `SPECIALTY_BENCH_CORES=n` runs
+ * the engine on at most n cores (`paintMaxCores`), a stand-in for a device with fewer cores (#826).
+ *
+ * Brushes that act on paint already there (`vortex`, `antimatter`) get a stroke of plain paint
+ * along the same path first (wet paint for a wet brush), outside the timings. `first frame` is the
+ * first tick after the stroke and its composite, which the mean hides; `worst frame` says which
+ * frame it was.
  */
 final class SpecialtyPaintBenchTests: XCTestCase {
-    static let defaultBrushes = ["turing-wash", "coral-ink", "ghost-gouache", "glow-wash", "mycelial-ink"]
+    static let defaultBrushes = ["turing-wash", "coral-ink", "ghost-gouache", "glow-wash", "mycelial-ink", "vortex", "antimatter"]
+
+    /// Brushes that need paint under them to do anything, and the brush that lays it.
+    static func basePaint(_ brush: String) -> String? {
+        if brush.hasPrefix("wet-") { return "watercolor-round" }
+        return brush.contains("vortex") || brush.hasPrefix("antimatter") ? "soft-pastel" : nil
+    }
 
     struct Result {
         var brush: String
@@ -27,6 +39,9 @@ final class SpecialtyPaintBenchTests: XCTestCase {
         var tickMs = 0.0
         var compositeMs = 0.0
         var worstMs = 0.0
+        var worstFrame = 0
+        var firstTickMs = 0.0
+        var firstCompositeMs = 0.0
         var dirtyShare = 0.0
         var tiles = 0.0
         var steps = 0
@@ -81,13 +96,17 @@ final class SpecialtyPaintBenchTests: XCTestCase {
             return PenPoint(x: 180 + t * 1680, y: 420 + sin(t * 7) * 240 + t * 620, pressure: 0.55 + 0.35 * sin(t * 11))
         }
         var out = Result(brush: brush)
+        if let base = Self.basePaint(brush) {
+            _ = try c.paintStroke(PaintStrokeInit(color: "#cc5522", brushId: base, seed: 3), points: points)
+            _ = draw()
+        }
         out.strokeMs = try ms { _ = try c.paintStroke(PaintStrokeInit(brushId: brush, seed: 7), points: points) }
         _ = draw()
         var now = 1000.0
         _ = c.tickWet(now)
         let player = c.playCultures(now: now)
         _ = draw()
-        for _ in 0..<frames {
+        for frame in 0..<frames {
             now += 1000.0 / 60.0
             let before = c.version
             let tick = ms {
@@ -102,7 +121,14 @@ final class SpecialtyPaintBenchTests: XCTestCase {
             out.tiles += Double(tiles)
             out.tickMs += tick
             out.compositeMs += composite
-            out.worstMs = Swift.max(out.worstMs, tick + composite)
+            if tick + composite > out.worstMs {
+                out.worstMs = tick + composite
+                out.worstFrame = frame
+            }
+            if frame == 0 {
+                out.firstTickMs = tick
+                out.firstCompositeMs = composite
+            }
         }
         out.activeTiles = c.wet.world?.activeTiles() ?? 0
         _ = draw(hashing: true)
@@ -126,12 +152,14 @@ final class SpecialtyPaintBenchTests: XCTestCase {
         let brushes = env["SPECIALTY_BENCH_BRUSHES"].map { $0.split(separator: ",").map(String.init) } ?? Self.defaultBrushes
         let frames = env["SPECIALTY_BENCH_FRAMES"].flatMap { Int($0) } ?? 90
         let gpu = env["SPECIALTY_BENCH_GPU"]
-        print("specialty paints, 2048×1536, \(frames) frames at 60 Hz, gpu \(gpu ?? "auto"):")
-        print("| brush | stroke ms | tick ms | composite ms | frame ms | worst frame ms | dirty % of canvas | tiles recomposited | wet steps | wet tiles left | view hash | settled hash |")
-        print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+        paintMaxCores = env["SPECIALTY_BENCH_CORES"].flatMap { Int($0) }
+        defer { paintMaxCores = nil }
+        print("specialty paints, 2048×1536, \(frames) frames at 60 Hz, gpu \(gpu ?? "auto"), \(paintCoreCount()) cores:")
+        print("| brush | stroke ms | tick ms | composite ms | frame ms | first frame tick + composite ms | worst frame ms (frame) | dirty % of canvas | tiles recomposited | wet steps | wet tiles left | view hash | settled hash |")
+        print("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for brush in brushes {
             let r = try run(brush, frames: frames, gpu: gpu)
-            print(String(format: "| %@ | %.0f | %.2f | %.2f | %.2f | %.1f | %.0f | %.1f | %d | %d | %016llx | %016llx |", r.brush, r.strokeMs, r.tickMs, r.compositeMs, r.tickMs + r.compositeMs, r.worstMs, r.dirtyShare * 100, r.tiles, r.steps, r.activeTiles, r.hash, r.settledHash))
+            print(String(format: "| %@ | %.0f | %.2f | %.2f | %.2f | %.1f + %.1f | %.1f (%d) | %.0f | %.1f | %d | %d | %016llx | %016llx |", r.brush, r.strokeMs, r.tickMs, r.compositeMs, r.tickMs + r.compositeMs, r.firstTickMs, r.firstCompositeMs, r.worstMs, r.worstFrame, r.dirtyShare * 100, r.tiles, r.steps, r.activeTiles, r.hash, r.settledHash))
         }
     }
 }
