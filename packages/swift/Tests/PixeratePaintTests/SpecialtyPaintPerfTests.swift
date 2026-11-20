@@ -175,6 +175,179 @@ final class SpecialtyPaintPerfTests: XCTestCase {
         XCTAssertTrue(c.compositePixels(wet: "display").data == first.data)
     }
 
+    // MARK: View compositing (#824)
+
+    func testBlendTileHasTheBitsOfTheSerialBlend() {
+        var rng = Rng(state: 11)
+        let n = TILE * TILE
+        let dst = (0..<(n * 4)).map { _ in UInt8(rng.next() % 256) }
+        let src = (0..<(n * 4)).map { i in i % 4 == 3 && i % 28 == 3 ? 0 : (i % 4 == 3 && i % 44 == 7 ? 255 : UInt8(rng.next() % 256)) }
+        let coverage = (0..<n).map { i in i % 9 == 0 ? Float(0) : Float(rng.unit()) }
+        for mode in [BlendMode.normal, .multiply, .screen, .overlay, .colorDodge, .hue, .luminosity, .linearDodge, .pigment] {
+            for cov in [nil, coverage] {
+                for alpha in [1.0, 0.63] {
+                    var fast = dst
+                    blendTile(&fast, src, mode, alpha, cov)
+                    // The reference: one row at a time, each far below the split, so it runs on one thread.
+                    var serial = dst
+                    for y in 0..<TILE {
+                        var row = Array(serial[(y * TILE * 4)..<((y + 1) * TILE * 4)])
+                        blendTile(&row, Array(src[(y * TILE * 4)..<((y + 1) * TILE * 4)]), mode, alpha, cov.map { Array($0[(y * TILE)..<((y + 1) * TILE)]) })
+                        serial.replaceSubrange((y * TILE * 4)..<((y + 1) * TILE * 4), with: row)
+                    }
+                    XCTAssertTrue(fast == serial, "\(mode) coverage \(cov != nil) alpha \(alpha)")
+                }
+            }
+        }
+    }
+
+    private func expandRef(_ t: Tile, _ channels: Int) -> [UInt8] {
+        if t.data.count == TILE * TILE * channels { return t.data }
+        let u = t.uniform ?? 0
+        if channels == 1 { return [UInt8](repeating: UInt8(u & 255), count: TILE * TILE) }
+        var out = [UInt8](repeating: 0, count: TILE * TILE * 4)
+        for i in stride(from: 0, to: out.count, by: 4) {
+            out[i] = UInt8((u >> 24) & 255); out[i + 1] = UInt8((u >> 16) & 255); out[i + 2] = UInt8((u >> 8) & 255); out[i + 3] = UInt8(u & 255)
+        }
+        return out
+    }
+
+    /// `LitCache.litFerro` as it was: one tile after another, no cache.
+    private func referenceLitFerro(_ color: TiledSurface, _ ch: ThickChannels, _ light: PaintLighting, _ ferro: FerroLayerInput) -> TiledSurface {
+        let hasFerroSpikes = !ferro.magnets.isEmpty
+        var out = color.tiles
+        var keys = OrderedMap<TileKey, Bool>()
+        for k in color.tiles.keys { keys.set(k, true) }
+        for k in ferro.surface.tiles.keys { keys.set(k, true) }
+        func buildHeightTile(_ ntx: Int, _ nty: Int) -> [UInt8]? {
+            let nkey = tileKeyIn(ntx, nty)
+            let ht = ch.height.tiles.get(nkey)
+            let ft = hasFerroSpikes ? ferro.surface.tiles.get(nkey) : nil
+            if ht == nil && ft == nil { return nil }
+            guard let ft else { return expandRef(ht!, 1) }
+            var outH = ht.map { expandRef($0, 1) } ?? [UInt8](repeating: 0, count: TILE * TILE)
+            let fData = expandRef(ft, 1)
+            let ox = Double(ntx * TILE + ferro.offset.x) + 0.5
+            let oy = Double(nty * TILE + ferro.offset.y) + 0.5
+            var p = 0
+            for py in 0..<TILE {
+                for px in 0..<TILE {
+                    let fb = Int(fData[p])
+                    if fb != 0 {
+                        let hs = ferroSpikeHeightAt(ox + Double(px), oy + Double(py), fb, ferro.magnets, ferro.settings)
+                        if hs > 0 { outH[p] = UInt8(Swift.min(255, Int(outH[p]) + hs)) }
+                    }
+                    p += 1
+                }
+            }
+            return outH
+        }
+        for (key, _) in keys {
+            let tile = color.tiles.get(key)
+            let (tx, ty) = tileCoord(key)
+            let film = ch.film.tiles.get(key)
+            var any = film != nil
+            for dy in -1...1 { for dx in -1...1 where ch.height.tiles.get(tileKeyIn(tx + dx, ty + dy)) != nil || ferro.surface.tiles.get(tileKeyIn(tx + dx, ty + dy)) != nil { any = true } }
+            if !any { continue }
+            let m = ch.material.tiles.get(key)
+            let f = ferro.surface.tiles.get(key)
+            if tile == nil && f == nil { continue }
+            var cd = tile.map { expandRef($0, 4) } ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+            var md = m.map { expandRef($0, 4) }
+            if let f {
+                let fd = expandRef(f, 1)
+                var mBuf = md ?? [UInt8](repeating: 0, count: TILE * TILE * 4)
+                for p in 0..<fd.count {
+                    let fb = Int(fd[p])
+                    if fb == 0 { continue }
+                    let i = p * 4
+                    if Int(cd[i + 3]) < fb {
+                        let a0 = Double(cd[i + 3]) / Double(fb)
+                        cd[i] = JS.u8c(JS.round(Double(cd[i]) * a0 + Double(FERRO_CARRIER_RGB.0) * (1.0 - a0)))
+                        cd[i + 1] = JS.u8c(JS.round(Double(cd[i + 1]) * a0 + Double(FERRO_CARRIER_RGB.1) * (1.0 - a0)))
+                        cd[i + 2] = JS.u8c(JS.round(Double(cd[i + 2]) * a0 + Double(FERRO_CARRIER_RGB.2) * (1.0 - a0)))
+                        cd[i + 3] = UInt8(fb)
+                    }
+                    let w = Double(fb) / 255.0
+                    mBuf[i] = UInt8(Swift.max(Int(mBuf[i]), Int(JS.round(Double(FERRO_DEFAULT_GLOSS) * w))))
+                    mBuf[i + 1] = UInt8(Swift.max(Int(mBuf[i + 1]), Int(JS.round(Double(FERRO_DEFAULT_METALLIC) * w))))
+                    mBuf[i + 2] = UInt8(Swift.max(Int(mBuf[i + 2]), Int(JS.round(Double(FERRO_DEFAULT_RIM) * w))))
+                    if mBuf[i + 3] == 0 { mBuf[i + 3] = 255 }
+                }
+                md = mBuf
+            }
+            let data = lightTile(cd, buildHeightTile(tx, ty), { dx, dy in buildHeightTile(tx + dx, ty + dy) }, md, light, film.map { expandRef($0, 4) })
+            out.set(key, Tile(data: data, uniform: nil))
+        }
+        return TiledSurface(channels: 4, tiles: out, defaultValue: color.defaultValue)
+    }
+
+    func testFerroLightsWithTheBitsOfTheSerialPass() {
+        let (color, _) = litScene()
+        var rng = Rng(state: 5)
+        let w = 700, h = 560
+        var fData = [UInt8](repeating: 0, count: w * h)
+        var hData = [UInt8](repeating: 0, count: w * h)
+        for y in 0..<h {
+            for x in 0..<w {
+                let d = ((Double(x) - 300) * (Double(x) - 300) + (Double(y) - 260) * (Double(y) - 260)).squareRoot()
+                if d < 220 { fData[y * w + x] = UInt8(Swift.min(255, Int((1 - d / 220) * 300))) }
+                if (x / 41 + y / 29) % 4 == 0 { hData[y * w + x] = UInt8(rng.next() % 200) }
+            }
+        }
+        // Ferrofluid reaches tiles the colour has none in (x 0).
+        let ferroSurface = surfaceFromPixels(width: w, height: h, data: fData, channels: 1, x: 0, y: -20)
+        let ch = ThickChannels(height: surfaceFromPixels(width: w, height: h, data: hData, channels: 1, x: 30, y: -20), material: emptySurface(4, 0))
+        let light = PaintLighting()
+        for magnets in [[], [PaintMagnet(id: "m1", x: 310, y: 250, strength: 0.9, radius: 160), PaintMagnet(id: "m2", x: 120, y: 400, strength: -0.6, radius: 90)]] {
+            let ferro = FerroLayerInput(surface: ferroSurface, magnets: magnets, settings: DEFAULT_FERRO, offset: LayerOffset(x: 0, y: 0))
+            let cache = LitCache()
+            let fast = cache.lit(color, ch, light, DEFAULT_VIEW_TILT, ferro)
+            let expected = referenceLitFerro(color, ch, light, ferro)
+            XCTAssertEqual(fast.tiles.keys, expected.tiles.keys, "magnets \(magnets.count): tile order")
+            assertSameSurface(fast, expected, "ferro, magnets \(magnets.count)")
+            // Warm: the same tiles come back from the cache.
+            let again = cache.lit(color, ch, light, DEFAULT_VIEW_TILT, ferro)
+            for (k, t) in again.tiles { XCTAssertTrue(t === fast.tiles.get(k), "cached tile \(tileCoord(k))") }
+        }
+    }
+
+    func testLightRectanglesCoverEverythingTheLightChanged() throws {
+        // Glow-wash light moves every step: a view that recomposites only the emitted rectangles shows what a full composite does.
+        let c = try PaintEditorController(width: 700, height: 420, color: "#2255aa")
+        let compositor = createPaintCompositor()
+        var view = [UInt8](repeating: 0, count: 700 * 420 * 4)
+        func draw() {
+            c.compositeTiles(using: compositor) { tx, ty, data, _ in
+                for y in 0..<TILE {
+                    let py = ty * TILE + y
+                    if py >= 420 { break }
+                    for x in 0..<TILE {
+                        let px = tx * TILE + x
+                        if px >= 700 { break }
+                        for k in 0..<4 { view[(py * 700 + px) * 4 + k] = data[(y * TILE + x) * 4 + k] }
+                    }
+                }
+            }
+        }
+        _ = try c.paintStroke(PaintStrokeInit(brushId: "glow-wash", seed: 3), points: [PenPoint(x: 40, y: 60, pressure: 0.7), PenPoint(x: 600, y: 330, pressure: 0.7)])
+        draw()
+        var partial = 0
+        var now = 1000.0
+        _ = c.tickWet(now)
+        for i in 0..<24 {
+            let since = c.version
+            now += 1000.0 / 30
+            _ = c.tickWet(now)
+            if i == 11 { _ = try c.paintStroke(PaintStrokeInit(brushId: "ink-pen", seed: 9), points: [PenPoint(x: 500, y: 40, pressure: 0.7), PenPoint(x: 520, y: 60, pressure: 0.7)]) }
+            if c.dirtySince(since) != nil { partial += 1 }
+            draw()
+            XCTAssertTrue(view == c.compositePixels(wet: "display").data, "step \(i)")
+        }
+        // The light no longer makes every frame a full one.
+        XCTAssertGreaterThan(partial, 0)
+    }
+
     // MARK: Live patterns
 
     /// `LivePatternField.step` as it was: one thread, a closure call per cell, the fields copied every substep.

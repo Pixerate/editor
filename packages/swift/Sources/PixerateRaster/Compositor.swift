@@ -316,85 +316,108 @@ private func dirtyInTile(_ rects: [DirtyRect], _ tx: Int, _ ty: Int) -> RasterRe
  */
 public func blendTile(_ dst: inout [UInt8], _ src: [UInt8], _ mode: BlendMode, _ alpha: Double, _ coverage: [Float]?) {
     if !(alpha > 0) { return }
-    let normal = mode == .normal
-    let pigment = mode == .pigment
-    let lut = !normal && isSeparableBlendMode(mode) ? separableLut(mode) : nil
-    var cb = [0.0, 0.0, 0.0]
-    var cs = [0.0, 0.0, 0.0]
-    let n = dst.count
+    let lut = mode != .normal && isSeparableBlendMode(mode) ? separableLut(mode) : nil
+    let pixels = Swift.min(dst.count, src.count) >> 2
     dst.withUnsafeMutableBufferPointer { dstBuf in
         src.withUnsafeBufferPointer { srcBuf in
             guard let dstPtr = dstBuf.baseAddress, let srcPtr = srcBuf.baseAddress else { return }
-            var i = 0, p = 0
-            while i < n {
-                defer {
-                    i += 4
-                    p += 1
-                }
-                let sa = srcPtr[i + 3]
-                if sa == 0 { continue }
-                let k = coverage.map { alpha * Double($0[p]) } ?? alpha
-                if !(k > 0) { continue }
-                if normal && sa == 255 && k >= 1 {
-                    // Opaque normal source: the result is the source (what the general formula rounds to).
-                    dstPtr[i] = srcPtr[i]
-                    dstPtr[i + 1] = srcPtr[i + 1]
-                    dstPtr[i + 2] = srcPtr[i + 2]
-                    dstPtr[i + 3] = 255
-                    continue
-                }
-                let as_ = (Double(sa) / 255) * k
-                let ab = Double(dstPtr[i + 3]) / 255
-                let ao = as_ + ab * (1 - as_)
-                if ao <= 0 {
-                    dstPtr[i] = 0
-                    dstPtr[i + 1] = 0
-                    dstPtr[i + 2] = 0
-                    dstPtr[i + 3] = 0
-                    continue
-                }
-                let d0 = Int(dstPtr[i]), d1 = Int(dstPtr[i + 1]), d2 = Int(dstPtr[i + 2])
-                if pigment {
-                    // Not B(Cb, Cs): the colours mix like paint by amount, `as / ao` of the source.
-                    mixPigment8(d0, d1, d2, Int(srcPtr[i]), Int(srcPtr[i + 1]), Int(srcPtr[i + 2]), as_ / ao, &cb)
-                    dstPtr[i] = JS.u8c(JS.round(cb[0] * 255))
-                    dstPtr[i + 1] = JS.u8c(JS.round(cb[1] * 255))
-                    dstPtr[i + 2] = JS.u8c(JS.round(cb[2] * 255))
-                    dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
-                    continue
-                }
-                let b0 = Double(d0) / 255, b1 = Double(d1) / 255, b2 = Double(d2) / 255
-                let s0 = Double(srcPtr[i]) / 255, s1 = Double(srcPtr[i + 1]) / 255, s2 = Double(srcPtr[i + 2]) / 255
-                let m0: Double, m1: Double, m2: Double
-                if normal {
-                    m0 = s0
-                    m1 = s1
-                    m2 = s2
-                } else if let lut {
-                    m0 = lut[(d0 << 8) | Int(srcPtr[i])]
-                    m1 = lut[(d1 << 8) | Int(srcPtr[i + 1])]
-                    m2 = lut[(d2 << 8) | Int(srcPtr[i + 2])]
-                } else {
-                    cb[0] = b0
-                    cb[1] = b1
-                    cb[2] = b2
-                    cs[0] = s0
-                    cs[1] = s1
-                    cs[2] = s2
-                    let m = blendRgb(mode, cb, cs)
-                    m0 = m[0]
-                    m1 = m[1]
-                    m2 = m[2]
-                }
-                let wb = (1 - as_) * ab
-                let ws = (1 - ab) * as_
-                let wm = as_ * ab
-                dstPtr[i] = JS.u8c(JS.round(((wb * b0 + ws * s0 + wm * m0) / ao) * 255))
-                dstPtr[i + 1] = JS.u8c(JS.round(((wb * b1 + ws * s1 + wm * m1) / ao) * 255))
-                dstPtr[i + 2] = JS.u8c(JS.round(((wb * b2 + ws * s2 + wm * m2) / ao) * 255))
-                dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
+            // Pixels are independent: rows of a large tile blend on every core, with the same bits (#824).
+            let chunks = pixels >= BLEND_SPLIT_MIN ? Swift.min(BLEND_SPLIT_MAX, Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)) : 1
+            if chunks <= 1 {
+                blendSpan(dstPtr, srcPtr, 0, pixels, mode, alpha, coverage, lut)
+                return
+            }
+            nonisolated(unsafe) let d = dstPtr
+            nonisolated(unsafe) let s = srcPtr
+            let per = (pixels + chunks - 1) / chunks
+            DispatchQueue.concurrentPerform(iterations: chunks) { c in
+                let from = c * per
+                let to = Swift.min(pixels, from + per)
+                if from < to { blendSpan(d, s, from, to, mode, alpha, coverage, lut) }
             }
         }
+    }
+}
+
+/// Tiles of at least this many pixels are blended on several cores (a 128 × 128 quarter tile and up).
+let BLEND_SPLIT_MIN = 128 * 128
+/// At most this many parts (more costs more in scheduling than a 256 × 256 tile gains).
+let BLEND_SPLIT_MAX = 8
+
+/// `blendTile` over pixels `from..<to`.
+private func blendSpan(_ dstPtr: UnsafeMutablePointer<UInt8>, _ srcPtr: UnsafePointer<UInt8>, _ from: Int, _ to: Int, _ mode: BlendMode, _ alpha: Double, _ coverage: [Float]?, _ lut: [Double]?) {
+    let normal = mode == .normal
+    let pigment = mode == .pigment
+    var cb = [0.0, 0.0, 0.0]
+    var cs = [0.0, 0.0, 0.0]
+    var i = from * 4, p = from
+    while i < to * 4 {
+        defer {
+            i += 4
+            p += 1
+        }
+        let sa = srcPtr[i + 3]
+        if sa == 0 { continue }
+        let k = coverage.map { alpha * Double($0[p]) } ?? alpha
+        if !(k > 0) { continue }
+        if normal && sa == 255 && k >= 1 {
+            // Opaque normal source: the result is the source (what the general formula rounds to).
+            dstPtr[i] = srcPtr[i]
+            dstPtr[i + 1] = srcPtr[i + 1]
+            dstPtr[i + 2] = srcPtr[i + 2]
+            dstPtr[i + 3] = 255
+            continue
+        }
+        let as_ = (Double(sa) / 255) * k
+        let ab = Double(dstPtr[i + 3]) / 255
+        let ao = as_ + ab * (1 - as_)
+        if ao <= 0 {
+            dstPtr[i] = 0
+            dstPtr[i + 1] = 0
+            dstPtr[i + 2] = 0
+            dstPtr[i + 3] = 0
+            continue
+        }
+        let d0 = Int(dstPtr[i]), d1 = Int(dstPtr[i + 1]), d2 = Int(dstPtr[i + 2])
+        if pigment {
+            // Not B(Cb, Cs): the colours mix like paint by amount, `as / ao` of the source.
+            mixPigment8(d0, d1, d2, Int(srcPtr[i]), Int(srcPtr[i + 1]), Int(srcPtr[i + 2]), as_ / ao, &cb)
+            dstPtr[i] = JS.u8c(JS.round(cb[0] * 255))
+            dstPtr[i + 1] = JS.u8c(JS.round(cb[1] * 255))
+            dstPtr[i + 2] = JS.u8c(JS.round(cb[2] * 255))
+            dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
+            continue
+        }
+        let b0 = Double(d0) / 255, b1 = Double(d1) / 255, b2 = Double(d2) / 255
+        let s0 = Double(srcPtr[i]) / 255, s1 = Double(srcPtr[i + 1]) / 255, s2 = Double(srcPtr[i + 2]) / 255
+        let m0: Double, m1: Double, m2: Double
+        if normal {
+            m0 = s0
+            m1 = s1
+            m2 = s2
+        } else if let lut {
+            m0 = lut[(d0 << 8) | Int(srcPtr[i])]
+            m1 = lut[(d1 << 8) | Int(srcPtr[i + 1])]
+            m2 = lut[(d2 << 8) | Int(srcPtr[i + 2])]
+        } else {
+            cb[0] = b0
+            cb[1] = b1
+            cb[2] = b2
+            cs[0] = s0
+            cs[1] = s1
+            cs[2] = s2
+            let m = blendRgb(mode, cb, cs)
+            m0 = m[0]
+            m1 = m[1]
+            m2 = m[2]
+        }
+        let wb = (1 - as_) * ab
+        let ws = (1 - ab) * as_
+        let wm = as_ * ab
+        dstPtr[i] = JS.u8c(JS.round(((wb * b0 + ws * s0 + wm * m0) / ao) * 255))
+        dstPtr[i + 1] = JS.u8c(JS.round(((wb * b1 + ws * s1 + wm * m1) / ao) * 255))
+        dstPtr[i + 2] = JS.u8c(JS.round(((wb * b2 + ws * s2 + wm * m2) / ao) * 255))
+        dstPtr[i + 3] = JS.u8c(JS.round(ao * 255))
     }
 }
 
