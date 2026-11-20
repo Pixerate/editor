@@ -62,10 +62,12 @@ extension PaintEditorController {
         return l
     }
 
-    private func liveStrokeLayer(_ layerId: String?, _ what: String) throws -> (layer: PaintLayer, strokes: [RecordedStroke]) {
+    private func liveStrokeLayer(_ layerId: String?, _ what: String, tails: Bool = false) throws -> (layer: PaintLayer, strokes: [RecordedStroke]) {
         let l = try pixelLayer(layerId, what)
-        guard let strokes = doc.liveStrokes?.get(l.id) else { throw PaintEditorError("Layer \"\(l.name)\" is not a stroke layer; add one with add_layer {type: \"strokes\"} (or convert_to_stroke_layer on an empty layer), then paint on it.") }
-        return (l, strokes)
+        if let strokes = doc.liveStrokes?.get(l.id) { return (l, strokes) }
+        // A pixel layer's strokes since it was last flattened (#902).
+        if tails { return (l, validTail(doc, l.id).map { tailStrokes(doc, $0) } ?? []) }
+        throw PaintEditorError("Layer \"\(l.name)\" is not a stroke layer; add one with add_layer {type: \"strokes\"} (or convert_to_stroke_layer on an empty layer), then paint on it.")
     }
 
     /// Makes an empty pixel layer a live stroke layer (one undo step).
@@ -82,21 +84,25 @@ extension PaintEditorController {
         return describeLayer(getLayer(l.id)!)
     }
 
-    /// The stroke layer holding a live stroke, and where.
-    private func findLiveStroke(_ id: String) throws -> (layer: PaintLayer, strokes: [RecordedStroke], index: Int) {
+    /// The layer holding an editable stroke (a stroke layer, or a pixel layer's tail), and where.
+    func findLiveStroke(_ id: String) throws -> (layer: PaintLayer, strokes: [RecordedStroke], index: Int, tail: StrokeTail?) {
         for (layerId, strokes) in doc.liveStrokes ?? OrderedMap() {
-            if let index = strokes.firstIndex(where: { $0.id == id }), let layer = getLayer(layerId), layer.isPixel { return (layer, strokes, index) }
+            if let index = strokes.firstIndex(where: { $0.id == id }), let layer = getLayer(layerId), layer.isPixel { return (layer, strokes, index, nil) }
         }
-        let baked = doc.strokes.contains { $0.id == id }
-        throw PaintEditorError(baked
-            ? "Stroke \"\(id)\" was painted on a pixel layer, so its pixels are baked; only strokes on a stroke layer can be edited (list_strokes {live: true}). Replay it onto a stroke layer (replay_strokes layerId) to edit the copy."
+        let logged = doc.strokes.first { $0.id == id }
+        if let logged, let tail = validTail(doc, logged.layerId) {
+            let strokes = tailStrokes(doc, tail)
+            if let index = strokes.firstIndex(where: { $0.id == id }), let layer = getLayer(logged.layerId), layer.isPixel { return (layer, strokes, index, tail) }
+        }
+        throw PaintEditorError(logged != nil
+            ? "Stroke \"\(id)\" can't be edited: \(BAKED_STROKE_REASON) Call list_strokes {live: true} for the ids of editable strokes, or replay it (replay_strokes) to paint an editable copy."
             : "Unknown stroke \"\(id)\". Call list_strokes {live: true} for the ids of editable strokes.")
     }
 
     /// Changes a live stroke's brush, colour, paint or seed, and redraws its layer (one undo step).
     /// `dualColor` (instead of `color`) gives the stroke a light / dark pair: the document draws its light side, the view the scheme's.
     public func updateStroke(_ id: String, brushId: String?, brushChanges: JSONObject?, color: String?, paint: JSONValue?, seed: Double?, dualColor: PaintDualColor? = nil) throws -> (stroke: RecordedStroke, bounds: RasterRect) {
-        let (layer, strokes, index) = try findLiveStroke(id)
+        let (layer, strokes, index, _) = try findLiveStroke(id)
         let was = strokes[index]
         var brush = was.brush
         if let brushId {
@@ -155,14 +161,14 @@ extension PaintEditorController {
         next.load = load.reservoir != nil || load.pickup != nil ? load : nil
         let list = strokes.enumerated().map { $0.offset == index ? next : $0.element }
         let area0 = strokeArea(was)
-        commit("Edit stroke", try withLiveStrokes(doc, layer, list))
+        commit("Edit stroke", try withEditedStrokes(doc, layer, list))
         return (next, unionRectOpt(area0, strokeArea(next)) ?? RasterRect(x: 0, y: 0, width: 0, height: 0))
     }
 
     /// Replaces a live stroke's points, or moves, scales, rotates or flips them, and redraws its layer.
     public func editStrokePoints(_ id: String, points: [PenPoint]?, transform: JSONObject?) throws -> (stroke: RecordedStroke, bounds: RasterRect) {
         if (points == nil) == (transform == nil) { throw PaintEditorError("Pass either points (the new pen samples) or transform (dx, dy, scale, rotate, flipX), not both.") }
-        let (layer, strokes, index) = try findLiveStroke(id)
+        let (layer, strokes, index, _) = try findLiveStroke(id)
         let was = strokes[index]
         var next: RecordedStroke
         if let points {
@@ -184,7 +190,7 @@ extension PaintEditorController {
         }
         let list = strokes.enumerated().map { $0.offset == index ? next : $0.element }
         let area0 = strokeArea(was)
-        commit("Edit stroke points", try withLiveStrokes(doc, layer, list))
+        commit("Edit stroke points", try withEditedStrokes(doc, layer, list))
         return (next, unionRectOpt(area0, strokeArea(next)) ?? RasterRect(x: 0, y: 0, width: 0, height: 0))
     }
 
@@ -197,9 +203,12 @@ extension PaintEditorController {
         var layers: [(String, PaintLayer)] = []
         for f in found where !layers.contains(where: { $0.0 == f.layer.id }) { layers.append((f.layer.id, f.layer)) }
         for (layerId, layer) in layers {
-            let current = d.liveStrokes?.get(layerId) ?? []
+            let tail = found.first { $0.layer.id == layerId }!.tail
+            let held = tail.map { validTail(d, layerId) ?? $0 }
+            let current = held.map { tailStrokes(d, $0) } ?? d.liveStrokes?.get(layerId) ?? []
             for x in current where ids.contains(x.id) { bounds = unionRectOpt(bounds, strokeArea(x)) }
-            d = try withLiveStrokes(d, layer, current.filter { !ids.contains($0.id) })
+            let kept = current.filter { !ids.contains($0.id) }
+            d = try held.map { try withTailStrokes(d, layer, $0, kept) } ?? withLiveStrokes(d, layer, kept)
         }
         commit(ids.count == 1 ? "Remove stroke" : "Remove strokes", d)
         return ["removed": .array(ids.map { .string($0) }), "bounds": rectJSON(bounds)]
@@ -207,12 +216,12 @@ extension PaintEditorController {
 
     /// Moves a live stroke to `index` in its layer (0 = bottom) and redraws (one undo step).
     public func reorderStroke(_ id: String, _ index: Int) throws -> [String] {
-        let (layer, strokes, from) = try findLiveStroke(id)
+        let (layer, strokes, from, _) = try findLiveStroke(id)
         if index < 0 || index >= strokes.count { throw PaintEditorError("index \(index) is out of range; the layer has \(strokes.count) strokes, so use 0..\(strokes.count - 1) (0 = bottom).") }
         var list = strokes
         let moved = list.remove(at: from)
         list.insert(moved, at: index)
-        if from != index { commit("Reorder stroke", try withLiveStrokes(doc, layer, list)) }
+        if from != index { commit("Reorder stroke", try withEditedStrokes(doc, layer, list)) }
         return list.map(\.id)
     }
 
@@ -229,7 +238,7 @@ extension PaintEditorController {
 
     /// The top-most stroke of a stroke layer that painted the pixel at (x, y), or nil.
     public func liveStrokeAt(_ layerId: String?, _ x: Double, _ y: Double) throws -> RecordedStroke? {
-        let (layer, strokes) = try liveStrokeLayer(layerId, "pick a stroke on")
+        let (layer, strokes) = try liveStrokeLayer(layerId, "pick a stroke on", tails: true)
         let plain = layer.copy(visible: true, locks: .some(nil)).withSurface(layer.pixelSurface, offset: LayerOffset(x: 0, y: 0))
         let base = doc.with { $0.liveStrokes = nil }
         let px = Int(JS.floor(x)), py = Int(JS.floor(y))
@@ -247,12 +256,7 @@ extension PaintEditorController {
         return liveStrokeBounds(s)
     }
 
-    func liveStrokeById(_ id: String) -> RecordedStroke? {
-        for (_, strokes) in doc.liveStrokes ?? OrderedMap() {
-            if let s = strokes.first(where: { $0.id == id }) { return s }
-        }
-        return nil
-    }
+    func liveStrokeById(_ id: String) -> RecordedStroke? { editableStroke(id) }
 
     /// The path-mapped paint a point edit of a stroke will paint with, or nil.
     private func editStrokePointsEffect(_ id: String, points: [PenPoint]?, transform: JSONObject?) -> PaintEffectPaint? {
@@ -318,6 +322,7 @@ extension PaintEditorController {
             })
             return
         }
+        // A stroke layer's list as a replay sets it, never a pixel layer's editable strokes (whose ids name the log).
         commit("Strokes", try withLiveStrokes(doc, l, strokes.map { var s = $0; s.layerId = l.id; return s }))
     }
 
@@ -358,12 +363,13 @@ extension PaintEditorController {
 
     /// A stroke layer's pixels drawn from its strokes, bottom first (every stroke drawn again). With
     /// `light`, the layer's light channel too: every stroke's light twin runs over it in order.
-    func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke], light: Bool = false) throws -> (surface: TiledSurface, film: TiledSurface, light: TiledSurface?) {
+    /// With `base` (a pixel layer's tail), drawing starts from its pixels and light instead of nothing.
+    func drawLiveStrokes(_ layer: PaintLayer, _ list: [RecordedStroke], light: Bool = false, base start: (surface: TiledSurface, light: TiledSurface?)? = nil) throws -> (surface: TiledSurface, film: TiledSurface, light: TiledSurface?) {
         let plain = layer.copy(visible: true, locks: .some(nil)).withSurface(layer.pixelSurface, offset: LayerOffset(x: 0, y: 0))
         let base = doc.with { $0.liveStrokes = nil }
-        var surface = emptySurface(4)
+        var surface = start?.surface ?? emptySurface(4)
         var film = emptySurface(4, 0)
-        var lightSoFar: TiledSurface? = nil
+        var lightSoFar: TiledSurface? = light ? start?.light : nil
         for st in list {
             let r = try drawLiveStroke(base, plain, surface, st, film, light: light ? .some(lightSoFar) : nil)
             surface = r.surface
@@ -394,15 +400,25 @@ func paintStrokeHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
     h["list_strokes"] = { a in
         let layerId = a["layerId"]?.stringValue
         if let layerId, c.getLayer(layerId) == nil { throw PaintEditorError("Unknown layer \"\(layerId)\". Call list_layers for the ids.") }
-        let liveAll = (c.doc.liveStrokes ?? OrderedMap()).values.flatMap { $0 }
-        let liveKeys = Set(liveAll.map(\.key))
+        let liveAll = c.allEditableStrokes()
+        let editable = Set(liveAll.map(\.id))
         let live = a["live"] == .bool(true)
         var all = live ? liveAll : c.doc.strokes
         if let layerId { all = all.filter { $0.layerId == layerId } }
         let ids = a["ids"]?.arrayValue?.compactMap(\.stringValue)
         let picked = ids.map { ids in all.filter { ids.contains($0.id) } } ?? Array(all.suffix(Int(a["last"]?.numberValue ?? 100)))
         if let ids { for id in ids where !all.contains(where: { $0.id == id }) { throw PaintEditorError("Unknown stroke \"\(id)\". Call list_strokes without ids for the ids.") } }
-        return ["total": .number(Double(all.count)), "strokes": .array(picked.map { strokeSummary($0, withPoints: ids != nil, live: live ? true : liveKeys.contains($0.key)) })]
+        return ["total": .number(Double(all.count)), "strokes": .array(picked.map { s in
+            // A stroke layer's log keeps each stroke as first painted: only the one in its list now is live.
+            let layerList = c.doc.liveStrokes?.get(s.layerId)
+            let isLive = live || (editable.contains(s.id) && (layerList.map { $0.contains { $0.key == s.key } } ?? true))
+            let sum = strokeSummary(s, withPoints: ids != nil, live: isLive)
+            if isLive { return sum }
+            let why = layerList != nil ? "An earlier version of a stroke layer’s stroke (the layer holds it as edited since); list_strokes {live: true} lists it as it is now." : c.getLayer(s.layerId) != nil ? BAKED_STROKE_REASON : "Its layer was deleted."
+            var o = sum.objectValue!
+            o["notEditable"] = .string(why)
+            return .object(o)
+        })]
     }
     h["stroke_at"] = { a in
         let s = try c.liveStrokeAt(a["layerId"]?.stringValue, a["x"]?.numberValue ?? .nan, a["y"]?.numberValue ?? .nan)
@@ -414,7 +430,7 @@ func paintStrokeHandlers(_ c: PaintEditorController) -> [String: PaintToolHandle
         if update.isEmpty { throw PaintEditorError("Pass at least one change: brushId, brush, color, paint or seed.") }
         var changes: JSONObject? = nil
         if let patch = update["brush"]?.objectValue {
-            guard let stroke = c.liveStrokeById(id) else { throw PaintEditorError("Unknown stroke \"\(id)\" on a stroke layer. Call list_strokes {live: true} for the ids.") }
+            guard let stroke = c.editableStroke(id) else { throw PaintEditorError("Stroke \"\(id)\" can't be edited now. Call list_strokes {live: true} for the ids of editable strokes.") }
             if let bid = update["brushId"]?.stringValue { changes = try c.brushChanges(patch, from: bid) } else { changes = try c.brushChanges(patch, fromBrush: stroke.brush) }
         }
         if let paint = update["paint"], isPaintEffectPaint(paint), var e = readPaintEffectPaint(paint) {

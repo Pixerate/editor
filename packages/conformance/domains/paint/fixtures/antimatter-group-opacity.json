@@ -216,6 +216,7 @@
               "id": "s1",
               "layerId": "@1",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 1,
               "seed": 42
             }

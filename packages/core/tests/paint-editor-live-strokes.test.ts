@@ -76,10 +76,12 @@ describe('live stroke layers', () => {
     expect(() => c.editStrokePoints(id, {})).toThrow(/either points .* or transform/);
     expect(() => c.reorderStroke(id, 9)).toThrow(/use 0\.\.2/);
     expect(c.listLiveStrokes()).toHaveLength(3);
-    // A baked stroke says why it can't be edited.
+    // A pixel layer's stroke stays editable until the layer is flattened (#902); then it says why it can't be.
     c.addLayer();
     const baked = c.paintStroke({ points: wave(80), brushId: 'ink-pen' }).strokeId!;
-    expect(() => c.updateStroke(baked, { seed: 1 })).toThrow(/pixel layer, so its pixels are baked/);
+    expect(c.isStrokeEditable(baked)).toBe(true);
+    c.paintStroke({ points: wave(80), brushId: 'smudge' });
+    expect(() => c.updateStroke(baked, { seed: 1 })).toThrow(/can't be edited: Painted before its layer was last flattened/);
     // Conversion needs an empty layer.
     expect(() => c.convertToLiveStrokes()).toThrow(/already has paint/);
     c.addLayer();

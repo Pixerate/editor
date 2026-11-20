@@ -37,7 +37,7 @@ describe('PaintGesture', () => {
     const { c, g } = setup();
     g.tool = 'stroke';
     g.down(ev(50, 50));
-    expect(g.error).toMatch(/Pick a stroke layer/);
+    expect(g.error).toMatch(/No visible layer has editable strokes/);
     c.addLayer({ type: 'strokes' });
     c.paintStroke({ points: [{ x: 20, y: 50 }, { x: 90, y: 50 }], brushId: 'ink-pen', color: '#000000' });
     const [s] = c.listLiveStrokes();

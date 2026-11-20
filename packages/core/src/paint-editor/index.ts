@@ -54,6 +54,7 @@ export * from './replay-tools';
 export * from './stencils';
 export * from './stickers';
 export * from './live-strokes';
+export * from './stroke-tails';
 export * from './procedural';
 export * from './sticker-tools';
 export * from './effects';

@@ -384,6 +384,14 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@3": {
+                "base": null,
+                "ids": [
+                  "s1"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {

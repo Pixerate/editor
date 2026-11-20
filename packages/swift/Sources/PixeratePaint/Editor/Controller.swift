@@ -2226,6 +2226,8 @@ public final class PaintEditorController {
                     o.liveStrokes = live
                 }
             }
+            // A pixel layer keeps the strokes it can redraw editable (#902); a blast keeps none.
+            if session.antimatterOutputs == nil { out = withTailStroke(d.with { $0.layers = baseLayers }, out, session, stroke) }
         }
         if session.initValues.wet != nil { out = finishWetStroke(out, session, &result, at: out.strokes.count) }
         return (out, result, session.initValues.brush)
@@ -2450,6 +2452,14 @@ public final class PaintEditorController {
         // The marks are complete next to the saved log, unless a layer of an opened document is still
         // unknown (an extension in TS, so it comes before the header).
         out["unloggedComplete"] = savesStrokeLog(d, strokeLog) && openedGaps(d).isEmpty ? .bool(true) : nil
+        // Pixel layers' editable strokes (#902) name strokes of the log: only with the log.
+        var tails = JSONObject()
+        if savesStrokeLog(d, strokeLog) {
+            for id in doc.strokeTails?.keys ?? [] {
+                if let t = validTail(doc, id), findLayer(d.layers, id) != nil { tails[id] = strokeTailToJSON(t) }
+            }
+        }
+        out["strokeTails"] = tails.isEmpty ? nil : .object(tails)
         let header: JSONObject = [
             "format": .string(PAINT_FORMAT), "version": .number(Double(PAINT_SCHEMA_VERSION)),
             "width": .number(Double(d.canvas.width)), "height": .number(Double(d.canvas.height)), "dpi": .number(d.canvas.dpi),

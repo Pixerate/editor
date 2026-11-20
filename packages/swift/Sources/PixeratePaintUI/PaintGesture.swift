@@ -160,16 +160,18 @@ public final class PaintGesture {
     }
 
     /**
-     * The Select stroke tool: pressing a stroke picks it, on whichever visible stroke layer painted it
-     * (the active layer first, then top-down), making that layer active; dragging moves it (one undo
-     * step at the drop). Pressing where no stroke painted clears the pick.
+     * The Select stroke tool: pressing a stroke picks it, on whichever visible layer painted it with
+     * an editable stroke (a stroke layer, or a pixel layer since it was last flattened; the active
+     * layer first, then top-down), making that layer active; dragging moves it (one undo step at the
+     * drop). Pressing where no stroke painted clears the pick.
      */
     private func strokeDown(_ e: PaintPointerEvent) -> Bool {
         let p = doc(e)
         let active = controller.doc.activeLayerId
-        let layers = controller.listLayers().filter { $0.visible && controller.doc.liveStrokes?.get($0.id) != nil }.map(\.id)
+        // Stroke layers and pixel layers with strokes painted since they were last flattened (#902).
+        let layers = controller.listLayers().filter { $0.visible && controller.editableStrokes($0.id)?.isEmpty == false }.map(\.id)
         if layers.isEmpty {
-            error = "Pick a stroke layer in the Layers panel (or add one) to select its strokes."
+            error = "No visible layer has editable strokes: strokes painted since a layer was last flattened (by wet paint, a smudge, a fill or a filter) can be selected."
             return false
         }
         let order = active.map { a in layers.contains(a) ? [a] + layers.filter { $0 != a } : layers } ?? layers

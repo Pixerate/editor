@@ -686,6 +686,14 @@
                 "invert": false
               }
             },
+            "strokeTails": {
+              "@2": {
+                "base": null,
+                "ids": [
+                  "s1"
+                ]
+              }
+            },
             "strokes": [
               {
                 "brush": {
@@ -979,6 +987,14 @@
               "wet": {
                 "contrast": 1,
                 "invert": false
+              }
+            },
+            "strokeTails": {
+              "@2": {
+                "base": null,
+                "ids": [
+                  "s1"
+                ]
               }
             },
             "strokes": [

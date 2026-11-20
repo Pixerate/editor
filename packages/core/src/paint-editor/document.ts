@@ -62,6 +62,11 @@ export interface PaintDocumentState {
    * stroke's brush, colour and points stay editable (`updateStroke`).
    */
   liveStrokes?: Readonly<Record<string, RecordedStroke[]>>;
+  /**
+   * Pixel layers' editable strokes (#902): the strokes painted since the layer's last flattening
+   * point, kept editable over the pixels under them. See `StrokeTail` and `stroke-tails.ts`.
+   */
+  strokeTails?: Readonly<Record<string, StrokeTail>>;
   /** Light paint: each layer's light channel, 0..255 per pixel in layer space (layers without light are missing). See `light.ts`. */
   light?: Readonly<Record<string, TiledSurface>>;
   /** UV-fluorescent ink: each layer's 4-channel RGBA fluorescence surface in layer space (layers without fluorescence are missing). See `heat.ts`. */
@@ -155,4 +160,20 @@ export function createPaintDocument(options: Partial<PaintCanvas> & { paper?: Pa
   const canvas = normalizeCanvas({ width: options.width ?? 2048, height: options.height ?? 1536, dpi: options.dpi });
   const layer = createPaintLayer('Layer 1');
   return { canvas, paper: normalizePaper(options.paper ?? {}), layers: [layer], activeLayerId: layer.id, strokes: [] };
+}
+
+/**
+ * The strokes of a pixel layer that can still be edited (#902): `ids` are logged strokes
+ * (`PaintDocumentState.strokes`) painted one after another since the layer's last flattening point
+ * (a stroke or change that can't be redrawn exactly), bottom first, and `base` / `baseLight` are the
+ * layer's pixels and light under them. Valid only while the layer's surface is still `top` and its
+ * light `topLight`: anything else that changes the layer replaces those, and the strokes are then
+ * baked into the pixels like any other.
+ */
+export interface StrokeTail {
+  base: TiledSurface;
+  baseLight: TiledSurface | null;
+  ids: readonly string[];
+  top: TiledSurface;
+  topLight: TiledSurface | null;
 }

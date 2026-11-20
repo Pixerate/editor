@@ -80,6 +80,7 @@ import {
   type PaintLayer,
   type PaintPixelLayer,
   type PaintEvent,
+  type StrokeTail,
 } from './document';
 import { defaultImageEncoder, type ImageEncoder, type ImageFormat } from './encode';
 import type { PenPoint } from './engine';
@@ -126,6 +127,7 @@ import { editorStickers } from '../stickers/editor';
 import { editorStampOf, normalizeStickerRef, StickersSlot } from '../stickers/helpers';
 import type { StickerProvider, StickerRef, StickerVariant } from '../stickers/types';
 import { liveStrokeBounds, liveStrokeRefusal } from './live-strokes';
+import { BAKED_STROKE_REASON, strokeTailFromJSON, strokeTailToJSON, withTailLog } from './stroke-tails';
 import { BacklightCache, backlightOf, type BacklitLayer } from './backlight';
 import { DEFAULT_LIGHT_SPILL, LightCache, emptyLight, lightFromJSON, lightInfo, lightToJSON, mergeLight, normalizeLightSpill, scaleLight, type LightSpill } from './light';
 import { DEFAULT_VIEW, normalizeView, viewMatrix, type PaintView } from './view';
@@ -1593,6 +1595,8 @@ export class PaintEditorController {
       logged.add(e.layerId);
       if (e.kind === 'clear') cleared.add(e.layerId);
     }
+    // A pixel layer's edited strokes (#902) are edits of the log itself.
+    for (const [id, t] of Object.entries(next.strokeTails ?? {})) if (t !== base.strokeTails?.[id]) logged.add(id);
     const oldWet = new Set(base.wetEvents ?? []);
     for (const e of next.wetEvents ?? []) {
       if (oldWet.has(e) || this.preludeDry.has(e)) continue;
@@ -3428,8 +3432,13 @@ export class PaintEditorController {
   }
 
   private strokeEditPaint(id: string, edit: { paint?: unknown; points?: readonly PenPoint[]; transform?: StrokeVariation }): PaintEffectPaint | null {
-    const was = Object.values(this.doc.liveStrokes ?? {}).flat().find((s) => s.id === id);
-    if (!was) return null;
+    let was: RecordedStroke | undefined;
+    try {
+      const f = this.findLiveStroke(id);
+      was = f.strokes[f.index];
+    } catch {
+      return null;
+    }
     try {
       if (edit.paint !== undefined) {
         if (!isPaintEffectPaint(edit.paint)) return null;
@@ -4758,6 +4767,7 @@ export class PaintEditorController {
               stroke,
             ),
           );
+        next = this.withTailStroke(this.doc, next, s, stroke);
         // Painted on the scheme's view of a stroke layer, or in a dual colour's dark side: the document draws it in its own colours.
         const list = next.liveStrokes?.[l.id];
         if (list && (viewBase || stroke.color !== s.init.colorHex)) {
@@ -4954,6 +4964,7 @@ export class PaintEditorController {
         const fl = s.fluorChannel();
         const th = s.thermoChannel();
         const cultures = this.applyStrokeCulture(out, s, l, surface, s.result!);
+        const prev = out;
         out = withLiveStroke({
           ...out,
           layers: mapLayer(out.layers, l.id, () => ({ ...l, surface, offset })),
@@ -4966,6 +4977,7 @@ export class PaintEditorController {
           ...(th ? { thermo: withLayerLight(out.thermo, l.id, th) } : {}),
           ...(cultures ? { cultures } : { cultures: undefined }),
         }, stroke);
+        out = this.withTailStroke(prev, out, s, stroke);
       },
     };
     // A stroke layer's document pixels are drawn in the light side of dual colours (the view shows the scheme's).
@@ -7476,6 +7488,24 @@ export class PaintEditorController {
         state = { ...state, ...loadedCultures };
       }
     }
+    if (ext.strokeTails && typeof ext.strokeTails === 'object') {
+      const tails: Record<string, StrokeTail> = {};
+      const logged = new Map(state.strokes.map((x) => [x.id, x]));
+      for (const [id, v] of Object.entries(ext.strokeTails as Record<string, unknown>)) {
+        const l = findLayer(state.layers, id)?.layer;
+        if (!isPixelLayer(l)) continue;
+        try {
+          const t = strokeTailFromJSON(v);
+          const missing = t.ids.find((x) => logged.get(x)?.layerId !== id);
+          if (missing) throw new Error(`stroke "${missing}" is not in the stroke log on that layer`);
+          // As opened, the layer's pixels and light are what its strokes last drew.
+          tails[id] = { ...t, top: l.surface, topLight: state.light?.[id] ?? null };
+        } catch (e) {
+          problems.push(`The editable strokes of layer "${id}" could not be read (${(e as Error).message}); its strokes load baked into its pixels.`);
+        }
+      }
+      if (Object.keys(tails).length) state = { ...state, strokeTails: tails };
+    }
     const raw = ext.layerChannels;
     if (!raw || typeof raw !== 'object') return state;
     const thick: Record<string, ThickChannels> = {};
@@ -7522,8 +7552,19 @@ export class PaintEditorController {
    */
   private ledgerExtensions(state: PaintDocumentState, strokes: StrokeLogOption | undefined): PaintDocumentExtensions {
     const ext = this.thickExtensions(state);
-    if (savesStrokeLog(state, { strokes, extensions: ext }) && !this.openedGaps(state).size) ext.unloggedComplete = true;
+    const savesLog = savesStrokeLog(state, { strokes, extensions: ext });
+    if (savesLog && !this.openedGaps(state).size) ext.unloggedComplete = true;
     else delete ext.unloggedComplete;
+    // Pixel layers' editable strokes (#902) name strokes of the log: only next to it (a pixel layer's are always saved in full).
+    const tails: Record<string, unknown> = {};
+    if (savesLog) {
+      for (const id of Object.keys(this.doc.strokeTails ?? {})) {
+        const t = this.validTail(this.doc, id);
+        if (t && findLayer(state.layers, id)) tails[id] = strokeTailToJSON(t);
+      }
+    }
+    if (Object.keys(tails).length) ext.strokeTails = tails;
+    else delete ext.strokeTails;
     return ext;
   }
 
@@ -7698,6 +7739,7 @@ export class PaintEditorController {
     delete this.extensions.lighting;
     delete this.extensions.stickers;
     delete this.extensions.liveStrokes;
+    delete this.extensions.strokeTails;
     delete this.extensions.unlogged;
     delete this.extensions.unloggedComplete;
     delete this.extensions.brushSources;
@@ -8453,11 +8495,14 @@ export class PaintEditorController {
     return { liveStrokes: out };
   }
 
-  private liveStrokeLayer(layerId: string | undefined, what: string): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[] } {
+  private liveStrokeLayer(layerId: string | undefined, what: string, options: { tails?: boolean } = {}): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[] } {
     const l = this.wetLayer(layerId, what);
     const strokes = this.doc.liveStrokes?.[l.id];
-    if (!strokes) throw new PaintEditorError(`Layer "${l.name}" is not a stroke layer; add one with add_layer {type: "strokes"} (or convert_to_stroke_layer on an empty layer), then paint on it.`);
-    return { layer: l, strokes };
+    if (strokes) return { layer: l, strokes };
+    const tail = options.tails ? this.validTail(this.doc, l.id) : null;
+    if (tail) return { layer: l, strokes: this.tailStrokes(this.doc, tail) };
+    if (options.tails) return { layer: l, strokes: [] };
+    throw new PaintEditorError(`Layer "${l.name}" is not a stroke layer; add one with add_layer {type: "strokes"} (or convert_to_stroke_layer on an empty layer), then paint on it.`);
   }
 
   /** Whether a layer is a live stroke layer. */
@@ -8478,22 +8523,166 @@ export class PaintEditorController {
 
   /** A stroke layer's strokes, bottom first. */
   listLiveStrokes(layerId?: string): RecordedStroke[] {
-    return this.liveStrokeLayer(layerId, 'list the strokes of').strokes.map((x) => ({ ...x }));
+    return this.liveStrokeLayer(layerId, 'list the strokes of', { tails: true }).strokes.map((x) => ({ ...x }));
   }
 
   /** The stroke layer holding a live stroke, and where. */
-  private findLiveStroke(id: string): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[]; index: number } {
+  private findLiveStroke(id: string): { layer: PaintPixelLayer; strokes: readonly RecordedStroke[]; index: number; tail: StrokeTail | null } {
     for (const [layerId, strokes] of Object.entries(this.doc.liveStrokes ?? {})) {
       const index = strokes.findIndex((x) => x.id === id);
       const layer = findLayer(this.doc.layers, layerId)?.layer;
-      if (index >= 0 && isPixelLayer(layer)) return { layer, strokes, index };
+      if (index >= 0 && isPixelLayer(layer)) return { layer, strokes, index, tail: null };
     }
-    const baked = this.doc.strokes.some((x) => x.id === id);
+    const logged = this.doc.strokes.find((x) => x.id === id);
+    if (logged) {
+      const tail = this.validTail(this.doc, logged.layerId);
+      const strokes = tail ? this.tailStrokes(this.doc, tail) : null;
+      const index = strokes ? strokes.findIndex((x) => x.id === id) : -1;
+      const layer = findLayer(this.doc.layers, logged.layerId)?.layer;
+      if (strokes && index >= 0 && isPixelLayer(layer)) return { layer, strokes, index, tail };
+    }
     throw new PaintEditorError(
-      baked
-        ? `Stroke "${id}" was painted on a pixel layer, so its pixels are baked; only strokes on a stroke layer can be edited (list_strokes {live: true}). Replay it onto a stroke layer (replay_strokes layerId) to edit the copy.`
+      logged
+        ? `Stroke "${id}" can't be edited: ${BAKED_STROKE_REASON} Call list_strokes {live: true} for the ids of editable strokes, or replay it (replay_strokes) to paint an editable copy.`
         : `Unknown stroke "${id}". Call list_strokes {live: true} for the ids of editable strokes.`
     );
+  }
+
+  // --- Editable strokes on pixel layers (#902) ------------------------------------
+
+  /** The logged strokes by id, per log array. */
+  private loggedById = new WeakMap<readonly RecordedStroke[], Map<string, RecordedStroke>>();
+
+  private loggedStroke(doc: PaintDocumentState, id: string): RecordedStroke | undefined {
+    let m = this.loggedById.get(doc.strokes);
+    if (!m) {
+      m = new Map(doc.strokes.map((x) => [x.id, x]));
+      this.loggedById.set(doc.strokes, m);
+    }
+    return m.get(id);
+  }
+
+  /**
+   * A pixel layer's stroke tail when it still holds: the layer's pixels and light are what the tail
+   * last drew (`top`), at offset 0, with no wet paint flowing on it and every stroke in the log.
+   */
+  private validTail(doc: PaintDocumentState, layerId: string): StrokeTail | null {
+    const t = doc.strokeTails?.[layerId];
+    if (!t) return null;
+    const l = findLayer(doc.layers, layerId)?.layer;
+    if (!isPixelLayer(l) || l.surface !== t.top || (doc.light?.[layerId] ?? null) !== t.topLight || l.offset.x || l.offset.y) return null;
+    if (doc.liveStrokes?.[layerId] || doc.stickers?.[layerId]?.length || this.wet.wetLayerIds().includes(layerId)) return null;
+    return t.ids.every((id) => this.loggedStroke(doc, id)?.layerId === layerId) ? t : null;
+  }
+
+  /** A tail's strokes from the log, bottom first. */
+  private tailStrokes(doc: PaintDocumentState, tail: StrokeTail): RecordedStroke[] {
+    return tail.ids.map((id) => this.loggedStroke(doc, id)!);
+  }
+
+  /**
+   * Whether a stroke just painted on a pixel layer can be redrawn exactly from the pixels under it:
+   * what a stroke layer takes (`liveStrokeRefusal`), and nothing else on the layer it could read or
+   * write (relief, film, ferrofluid, fluorescent or thermochromic ink, stickers, cultures, wet paint,
+   * live effect paint), on an unlocked layer at offset 0.
+   */
+  private tailEligible(prev: PaintDocumentState, s: PaintStrokeSession, stroke: RecordedStroke): boolean {
+    const id = s.layerId;
+    const l = findLayer(prev.layers, id)?.layer;
+    const brush = s.init.brush;
+    if (!isPixelLayer(l) || liveStrokeRefusal(brush) || brush.iridescence || s.init.wet || s.init.scraper) return false;
+    if (l.offset.x || l.offset.y || isLayerLocked(l, 'pixels') || isLayerLocked(l, 'transparency') || this.tempLayerTargets.has(id)) return false;
+    if (prev.liveStrokes?.[id] || prev.stickers?.[id]?.length || prev.effectLayers?.[id] || prev.cultures?.[id]) return false;
+    if (prev.thick?.[id] || prev.ferro?.[id] || prev.fluor?.[id] || prev.thermo?.[id] || this.wet.wetLayerIds().includes(id)) return false;
+    if (s.thickChannels() || s.ferroChannel() || s.fluorChannel() || s.thermoChannel() || s.stickers()) return false;
+    return !isLiveEffect(stroke);
+  }
+
+  /**
+   * `next` (the document after `stroke`, painted on `prev`) with the layer's stroke tail extended
+   * by the stroke, started over the layer's pixels before it, or dropped when it can't be redrawn.
+   */
+  private withTailStroke(prev: PaintDocumentState, next: PaintDocumentState, s: PaintStrokeSession, stroke: RecordedStroke): PaintDocumentState {
+    const id = s.layerId;
+    const after = findLayer(next.layers, id)?.layer;
+    if (!isPixelLayer(after) || next.liveStrokes?.[id]) return next;
+    if (!this.tailEligible(prev, s, stroke)) {
+      if (!next.strokeTails?.[id]) return next;
+      const { [id]: _gone, ...rest } = next.strokeTails;
+      return { ...next, strokeTails: Object.keys(rest).length ? rest : undefined };
+    }
+    const before = findLayer(prev.layers, id)!.layer as PaintPixelLayer;
+    const held = this.validTail(prev, id);
+    const top = { top: after.surface, topLight: next.light?.[id] ?? null };
+    const tail: StrokeTail = held ? { ...held, ids: [...held.ids, stroke.id], ...top } : { base: before.surface, baseLight: prev.light?.[id] ?? null, ids: [stroke.id], ...top };
+    return { ...next, strokeTails: { ...(next.strokeTails ?? {}), [id]: tail } };
+  }
+
+  /**
+   * The document with a pixel layer's tail strokes set to `list` (an edit of the tail: changed,
+   * reordered or fewer strokes), its pixels and light redrawn from the tail's base and the log edited
+   * to match (`withTailLog`).
+   */
+  private withTailStrokes(doc: PaintDocumentState, layer: PaintPixelLayer, tail: StrokeTail, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): PaintDocumentState {
+    if (isLayerLocked(layer, 'pixels')) throw new PaintEditorError(`Layer "${layer.name}" has its pixels locked; unlock it (update_layer locks) first.`);
+    const current = findLayer(doc.layers, layer.id)?.layer as PaintPixelLayer;
+    const lit = Boolean(tail.baseLight) || list.some((s) => s.brush.light.amount > 0);
+    const drawn = this.drawLiveLayer(current, list, dirty, lit ? (doc.light?.[layer.id] ?? null) : undefined, { surface: tail.base, light: tail.baseLight });
+    const light = { ...(doc.light ?? {}) };
+    if (drawn.light?.tiles.size) light[layer.id] = drawn.light;
+    else delete light[layer.id];
+    const keepLight = Boolean(doc.light) || Boolean(drawn.light?.tiles.size);
+    const next: StrokeTail = { ...tail, ids: list.map((s) => s.id), top: drawn.surface, topLight: keepLight ? (light[layer.id] ?? null) : null };
+    return {
+      ...doc,
+      ...withTailLog(doc, tail.ids, list),
+      layers: mapLayer(doc.layers, layer.id, (l) => ({ ...(l as PaintPixelLayer), surface: drawn.surface })),
+      ...(keepLight ? { light } : {}),
+      strokeTails: { ...(doc.strokeTails ?? {}), [layer.id]: next },
+    };
+  }
+
+  /**
+   * The strokes of a layer that can be edited now (`updateStroke` and the rest), bottom first: a
+   * stroke layer's strokes, or a pixel layer's strokes since it was last flattened (`[]` when there
+   * are none). `null` for a layer that holds no strokes (a sticker or vector layer, or no layer).
+   */
+  editableStrokes(layerId?: string): RecordedStroke[] | null {
+    const id = layerId ?? this.doc.activeLayerId;
+    if (!id) return null;
+    const l = findLayer(this.doc.layers, id)?.layer;
+    if (!isPixelLayer(l) || this.doc.stickers?.[id]?.length) return null;
+    const live = this.doc.liveStrokes?.[id];
+    if (live) return live.map((x) => ({ ...x }));
+    const tail = this.validTail(this.doc, id);
+    return tail ? this.tailStrokes(this.doc, tail).map((x) => ({ ...x })) : [];
+  }
+
+  /** Every stroke that can be edited now (`editableStrokes` of each layer), top layer's last. */
+  allEditableStrokes(): RecordedStroke[] {
+    const out: RecordedStroke[] = [];
+    for (const l of flattenLayers(this.doc.layers)) if (isPixelLayer(l)) out.push(...(this.editableStrokes(l.id) ?? []));
+    return out;
+  }
+
+  /** An editable stroke by id (a copy), or `null` when it can't be edited now. */
+  editableStroke(id: string): RecordedStroke | null {
+    try {
+      const f = this.findLiveStroke(id);
+      return { ...f.strokes[f.index] };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether a stroke (by id) can be edited now: on a stroke layer, or painted on a pixel layer since it was last flattened. */
+  isStrokeEditable(id: string): boolean {
+    try {
+      this.findLiveStroke(id);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -8591,9 +8780,12 @@ export class PaintEditorController {
     const layers = new Map<string, PaintPixelLayer>();
     for (const f of found) layers.set(f.layer.id, f.layer);
     for (const [layerId, layer] of layers) {
-      const gone = (doc.liveStrokes?.[layerId] ?? []).filter((x) => ids.includes(x.id));
+      const tail = found.find((f) => f.layer.id === layerId)!.tail;
+      const list = tail ? this.tailStrokes(doc, this.validTail(doc, layerId) ?? tail) : (doc.liveStrokes?.[layerId] ?? []);
+      const gone = list.filter((x) => ids.includes(x.id));
       for (const x of gone) bounds = unionRect(bounds, this.strokeArea(x));
-      doc = this.withLiveStrokes(doc, layer, (doc.liveStrokes?.[layerId] ?? []).filter((x) => !ids.includes(x.id)), this.strokeAreas(gone));
+      const kept = list.filter((x) => !ids.includes(x.id));
+      doc = tail ? this.withTailStrokes(doc, layer, this.validTail(doc, layerId) ?? tail, kept, this.strokeAreas(gone)) : this.withLiveStrokes(doc, layer, kept, this.strokeAreas(gone));
     }
     this.commit(ids.length === 1 ? 'Remove stroke' : 'Remove strokes', doc);
     return { removed: [...ids], bounds };
@@ -8626,7 +8818,8 @@ export class PaintEditorController {
       this.commit('Rasterize stroke layer', { ...this.doc, ...this.liveStrokesWithout([l.id]) });
       return;
     }
-    this.commitLiveStrokes('Strokes', l, strokes.map((x) => ({ ...x, layerId: l.id })));
+    // A stroke layer's list as a replay sets it, never a pixel layer's editable strokes (whose ids name the log).
+    this.commit('Strokes', this.withLiveStrokes(this.doc, l, strokes.map((x) => ({ ...x, layerId: l.id }))));
   }
 
   /**
@@ -8636,7 +8829,7 @@ export class PaintEditorController {
    */
   liveStrokeAt(layerId: string | undefined, x: number, y: number): RecordedStroke | null {
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new PaintEditorError('x and y must be numbers of document pixels.');
-    const { layer, strokes } = this.liveStrokeLayer(layerId, 'pick a stroke on');
+    const { layer, strokes } = this.liveStrokeLayer(layerId, 'pick a stroke on', { tails: true });
     const plain: PaintPixelLayer = { ...layer, visible: true, locks: undefined, offset: { x: 0, y: 0 } };
     const doc: PaintDocumentState = { ...this.doc, liveStrokes: undefined, stickers: undefined };
     const px = Math.floor(x);
@@ -8664,7 +8857,8 @@ export class PaintEditorController {
 
   /** Commits a layer's new stroke list with its redrawn pixels, recorded for replays (one undo step). */
   private commitLiveStrokes(label: string, layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null): void {
-    this.commit(label, this.withLiveStrokes(this.doc, layer, list, dirty));
+    const tail = this.doc.liveStrokes?.[layer.id] ? null : this.validTail(this.doc, layer.id);
+    this.commit(label, tail ? this.withTailStrokes(this.doc, layer, tail, list, dirty) : this.withLiveStrokes(this.doc, layer, list, dirty));
   }
 
   /**
@@ -8768,7 +8962,7 @@ export class PaintEditorController {
    * none) the light channel too: every stroke's light twin runs over it in the same order and the
    * same areas, so light comes and goes with the strokes that lay, dim or erase it.
    */
-  private drawLiveLayer(layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null, light?: TiledSurface | null): { surface: TiledSurface; light: TiledSurface | null } {
+  private drawLiveLayer(layer: PaintPixelLayer, list: readonly RecordedStroke[], dirty?: RasterRect[] | null, light?: TiledSurface | null, base?: { surface: TiledSurface; light: TiledSurface | null }): { surface: TiledSurface; light: TiledSurface | null } {
     // Drawn on a copy of the layer as a visible, unlocked, plain layer at offset 0.
     const plain: PaintPixelLayer = { ...layer, visible: true, locks: undefined, offset: { x: 0, y: 0 } };
     const doc: PaintDocumentState = { ...this.doc, liveStrokes: undefined, stickers: undefined };
@@ -8776,8 +8970,8 @@ export class PaintEditorController {
     const unknown = list.filter((s) => !this.paintedBounds.has(s));
     const partial = dirty && !layer.offset.x && !layer.offset.y && unknown.length <= 4;
     if (!partial) {
-      let surface = emptySurface(4);
-      let l: TiledSurface | null | undefined = lit ? null : undefined;
+      let surface = base?.surface ?? emptySurface(4);
+      let l: TiledSurface | null | undefined = lit ? (base?.light ?? null) : undefined;
       for (const st of list) {
         const r = this.drawLiveStroke(doc, plain, surface, st, undefined, l);
         surface = r.surface;
@@ -8795,8 +8989,9 @@ export class PaintEditorController {
     const rects = areas.filter((r) => r.width > 0 && r.height > 0);
     if (!rects.length) return { surface: layer.surface, light: light ?? null };
     const overlaps = (a: RasterRect, b: RasterRect) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
-    let drawn = emptySurface(4);
-    let drawnLight: TiledSurface | null | undefined = lit ? null : undefined;
+    // A pixel layer's tail draws over its base: a pixel depends only on the base there and the strokes over it.
+    let drawn = base?.surface ?? emptySurface(4);
+    let drawnLight: TiledSurface | null | undefined = lit ? (base?.light ?? null) : undefined;
     for (const st of list) {
       const b = this.paintedBounds.get(st);
       if (!b || !rects.some((r) => overlaps(r, b))) continue;

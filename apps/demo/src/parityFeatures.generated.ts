@@ -2229,6 +2229,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`PaintEditorController.updateStroke`, `PaintStrokePanel`, Select stroke in `PaintCanvasView`"
       },
       {
+        "feature": "Editable strokes on pixel layers (#902: the strokes painted on a pixel layer since its last flattening point (a stroke or change that can't be redrawn exactly) stay selectable and editable over the pixels under them; edits change the stroke log, so replays, exports and the other colour scheme show them; strokes before it say why they are baked; saved, undone and replayed; `list_strokes` `live` / `notEditable`, `stroke_at`, `update_stroke`, `edit_stroke_points`, `reorder_stroke`, `remove_strokes` agent tools)",
+        "core": "`editableStrokes`, `allEditableStrokes`, `editableStroke`, `isStrokeEditable`, `PaintDocumentState.strokeTails`, `StrokeTail`",
+        "react": "`<StrokePanel>` (Editable strokes on a pixel layer), the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",
+        "svelte": "`<StrokePanel>` (Editable strokes on a pixel layer), the Select stroke tool in `<PaintToolbar>` / `<PaintCanvas>`",
+        "swift": "`PaintEditorController.editableStrokes`, `PaintStrokePanel`, Select stroke in `PaintCanvasView`"
+      },
+      {
         "feature": "Pixel layers in the colour scheme, replayed from the stroke log (#720: light / dark strokes on pixel layers, wet paint included, shown in the viewer's `setColorScheme` side by replaying the recorded strokes and events with each pair in that side into a view-only editor, so wet paint mixes the dark sides as it mixed the light ones; built lazily in the background, the layer showing its own pixels until it is ready; kept current from new strokes and events, a live stroke followed point by point at its recorded clocks, undo and redo rolled back to checkpoints; layers holding pixels the log doesn't have (merges, moves, transforms, imports) keep their colours and say why, saved with the document; never changes the document, history or saved file; `get_color_scheme_view` agent tool)",
         "core": "`colorSchemeView`, `colorSchemeViewReady`, `PaintEditorState.colorSchemeView`, `PaintDocumentState.unlogged`, `replayItem`",
         "react": "`colorSchemeView` in `usePaintEditorState`, kept / updating marks in `<PaintLayersPanel>`",

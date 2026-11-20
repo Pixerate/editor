@@ -1762,6 +1762,7 @@
               "id": "s1",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1779,6 +1780,7 @@
               "id": "s2",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1796,6 +1798,7 @@
               "id": "s3",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1813,6 +1816,7 @@
               "id": "s4",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1830,6 +1834,7 @@
               "id": "s5",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1847,6 +1852,7 @@
               "id": "s6",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1864,6 +1870,7 @@
               "id": "s7",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1881,6 +1888,7 @@
               "id": "s8",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             },
@@ -1898,6 +1906,7 @@
               "id": "s9",
               "layerId": "base",
               "live": false,
+              "notEditable": "Painted before its layer was last flattened (by a stroke or change that can’t be redrawn exactly: wet paint, a smudge, blender or pick-up, a fill, a filter, a transform, an import), so its pixels are baked. Strokes painted after that stay editable.",
               "points": 2,
               "seed": 3
             }

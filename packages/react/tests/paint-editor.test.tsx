@@ -721,6 +721,26 @@ describe('stroke layers', () => {
     expect(container.querySelector('[data-testid="stroke-panel"]')).toBeNull();
     expect(c.getState().undoLabel).toBe('Rasterize stroke layer');
   });
+
+  it('lists a pixel layer’s strokes since it was last flattened, editable, without Rasterize (#902)', () => {
+    const c = new PaintEditorController({ width: 300, height: 200 });
+    render(<StrokePanel controller={c} />);
+    expect(container.querySelector('[data-testid="stroke-panel"]')).toBeNull();
+    act(() => {
+      c.paintStroke({ points: [{ x: 20, y: 60 }, { x: 260, y: 60 }], brushId: 'ink-pen', color: '#2563eb' });
+      c.paintStroke({ points: [{ x: 20, y: 120 }, { x: 260, y: 120 }], brushId: 'ink-pen', color: '#dc2626' });
+    });
+    expect(container.querySelector('[data-testid="stroke-panel"]')?.textContent).toContain('Editable strokes (2)');
+    expect(byText('Rasterize')).toBeUndefined();
+    click(container.querySelectorAll('[data-testid="stroke-panel"] [role="option"]')[1]);
+    click(byText('New seed'));
+    const b = c.editableStrokes()![1];
+    expect(c.getStrokes()[1].seed).toBe(b.seed);
+    act(() => {
+      c.paintStroke({ points: [{ x: 100, y: 30 }, { x: 110, y: 90 }, { x: 100, y: 150 }], brushId: 'smudge' });
+    });
+    expect(container.querySelector('[data-testid="stroke-panel"]')).toBeNull();
+  });
 });
 
 describe('light paint', () => {

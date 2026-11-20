@@ -129,7 +129,7 @@ public struct PaintCanvasView: View {
     private func guideLines() -> [GuideLine] {
         var out: [GuideLine] = []
         let c = model.canvas
-        if let id = model.selectedStroke, model.liveStrokes?.contains(where: { $0.id == id }) == true, let area = model.controller.liveStrokeArea(id) {
+        if let id = model.selectedStroke, model.editableStrokes?.contains(where: { $0.id == id }) == true, let area = model.controller.liveStrokeArea(id) {
             let drag = model.strokeDrag
             let dx = drag?.id == id ? drag!.dx : 0, dy = drag?.id == id ? drag!.dy : 0
             let x0 = Double(area.x) + dx, y0 = Double(area.y) + dy, x1 = x0 + Double(area.width), y1 = y0 + Double(area.height)

@@ -10,7 +10,9 @@
   let { controller, class: className = '' }: Props = $props();
   const editor = paintEditorState(() => controller);
   const layerId = $derived(editor.current.document.activeLayerId);
-  const strokes = $derived(layerId ? editor.current.document.liveStrokes?.[layerId] : undefined);
+  const strokeLayer = $derived(Boolean(layerId && editor.current.document.liveStrokes?.[layerId]));
+  // Read through the state's document (the controller's), so a change re-derives it.
+  const strokes = $derived(layerId && editor.current.document ? controller.editableStrokes(layerId) : null);
   const index = $derived(strokes ? strokes.findIndex((s) => s.id === editor.current.selectedStroke) : -1);
   const sel = $derived(strokes && index >= 0 ? strokes[index] : null);
   const brushes = $derived(editor.current.brushes.filter((b) => !liveStrokeRefusal(b)));
@@ -18,12 +20,12 @@
   const run = (fn: () => unknown) => attempt(fn, (m) => (error = m));
 </script>
 
-<!-- The active stroke layer's strokes: pick one (here, or with the Select stroke tool on the canvas) to change its brush, size, opacity, flow, colour or seed, reorder or delete it. The layer redraws exactly; each change is one undo step. -->
-{#if layerId && strokes}
+<!-- The active layer's editable strokes (a stroke layer's, or a pixel layer's since it was last flattened, #902): pick one (here, or with the Select stroke tool on the canvas) to change its brush, size, opacity, flow, colour or seed, reorder or delete it. The layer redraws exactly; each change is one undo step. -->
+{#if layerId && strokes && (strokeLayer || strokes.length)}
   <div class={`${panel} ${className}`} data-testid="stroke-panel">
     <div class="flex items-center justify-between">
-      <span class="font-medium text-slate-300">Strokes ({strokes.length})</span>
-      <button type="button" class={button} onclick={() => run(() => controller.rasterizeLiveStrokes(layerId))}>Rasterize</button>
+      <span class="font-medium text-slate-300" title={strokeLayer ? undefined : 'Strokes painted on this layer since it was last flattened (by wet paint, a smudge, a fill or a filter)'}>{strokeLayer ? 'Strokes' : 'Editable strokes'} ({strokes.length})</span>
+      {#if strokeLayer}<button type="button" class={button} onclick={() => run(() => controller.rasterizeLiveStrokes(layerId))}>Rasterize</button>{/if}
     </div>
     <div class="flex max-h-24 flex-wrap gap-1 overflow-y-auto" role="listbox" aria-label="Strokes">
       {#each strokes as s, i (s.id)}
