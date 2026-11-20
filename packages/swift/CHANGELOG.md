@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.85.3
+
+### Patch Changes
+
+- 8da4295: Scraper brushes now resolve `dynamics.count`, `dynamics.flip` and `tip.grain` as the TypeScript core does. Before, a scraper with several dabs per step laid one in Swift.
+
 ## 0.85.2
 
 ### Patch Changes
