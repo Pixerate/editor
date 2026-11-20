@@ -126,10 +126,14 @@ Facets are listed in the same order in several places (the schema's properties, 
   `PaintToolArguments.swift` comes from `pnpm gen:swift`; `swift-generated.test.ts` fails without it.
 - **Until a preset uses the facet, almost nothing fails.** The TS facet can be half-wired (missing
   from `ordered()`, `resolve.ts` or the engine model) and all tests pass. Add the preset early.
-- **Swift checks resolve and normalize only.** With a preset, `BrushModelTests` fails until
-  Swift's `Normalize`, `Migrate`, `Resolve` and engine model know the facet. Nothing compares
-  Swift's `checkBrush` with `checks.json`, and Swift has no brush editor sections. Port
-  `Profiles.swift` by reading `profiles.ts`; no test will tell you it's missing.
+- **Swift checks resolve, normalize and host support.** With a preset, `BrushModelTests` fails
+  until Swift's `Normalize`, `Migrate`, `Resolve` and engine model know the facet, and
+  `BrushHostCheckTests` fails until `Profiles.swift` has the profile field (its value on every
+  host matching `profiles.json`) and the `checkBrush` line: it runs Swift's `checkBrush` on every
+  preset and host and compares `ok` and each issue's facet and severity with `checks.json`. The
+  contracts don't record an issue's reason or fix, so port those words from `profiles.ts` by hand,
+  and give `degrade` the case that strips the facet (the test checks it drops every refusal). Swift
+  has no brush editor sections.
 - No test checks the schema descriptions, `patch.ts`, the editor controls, the parity row or
   the skills. Check them by hand: `create_brush` and `update_brush` (with `unset`) on the new
   facet, `check_brush` on every host, and the brush editor in the demo.

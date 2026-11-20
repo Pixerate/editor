@@ -190,9 +190,11 @@ public func checkBrush(_ brush: Brush, _ profile: BrushHostProfile) -> BrushChec
     return BrushCheck(ok: !issues.contains { $0.severity == "error" }, issues: issues)
 }
 
-/// The brush the host can render: facets it refuses are removed, each reported in `dropped`.
-public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
-    let before = checkBrush(brush, profile).issues.filter { $0.severity == "error" }
+/// The brush the host can render: facets it refuses are removed, each reported in `dropped`. A
+/// kind or tool the host lacks can't be stripped and stays in `issues`. `ignored: true` also
+/// removes what the host paints without (its warnings), for a brush made only of what it uses.
+public func degrade(_ brush: Brush, _ profile: BrushHostProfile, ignored: Bool = false) -> JSONObject {
+    let before = checkBrush(brush, profile).issues.filter { $0.severity == "error" || ignored }
     var b = brush
     var dropped: [BrushIssue] = []
     func edit(_ key: String, _ fn: (inout JSONObject) -> Void) {
@@ -238,11 +240,17 @@ public func degrade(_ brush: Brush, _ profile: BrushHostProfile) -> JSONObject {
         case "dynamics.velocity": edit("dynamics") { o in o["velocitySize"] = nil; o["velocityOpacity"] = nil }
         case "dynamics.tilt": edit("dynamics") { o in o["tiltSize"] = nil; o["tiltRoundness"] = nil; o["tiltOpacity"] = nil }
         case "colour.default": edit("colour") { $0["default"] = nil }
+        case "colour.palette":
+            edit("colour") { o in
+                let kept = (o["palette"]?.arrayValue ?? []).filter { profile.colours.contains(brushColourKind($0)) }
+                o["palette"] = kept.isEmpty ? nil : .array(kept)
+            }
         default: continue
         }
         dropped.append(issue)
     }
     if let e = b.path("behaviour.exchange")?.objectValue, e.isEmpty { edit("behaviour") { $0["exchange"] = nil } }
+    if let c = b["colour"]?.objectValue, c.isEmpty { b["colour"] = nil }
     let after = checkBrush(b, profile).issues.filter { $0.severity == "error" }
     return ["brush": .object(b), "dropped": .array(dropped.map(\.json)), "issues": .array(after.map(\.json))]
 }
