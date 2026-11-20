@@ -469,10 +469,15 @@ public final class PaintEditorController {
             layerLight: { [unowned self] id in doc.light?.get(id) },
             updateLights: { [unowned self] lights in
                 let d = doc
+                var rects: [RasterRect]? = []
+                for (id, surface) in lights {
+                    guard let l = findLayer(d.layers, id)?.layer else { continue }
+                    if let r = lightDirty(d.light?.get(id), surface, lightSpills[id] ?? DEFAULT_LIGHT_SPILL, l.isPixel ? l.pixelOffset : LayerOffset(x: 0, y: 0)), rects != nil { rects! += r } else { rects = nil }
+                }
                 // Wet light moving is not an undo step either.
                 setDocSilentlyKeepingGrowth(d.with { o in for (id, surface) in lights where findLayer(d.layers, id) != nil { o.settingLight(id, surface) } })
-                // Anywhere: light spills past its tiles (`computeSpill`), so tile rectangles would miss the glow around them.
-                emit(nil)
+                // Light spills past its tiles (`computeSpill`): the rectangles are grown by how far the spill reaches (#824).
+                emit(rects)
             },
             layerHeight: { [unowned self] id in doc.thick?.get(id)?.height },
             updateHeights: { [unowned self] heights in

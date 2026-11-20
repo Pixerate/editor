@@ -145,6 +145,45 @@ private let byteToLinear: [Double] = (0..<256).map { colourToLinear(Double($0) /
  * the blur by colour channel, and the picture by pixel row. Pixels whose four reduced cells hold no
  * energy are skipped: they add nothing (`colourFromLinear(0)` is 0).
  */
+/// How far (px) `computeSpill` carries a lit pixel: three box blurs of `box` reduced cells of `f` px, plus the cell a pixel samples between.
+func spillReach(_ spill: LightSpill) -> Int {
+    if !(spill.radius > 0) || !(spill.strength > 0) { return 0 }
+    let f = Swift.max(1, Int(JS.floor(spill.radius / 6)))
+    let box = Swift.max(1, Int(JS.round(spill.radius / Double(f) / 2.5)))
+    return Swift.max(Int(JS.ceil(spill.radius)), (3 * box + 2) * f)
+}
+
+/**
+ * Where the view changes (document space) when a layer's light goes from `old` to `new` (layer
+ * space, at `offset`), nil for anywhere (#824). The glow is per pixel, so a changed tile changes
+ * itself; the spill reaches `spillReach` around it, as long as its reduced grid stays where it was
+ * (it is aligned to the light's bounds). When the bounds move, the grid moves: everywhere either
+ * spill covers changes.
+ */
+func lightDirty(_ old: TiledSurface?, _ new: TiledSurface, _ spill: LightSpill, _ offset: LayerOffset) -> [RasterRect]? {
+    if old === new { return [] }
+    let reach = spillReach(spill)
+    let grow = { (r: RasterRect, by: Int) in RasterRect(x: r.x + offset.x - by, y: r.y + offset.y - by, width: r.width + 2 * by, height: r.height + 2 * by) }
+    let oldBounds = old?.bounds
+    if reach > 0 && oldBounds != new.bounds {
+        let r = Int(JS.ceil(spill.radius))
+        var out: [RasterRect] = []
+        for b in [oldBounds, new.bounds] { if let b { out.append(grow(b, r)) } }
+        return out
+    }
+    var out: [RasterRect] = []
+    let before = old?.tiles ?? OrderedMap()
+    for (key, t) in new.tiles where before.get(key) !== t {
+        let (tx, ty) = tileCoord(key)
+        out.append(grow(RasterRect(x: tx * TILE, y: ty * TILE, width: TILE, height: TILE), reach))
+    }
+    for (key, _) in before where new.tiles.get(key) == nil {
+        let (tx, ty) = tileCoord(key)
+        out.append(grow(RasterRect(x: tx * TILE, y: ty * TILE, width: TILE, height: TILE), reach))
+    }
+    return out
+}
+
 func computeSpill(_ color: TiledSurface, _ light: TiledSurface?, _ spill: LightSpill) -> TiledSurface? {
     guard let light, let b = lightInfo(light).bounds, spill.radius > 0, spill.strength > 0 else { return nil }
     let r = Int(JS.ceil(spill.radius))
