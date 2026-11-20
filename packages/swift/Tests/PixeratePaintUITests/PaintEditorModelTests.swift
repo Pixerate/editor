@@ -183,6 +183,36 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertEqual(image.height, 768)
     }
 
+    func testThePresenterCompositesOnlyTheTilesInView() throws {
+        let model = try makeModel(width: 2048, height: 1536)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        var view = model.view
+        view.zoom = 2
+        view.panX = 1024 * 2 - 300
+        view.panY = 768 * 2 - 200
+        let visible = try XCTUnwrap(visibleDocumentRect(view, model.controller.doc.canvas, viewport: 600, 400, margin: VIEW_MARGIN))
+        XCTAssertEqual(visible, RasterRect(x: 0, y: 0, width: 300 + VIEW_MARGIN, height: 200 + VIEW_MARGIN))
+        XCTAssertEqual(presenter.tiles(visible: visible).count, 4)
+        XCTAssertEqual(presenter.lastTilesDrawn, 4)
+        // A stroke out of view draws nothing now, and its tile once the view gets there.
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: [PenPoint(x: 1800, y: 1300), PenPoint(x: 1900, y: 1400)])
+        _ = presenter.tiles(visible: visible)
+        XCTAssertEqual(presenter.lastTilesDrawn, 0)
+        let there = RasterRect(x: 1792, y: 1280, width: 256, height: 256)
+        XCTAssertTrue(presenter.tiles(visible: there).contains { $0.tx == 7 && $0.ty == 5 })
+        XCTAssertEqual(presenter.lastTilesDrawn, 1)
+        // A rotated, centred view takes the rectangle around what it shows; one off the canvas shows none.
+        var centred = view
+        centred.panX = 0
+        centred.panY = 0
+        XCTAssertEqual(visibleDocumentRect(centred, model.controller.doc.canvas, viewport: 600, 400), RasterRect(x: 874, y: 668, width: 300, height: 200))
+        centred.rotation = 45
+        let turned = try XCTUnwrap(visibleDocumentRect(centred, model.controller.doc.canvas, viewport: 600, 400))
+        XCTAssertEqual(turned.width, Int((1024 + 250 / 2.0.squareRoot()).rounded(.up)) - Int((1024 - 250 / 2.0.squareRoot()).rounded(.down)))
+        centred.panX = 99999
+        XCTAssertNil(visibleDocumentRect(centred, model.controller.doc.canvas, viewport: 600, 400))
+    }
+
     func testThePresenterDrawsTileImagesAndRebuildsOnlyTheChangedOnes() throws {
         let model = try makeModel(width: 600, height: 300)
         let presenter = PaintCanvasPresenter(controller: model.controller)

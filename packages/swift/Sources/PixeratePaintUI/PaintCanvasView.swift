@@ -38,7 +38,6 @@ public struct PaintCanvasView: View {
     public var body: some View {
         // Reading `revision` redraws the canvas after every change.
         let _ = model.revision
-        let tiles = presenter.tiles()
         let view = model.view
         let canvas = model.canvas
         let lines = showGuides ? guideLines() : []
@@ -47,6 +46,8 @@ public struct PaintCanvasView: View {
         let tipSize = model.brush.tip.size
         let water = waterImages(model.waterOverlayTiles)
         GeometryReader { geo in
+            // On screen only the tiles in view are composited (#515); a still takes the whole canvas.
+            let tiles = interactive ? presenter.tiles(visible: visibleDocumentRect(view, canvas, viewport: geo.size.width, geo.size.height, margin: VIEW_MARGIN)) : presenter.tiles()
             let m = paintViewMatrix(view, canvas, viewport: geo.size.width, geo.size.height)
             let t = CGAffineTransform(a: m[0], b: m[2], c: m[1], d: m[3], tx: m[4], ty: m[5])
             let smooth = view.zoom < 2

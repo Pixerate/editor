@@ -106,6 +106,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: Water spreading into new tiles wakes them (`activate`), and each fills its paper heights (`fillPaper`) with `paper.heightAt(...)` per cell. `paper` is a struct (an array and a closure) stored on the `WetWorld` class, so each of the 258² reads paid an exclusivity check and retains, about 3.3 ms a tile instead of 0.2 ms; running the tiles on several cores didn't help while they all contended for the same reference counts.
 - **Solution / Workaround**: Read the closure into a local before the loop (`let heightAt = paper.heightAt`), and fill woken tiles' paper on every core (`paintParallel`). The same applies to any per-pixel loop in the Swift engine that reads a class's struct property; measure with `SPECIALTY_BENCH=1` (`first frame` column).
 
+### [core|swift/raster] A Compositor Patches a Dirty Rectangle Only Onto the Previous Call's Tile (#515)
+
+- **Issue / Symptom**: With the paint view compositing only the tiles in view, a tile that changed while out of view (wet paint flowing, reported as small rectangles each frame) and then changed a little more once in view showed only the second change.
+- **Root Cause**: `compositeTiles` `dirty` means "what changed since the last call", and a tile whose dirty part is smaller than the tile was patched onto its cached result. That holds only if the tile was composited in that last call; one left out of it may have changed anywhere since.
+- **Solution / Workaround**: The patch path requires `entry.stamp === stamp - 1` (TS and Swift); any other cached tile with changed inputs is composited whole. Committed strokes report `'all'` (`takeDirty`), so the case only showed with flowing wet paint; `image-layers-compositor.test.ts` and `CompositorViewportTests` cover it at the compositor level.
+
 ### [core] A Conformance Host's `load` Must Not Assert: `runConformanceScenario` Swallows What It Throws
 
 - **Issue / Symptom**: In `tests/paint-conformance.test.ts`, the `… reopens what it saved unchanged` tests passed even when the save after reopening differed (#850), while Swift's `RoundTripHost` (in `PaintConformanceTests`) failed on the same scenario.

@@ -777,7 +777,9 @@ public final class RasterCompositor<L: CompositorLayer, S: RasterSources> {
         if let entry { for (index, cp) in entry.checkpoints where index <= start { checkpoints.set(index, cp) } }
         var result: TileResult
 
-        if let entry, let r = dirty, r.width < TILE || r.height < TILE {
+        // `dirty` is what changed since the last call: only a tile composited in that call can be patched (one left out of it,
+        // such as a tile out of view, may have changed anywhere since) (#515).
+        if let entry, let r = dirty, r.width < TILE || r.height < TILE, entry.stamp == stamp - 1 {
             // Only `dirty` changed: recomposite that part from the checkpoint and patch the previous result.
             var acc = [UInt8](repeating: 0, count: r.width * r.height * 4)
             if let b = base {

@@ -27,6 +27,24 @@ public func documentToScreen(_ view: PaintView, _ canvas: PaintCanvas, viewport 
     return Point2(x: p.x, y: p.y)
 }
 
+/// Document pixels around the view that are composited too, so a small pan shows no stale tiles (`VIEW_MARGIN`, #515).
+public let VIEW_MARGIN = 64
+
+/**
+ * The part of the canvas a viewport shows (document pixels, whole pixels, inside the canvas),
+ * padded by `margin` document pixels, or nil when none of it is in view (`visibleDocumentRect`,
+ * #515). The four viewport corners mapped into the document bound it.
+ */
+public func visibleDocumentRect(_ view: PaintView, _ canvas: PaintCanvas, viewport width: Double, _ height: Double, margin: Int = 0) -> RasterRect? {
+    guard width > 0, height > 0, let inv = try? invertAffine(viewMatrix(view, canvas, width, height)) else { return nil }
+    let corners = [applyAffine(inv, 0, 0), applyAffine(inv, width, 0), applyAffine(inv, 0, height), applyAffine(inv, width, height)]
+    let x0 = Swift.max(0, Int(JS.floor(corners.map(\.x).min()!)) - margin)
+    let y0 = Swift.max(0, Int(JS.floor(corners.map(\.y).min()!)) - margin)
+    let x1 = Swift.min(canvas.width, Int(JS.ceil(corners.map(\.x).max()!)) + margin)
+    let y1 = Swift.min(canvas.height, Int(JS.ceil(corners.map(\.y).max()!)) + margin)
+    return x1 > x0 && y1 > y0 ? RasterRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0) : nil
+}
+
 /// The zoom that fits the canvas in the viewport (with `margin` points around it).
 public func fitZoom(_ canvas: PaintCanvas, viewport width: Double, _ height: Double, margin: Double = 24) -> Double {
     let w = Swift.max(1, width - 2 * margin)

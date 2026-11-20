@@ -39,6 +39,7 @@ public final class PaintCanvasPresenter {
     private var order: [TileKey] = []
     private var cached: CGImage?
     private var renderedVersion = -1
+    private var renderedVisible: RasterRect?
     /// Tiles copied by the last `render`.
     public private(set) var lastTilesDrawn = 0
 
@@ -49,9 +50,9 @@ public final class PaintCanvasPresenter {
         self.controller = controller
     }
 
-    /// Brings the bitmap up to date; returns the tiles drawn.
+    /// Brings the bitmap up to date (with `visible`, only its tiles there, #515); returns the tiles drawn.
     @discardableResult
-    public func render() -> Int {
+    public func render(visible: RasterRect? = nil) -> Int {
         let c = controller.doc.canvas
         if c.width != size.width || c.height != size.height || pixels.isEmpty {
             size = (c.width, c.height)
@@ -66,7 +67,7 @@ public final class PaintCanvasPresenter {
         var changedTiles: [(tx: Int, ty: Int)] = []
         pixels.withUnsafeMutableBufferPointer { buf in
             let base = buf.baseAddress!
-            controller.compositeTiles(using: compositor) { tx, ty, data, changed in
+            controller.compositeTiles(using: compositor, rect: visible) { tx, ty, data, changed in
                 let key = tileKey(tx, ty)
                 if !changed && drawn.contains(key) { return }
                 drawn.insert(key)
@@ -135,10 +136,12 @@ public final class PaintCanvasPresenter {
         return PaintCanvasTile(tx: tx, ty: ty, rect: CGRect(x: ox, y: oy, width: cw, height: ch), image: image)
     }
 
-    private func refresh() {
-        if renderedVersion != controller.version || pixels.isEmpty {
+    private func refresh(_ visible: RasterRect? = nil) {
+        // A pan or zoom brings other tiles into view: they are composited then (the compositor keeps the rest).
+        if renderedVersion != controller.version || pixels.isEmpty || visible != renderedVisible {
             renderedVersion = controller.version
-            render()
+            renderedVisible = visible
+            render(visible: visible)
         }
     }
 
@@ -149,6 +152,16 @@ public final class PaintCanvasPresenter {
      */
     public func tiles() -> [PaintCanvasTile] {
         refresh()
+        return order.compactMap { tileImages[$0] }
+    }
+
+    /**
+     * `tiles()` composited only where the view shows the canvas (`visibleDocumentRect`, #515): on a
+     * large canvas a stroke or a slider drag costs what is on screen. Tiles out of view keep what
+     * they last showed until they come into view.
+     */
+    public func tiles(visible: RasterRect?) -> [PaintCanvasTile] {
+        refresh(visible ?? RasterRect(x: 0, y: 0, width: 0, height: 0))
         return order.compactMap { tileImages[$0] }
     }
 

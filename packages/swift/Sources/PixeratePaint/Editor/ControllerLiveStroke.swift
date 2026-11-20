@@ -332,8 +332,9 @@ extension PaintEditorController {
      * compositor's last call), for a canvas view: `onTile` gets each tile's TILE × TILE RGBA
      * (straight alpha) and whether it changed since the last call.
      */
-    public func compositeTiles(using compositor: RasterCompositor<ViewLayer, BasicRasterSources>? = nil, _ onTile: (_ tx: Int, _ ty: Int, _ data: [UInt8], _ changed: Bool) -> Void) {
-        let rect = RasterRect(x: 0, y: 0, width: doc.canvas.width, height: doc.canvas.height)
+    public func compositeTiles(using compositor: RasterCompositor<ViewLayer, BasicRasterSources>? = nil, rect only: RasterRect? = nil, _ onTile: (_ tx: Int, _ ty: Int, _ data: [UInt8], _ changed: Bool) -> Void) {
+        // `only`: just the tiles there (the part of the canvas in view, #515); the others stay as the compositor last left them.
+        let rect = only ?? RasterRect(x: 0, y: 0, width: doc.canvas.width, height: doc.canvas.height)
         let c = compositor ?? viewCompositor
         let id = ObjectIdentifier(c)
         // Changed tiles recomposite only where the canvas changed since this compositor's last call.

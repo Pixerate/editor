@@ -6,6 +6,8 @@
     screenToDocument,
     drawWaterOverlay,
     fitZoom,
+    visibleDocumentRect,
+    VIEW_MARGIN,
     startDeviceTilt,
     startWetClock,
     startCultureCatchUp,
@@ -109,12 +111,14 @@
     untrack(() => controller.setView({ zoom: fitZoom(doc, s), pan: { x: 0, y: 0 } }));
   });
 
-  // Upload changed tiles whenever the state changes.
+  // Upload changed tiles whenever the state changes: once the viewport is measured, only the ones in view (#515).
   $effect(() => {
-    void snap;
+    const st = snap;
+    const s = size;
     const ctx = canvas?.getContext('2d');
     untrack(() => {
-      if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never);
+      const visible = measured ? visibleDocumentRect(st.view, st.document.canvas, s, VIEW_MARGIN) : undefined;
+      if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never, visible);
       else controller.takeDirty();
     });
   });

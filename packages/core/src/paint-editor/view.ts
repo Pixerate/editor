@@ -75,6 +75,26 @@ export function documentToScreen(view: PaintView, canvas: { width: number; heigh
   return applyAffine(viewMatrix(view, canvas, viewport), x, y);
 }
 
+/** Document pixels around the view that are composited too, so a small pan shows no stale tiles (#515). */
+export const VIEW_MARGIN = 64;
+
+/**
+ * The part of the canvas a viewport shows (document pixels, whole pixels, inside the canvas),
+ * padded by `margin` document pixels, or `null` when none of it is in view. The four viewport
+ * corners mapped into the document bound it, so a rotated view gets the rectangle around what it
+ * shows (#515).
+ */
+export function visibleDocumentRect(view: PaintView, canvas: { width: number; height: number }, viewport: { width: number; height: number }, margin = 0): { x: number; y: number; width: number; height: number } | null {
+  if (!(viewport.width > 0) || !(viewport.height > 0)) return null;
+  const inv = invertAffine(viewMatrix(view, canvas, viewport));
+  const corners = [applyAffine(inv, 0, 0), applyAffine(inv, viewport.width, 0), applyAffine(inv, 0, viewport.height), applyAffine(inv, viewport.width, viewport.height)];
+  const x0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.x)) - margin));
+  const y0 = Math.max(0, Math.floor(Math.min(...corners.map((p) => p.y)) - margin));
+  const x1 = Math.min(canvas.width, Math.ceil(Math.max(...corners.map((p) => p.x)) + margin));
+  const y1 = Math.min(canvas.height, Math.ceil(Math.max(...corners.map((p) => p.y)) + margin));
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, width: x1 - x0, height: y1 - y0 } : null;
+}
+
 /** A CSS `matrix(...)` for an element of the canvas size placed at the viewport's top-left. */
 export function viewCssTransform(view: PaintView, canvas: { width: number; height: number }, viewport: { width: number; height: number }): string {
   const m = viewMatrix(view, canvas, viewport);

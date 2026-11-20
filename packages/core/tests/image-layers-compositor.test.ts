@@ -273,4 +273,27 @@ describe('layer compositor', () => {
     // And the result is still what a fresh compositor computes.
     expect(Buffer.from(c.composite(drag(0.3), rect, big)).equals(Buffer.from(new LayerCompositor().composite(drag(0.3), rect, big)))).toBe(true);
   });
+
+  it('patches only a tile composited in the last call: one left out (out of view) is composited whole (#515)', () => {
+    const big = { width: TILE * 2, height: TILE };
+    const both = { x: 0, y: 0, width: TILE * 2, height: TILE };
+    const right = { x: TILE, y: 0, width: TILE, height: TILE };
+    const left = { x: 0, y: 0, width: TILE, height: TILE };
+    const base = [pixelLayer('a', 1, {}, 'opaque'), pixelLayer('b', 2)];
+    const c = new LayerCompositor();
+    c.compositeTiles(base, both, big, () => {});
+    const paint = (layers: typeof base, r: { x: number; y: number; width: number; height: number }, v: number) => {
+      const top = layers[1] as PixelLayer;
+      return [layers[0], { ...top, surface: writeRegion(top.surface, r, new Uint8ClampedArray(r.width * r.height * 4).fill(v)) }];
+    };
+    // The right tile changes while only the left one is in view (its change is reported, and skipped)…
+    const a = { x: TILE + 100, y: 40, width: 60, height: 60 };
+    const once = paint(base, a, 200);
+    c.compositeTiles(once, left, big, () => {}, { dirty: [a] });
+    // …then changes a little more once it is in view again: the first change must show too.
+    const b = { x: TILE + 10, y: 10, width: 8, height: 8 };
+    const twice = paint(once, b, 90);
+    c.compositeTiles(twice, right, big, () => {}, { dirty: [b] });
+    expect(Buffer.from(c.composite(twice, both, big)).equals(Buffer.from(new LayerCompositor().composite(twice, both, big)))).toBe(true);
+  });
 });
