@@ -9,6 +9,8 @@ import {
   startWetClock,
   startCultureCatchUp,
   fitZoom,
+  visibleDocumentRect,
+  VIEW_MARGIN,
   guideOverlay,
   handlePaintShortcut,
   viewCssTransform,
@@ -102,12 +104,13 @@ export const PaintCanvas: React.FC<PaintCanvasProps> = ({ controller, tool = 'br
     controller.setView({ zoom: fitZoom(doc, size), pan: { x: 0, y: 0 } });
   }, [controller, doc, size, fitOnMount]);
 
-  // Upload changed tiles whenever the state changes.
+  // Upload changed tiles whenever the state changes: once the viewport is measured, only the ones in view (#515).
   useEffect(() => {
     const ctx = canvas.current?.getContext('2d');
-    if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never);
+    const visible = measured.current ? visibleDocumentRect(state.view, state.document.canvas, size, VIEW_MARGIN) : undefined;
+    if (ctx && typeof ctx.createImageData === 'function') presenter.render(ctx as never, visible);
     else controller.takeDirty();
-  }, [state, presenter, controller]);
+  }, [state, presenter, controller, size]);
 
   // Wet paint flows with the display.
   useEffect(() => startWetClock(controller), [controller]);

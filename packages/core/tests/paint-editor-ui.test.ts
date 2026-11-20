@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   BLEND_MENU_GROUPS,
   BUILTIN_BRUSHES,
@@ -13,6 +13,8 @@ import {
   PAPER_SLIDERS,
   PaintCanvasPresenter,
   PaintEditorController,
+  VIEW_MARGIN,
+  visibleDocumentRect,
   PaintGesture,
   guideOverlay,
   handlePaintShortcut,
@@ -209,6 +211,54 @@ describe('PaintCanvasPresenter', () => {
     expect(p.render(ctx)).toBe(0);
     c.paintStroke({ points: [{ x: 10, y: 10 }, { x: 40, y: 10 }], brushId: 'ink-pen' });
     expect(p.render(ctx)).toBe(1);
+  });
+
+  it('composites only the tiles in view, and the others once they come into view (#515)', () => {
+    const c = new PaintEditorController({ width: 2048, height: 1536, paper: 'smooth' });
+    const puts: Array<[number, number]> = [];
+    const ctx = {
+      createImageData: (w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4) }),
+      putImageData: (_img: never, dx: number, dy: number) => puts.push([dx, dy]),
+    };
+    const p = new PaintCanvasPresenter(c);
+    const composite = vi.spyOn(c, 'compositeTiles');
+    // Zoomed in on the top-left: four tiles of 48.
+    const view = { zoom: 2, pan: { x: 1024 * 2 - 300, y: 768 * 2 - 200 }, rotation: 0, mirror: false };
+    const visible = visibleDocumentRect(view, c.document.canvas, { width: 600, height: 400 }, VIEW_MARGIN);
+    expect(visible).toEqual({ x: 0, y: 0, width: 300 + VIEW_MARGIN, height: 200 + VIEW_MARGIN });
+    expect(p.render(ctx, visible)).toBe(4);
+    expect(composite.mock.calls[0][0]).toEqual(visible);
+    // A stroke out of view draws nothing now…
+    c.paintStroke({ points: [{ x: 1800, y: 1300 }, { x: 1900, y: 1400 }], brushId: 'ink-pen' });
+    puts.length = 0;
+    expect(p.render(ctx, visible)).toBe(0);
+    // …and its tile, freshly composited, once the view gets there.
+    expect(p.render(ctx, { x: 1792, y: 1280, width: 256, height: 256 })).toBe(1);
+    expect(puts).toEqual([[1792, 1280]]);
+    const shown = c.compositePixels({ rect: { x: 1792, y: 1280, width: 256, height: 256 } } as never);
+    expect(shown.data.some((v, i) => i % 4 === 3 && v > 0)).toBe(true);
+    // A tile changed while out of view, then again a little once in view: composited whole, not patched (#515).
+    const tile = { x: 1536, y: 1024, width: 256, height: 256 };
+    expect(p.render(ctx, tile)).toBe(1);
+    c.paintStroke({ points: [{ x: 1550, y: 1040 }, { x: 1780, y: 1270 }], brushId: 'ink-pen', color: '#dc2626' });
+    expect(p.render(ctx, visible)).toBe(0);
+    c.paintStroke({ points: [{ x: 1600, y: 1100 }, { x: 1610, y: 1104 }], brushId: 'ink-pen', color: '#2563eb' });
+    let got: Uint8ClampedArray | null = null;
+    composite.mockRestore();
+    c.compositeTiles(tile, (_tx, _ty, data) => (got = data), { dirty: c.takeDirty() });
+    const full = new PaintEditorController({ width: 2048, height: 1536, paper: 'smooth' });
+    full.loadJSON(c.toJSON());
+    let want: Uint8ClampedArray | null = null;
+    full.compositeTiles(tile, (_tx, _ty, data) => (want = data));
+    expect(Buffer.from(got!).equals(Buffer.from(want!))).toBe(true);
+    // Nothing in view: nothing composited.
+    expect(p.render(ctx, null)).toBe(0);
+    // A rotated view takes the rectangle around what it shows.
+    const centred = { ...view, pan: { x: 0, y: 0 } };
+    expect(visibleDocumentRect(centred, c.document.canvas, { width: 600, height: 400 })).toEqual({ x: 874, y: 668, width: 300, height: 200 });
+    const turned = visibleDocumentRect({ ...centred, rotation: 45 }, c.document.canvas, { width: 600, height: 400 })!;
+    expect(turned.width).toBe(Math.ceil(1024 + 250 / Math.SQRT2) - Math.floor(1024 - 250 / Math.SQRT2));
+    expect(visibleDocumentRect({ ...view, pan: { x: 99999, y: 0 } }, c.document.canvas, { width: 600, height: 400 })).toBeNull();
   });
 });
 

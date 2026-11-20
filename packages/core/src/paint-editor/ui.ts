@@ -422,6 +422,13 @@ export interface Paint2DContext {
   putImageData(image: never, dx: number, dy: number, sx?: number, sy?: number, sw?: number, sh?: number): void;
 }
 
+/** `r` inside a `width × height` canvas. */
+function clipRect(r: RasterRect, width: number, height: number): RasterRect {
+  const x = Math.max(0, r.x);
+  const y = Math.max(0, r.y);
+  return { x, y, width: Math.min(width, r.x + r.width) - x, height: Math.min(height, r.y + r.height) - y };
+}
+
 /** Keeps a document-sized canvas in step with the controller, tile by tile. */
 export class PaintCanvasPresenter {
   private readonly uploaded = new Map<string, Uint8ClampedArray>();
@@ -430,8 +437,14 @@ export class PaintCanvasPresenter {
 
   constructor(private readonly controller: PaintEditorController) {}
 
-  /** Draws what changed into `ctx` (a canvas the size of the document); returns the tiles drawn. */
-  render(ctx: Paint2DContext): number {
+  /**
+   * Draws what changed into `ctx` (a canvas the size of the document); returns the tiles drawn.
+   * With `visible` (document pixels, `visibleDocumentRect`), only the tiles there are composited
+   * and drawn: on a large canvas a slider drag or a stroke costs what is on screen (#515). A tile
+   * left out keeps what it showed until it comes into view, when the compositor finds its inputs
+   * changed and composites it again.
+   */
+  render(ctx: Paint2DContext, visible?: RasterRect | null): number {
     const { width, height } = this.controller.document.canvas;
     const size = `${width}x${height}`;
     let dirty = this.controller.takeDirty();
@@ -441,7 +454,9 @@ export class PaintCanvasPresenter {
       dirty = 'all';
     }
     let drawn = 0;
-    const rect: RasterRect = { x: 0, y: 0, width, height };
+    if (visible === null) return 0;
+    const rect: RasterRect = visible ? clipRect(visible, width, height) : { x: 0, y: 0, width, height };
+    if (rect.width <= 0 || rect.height <= 0) return 0;
     this.controller.compositeTiles(rect, (tx, ty, data) => {
       const key = `${tx},${ty}`;
       if (this.uploaded.get(key) === data) return;

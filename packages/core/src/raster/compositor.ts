@@ -640,7 +640,9 @@ export class RasterCompositor<L extends CompositorLayer = CompositorLayer, S ext
     if (entry) for (const [index, cp] of entry.checkpoints) if (index <= start) checkpoints.set(index, cp);
     let result: Uint8ClampedArray;
 
-    if (entry && dirty && (dirty.width < TILE || dirty.height < TILE)) {
+    // `dirty` is what changed since the last call: only a tile composited in that call can be patched (one left out of it,
+    // such as a tile out of view, may have changed anywhere since) (#515).
+    if (entry && dirty && (dirty.width < TILE || dirty.height < TILE) && entry.stamp === this.stamp - 1) {
       // Only `dirty` changed: recomposite that part from the checkpoint and patch the previous result.
       const r = dirty;
       const sub = (data: Uint8ClampedArray | null) => {

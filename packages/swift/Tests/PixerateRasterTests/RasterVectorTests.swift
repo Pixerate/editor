@@ -1125,3 +1125,33 @@ extension JSONValue {
     var b: Bool { boolValue! }
     var a: [JSONValue] { arrayValue! }
 }
+
+
+/// Viewport-only compositing (#515): a tile left out of a call is composited whole, never patched.
+final class CompositorViewportTests: XCTestCase {
+    private func layer(_ id: String, _ surface: TiledSurface) -> RasterLayer {
+        RasterLayer(id: id, name: id, visible: true, opacity: 1, blend: .mode(.normal), content: .pixel(surface: surface, offset: LayerOffset(x: 0, y: 0), fillOpacity: nil))
+    }
+
+    func testPatchesOnlyATileCompositedInTheLastCall() {
+        let sources = BasicRasterSources(width: TILE * 2, height: TILE)
+        let both = RasterRect(x: 0, y: 0, width: TILE * 2, height: TILE)
+        let left = RasterRect(x: 0, y: 0, width: TILE, height: TILE)
+        let right = RasterRect(x: TILE, y: 0, width: TILE, height: TILE)
+        let bg = writeRegion(emptySurface(4), both, [UInt8](repeating: 200, count: TILE * 2 * TILE * 4))
+        let top0 = emptySurface(4)
+        let comp = RasterCompositor<RasterLayer, BasicRasterSources>()
+        _ = comp.composite([layer("a", bg), layer("b", top0)], both, sources)
+        // The right tile changes while only the left one is in view (its change is reported, and skipped)…
+        let a = RasterRect(x: TILE + 100, y: 40, width: 60, height: 60)
+        let top1 = writeRegion(top0, a, [UInt8](repeating: 255, count: 60 * 60 * 4))
+        comp.compositeTiles([layer("a", bg), layer("b", top1)], left, sources, { _, _, _, _ in }, CompositeCallOptions(dirty: [DirtyRect(a)]))
+        // …then a little more once it is in view again: the first change must show too.
+        let b = RasterRect(x: TILE + 10, y: 10, width: 8, height: 8)
+        let top2 = writeRegion(top1, b, [UInt8](repeating: 90, count: 8 * 8 * 4))
+        let layers2 = [layer("a", bg), layer("b", top2)]
+        comp.compositeTiles(layers2, right, sources, { _, _, _, _ in }, CompositeCallOptions(dirty: [DirtyRect(b)]))
+        let fresh = RasterCompositor<RasterLayer, BasicRasterSources>().composite(layers2, both, sources)
+        XCTAssertTrue(comp.composite(layers2, both, sources) == fresh)
+    }
+}
