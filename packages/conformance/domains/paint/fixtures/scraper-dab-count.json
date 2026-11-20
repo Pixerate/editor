@@ -1,0 +1,184 @@
+{
+  "$schema": "../../../schema/fixture.schema.json",
+  "id": "scraper-dab-count",
+  "description": "A scraper brush with several scattered dabs per step (dynamics.count): Swift resolves count, flip and tip grain for the scraper engine as TS does.",
+  "setup": {
+    "width": 64,
+    "height": 64,
+    "paper": "smooth"
+  },
+  "steps": [
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "impasto-brush",
+        "color": "#f7f5ee",
+        "seed": 11,
+        "points": [
+          {
+            "x": 14,
+            "y": 32
+          },
+          {
+            "x": 50,
+            "y": 32
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 48,
+            "width": 83,
+            "x": -10,
+            "y": 8
+          },
+          "dabs": 17,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 1,
+            "pickup": null,
+            "reservoir": "#f7f5ee"
+          },
+          "strokeId": "s1"
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "brushId": "oil-round",
+        "color": "#d23a2a",
+        "seed": 22,
+        "points": [
+          {
+            "x": 12,
+            "y": 20
+          },
+          {
+            "x": 52,
+            "y": 44
+          }
+        ]
+      },
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 58,
+            "width": 74,
+            "x": -5,
+            "y": 3
+          },
+          "dabs": 25,
+          "layerId": "@1",
+          "mixerLoad": {
+            "amount": 0.942,
+            "pickup": null,
+            "reservoir": "#d23a2a"
+          },
+          "strokeId": "s2",
+          "wet": true
+        }
+      }
+    },
+    {
+      "tool": "dry_paint",
+      "arguments": {},
+      "expect": {
+        "result": {
+          "dried": [
+            {
+              "bounds": {
+                "height": 64,
+                "width": 64,
+                "x": 0,
+                "y": 0
+              },
+              "layerId": "@1"
+            }
+          ],
+          "stillWet": false
+        }
+      }
+    },
+    {
+      "tool": "set_brush",
+      "arguments": {
+        "id": "paint-scraper",
+        "dynamics": {
+          "count": 3,
+          "scatter": 0.6
+        }
+      },
+      "expect": {
+        "result": {
+          "brush": {
+            "dynamics": {
+              "count": 3,
+              "minSize": 0.5,
+              "rotation": "stroke",
+              "scatter": 0.6,
+              "smoothing": 0.25
+            },
+            "id": "paint-scraper",
+            "kind": "mark",
+            "marks": {
+              "kind": "scraper"
+            },
+            "medium": "paint",
+            "name": "Paint scraper",
+            "tip": {
+              "angle": 30,
+              "hardness": 0.9,
+              "roundness": 0.35,
+              "shape": "flat",
+              "size": 28,
+              "spacing": 0.06
+            },
+            "variety": "scraper"
+          },
+          "engine": "scraper",
+          "problems": []
+        }
+      }
+    },
+    {
+      "tool": "paint_stroke",
+      "arguments": {
+        "seed": 33,
+        "points": [
+          {
+            "x": 20,
+            "y": 32
+          },
+          {
+            "x": 44,
+            "y": 32
+          }
+        ]
+      },
+      "pixels": true,
+      "expect": {
+        "result": {
+          "bounds": {
+            "height": 75,
+            "width": 66,
+            "x": -1,
+            "y": -5
+          },
+          "dabs": 45,
+          "layerId": "@1",
+          "strokeId": "s3"
+        },
+        "pixels": {
+          "file": "png/scraper-dab-count.5.png",
+          "width": 64,
+          "height": 64,
+          "sha256": "241efe8e7c8bc30eac64e8017d1ce524ac5c33064c32fad7844e911148fa9284",
+          "maxDelta": 2,
+          "meanDelta": 0.1
+        }
+      }
+    }
+  ]
+}

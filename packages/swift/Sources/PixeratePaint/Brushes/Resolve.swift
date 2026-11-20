@@ -17,7 +17,7 @@ private let ALL = ["dab", "eraser", "mixer", "blender", "smudge", "wet", "impast
 /// Engines that pick up and mix paint dab by dab (the exchange ratios apply).
 private let EXCHANGE = ["dab", "wet", "impasto"]
 /// Engines that lay dabs from the pen dab walker: tip grain, count and flip apply.
-private let DABS = ["dab", "eraser", "mixer", "blender", "smudge"]
+private let DABS = ["dab", "eraser", "mixer", "blender", "smudge", "scraper"]
 /// Engines that can deposit a thin-film iridescence coat.
 private let FILM = ["dab", "mixer", "wet", "impasto", "particle", "bristle", "vortex"]
 /// Engines whose strokes seed biopaint spores: a vortex warps paint already down and carries none.
