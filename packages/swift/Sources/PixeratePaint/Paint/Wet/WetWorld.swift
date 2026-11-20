@@ -301,7 +301,7 @@ public final class WetWorld {
     private var paper: WetPaperInput
     private var paperBytes: [Int]
     /// Threads that step tiles (1: the calling thread only). Any count gives the same bits.
-    public var threads = Swift.max(1, ProcessInfo.processInfo.activeProcessorCount)
+    public var threads = paintCoreCount()
     /// Steps with the scalar reference kernel (`wetStepSlot`) instead of the SIMD one: tests only (same bits, slower).
     var scalarKernel = false
     // Metal shading (see `attachGpu`).
@@ -640,7 +640,7 @@ public final class WetWorld {
 
     /// Activates a tile of a lane. Returns false when no slot can be had.
     @discardableResult
-    private func activate(_ key: Int) -> Bool {
+    private func activate(_ key: Int, paper: Bool = true) -> Bool {
         if slotOf(key) >= 0 { return true }
         var slot: Int
         if let s = freeSlots.popLast() {
@@ -660,7 +660,7 @@ public final class WetWorld {
         last[key] = 0
         slotStamp[key] += 1
         active.append(key)
-        fillPaper(key)
+        if paper { fillPaper(key) }
         fillFlow(key)
         return true
     }
@@ -695,11 +695,14 @@ public final class WetWorld {
     private func fillPaper(_ key: Int) {
         let (tx, ty) = tileXY(key)
         let h = slotPtr(slotOf(key)) + P_H * PL
+        // Read once: `paper` on the world is a struct with an array and a closure, which each access retains (#826).
+        let heightAt = paper.heightAt
+        let width = width, height = height
         for y in 0..<S {
             let gy = ty * WET_TILE + y - 1
             for x in 0..<S {
                 let gx = tx * WET_TILE + x - 1
-                h[y * S + x] = gx < 0 || gy < 0 || gx >= width || gy >= height ? -1 : quantizeHeight(paper.heightAt(Double(gx) + 0.5, Double(gy) + 0.5))
+                h[y * S + x] = gx < 0 || gy < 0 || gx >= width || gy >= height ? -1 : quantizeHeight(heightAt(Double(gx) + 0.5, Double(gy) + 0.5))
             }
         }
     }
@@ -905,7 +908,14 @@ public final class WetWorld {
             if R && B { push(tx + 1, ty + 1) }
         }
         var woke = false
-        for key in wakeups { woke = activate(key) || woke }
+        // Each woken tile's paper heights (258² grain lookups, about 3 ms) fill on every core: water
+        // spreading into several new tiles after a stroke otherwise costs one long frame (#826).
+        var filled: [Int] = []
+        for key in wakeups where slotOf(key) < 0 {
+            if activate(key, paper: false) { filled.append(key) }
+        }
+        woke = !filled.isEmpty
+        paintParallel(filled.count) { i in self.fillPaper(filled[i]) }
         if clock % FREE_INTERVAL == 0 {
             ageSwirls(1)
             for lane in lanes {
