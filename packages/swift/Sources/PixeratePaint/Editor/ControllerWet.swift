@@ -464,11 +464,13 @@ extension PaintEditorController {
     }
 
     /// Wet settings saved with the document (nil when they are all defaults), with the wet clock
-    /// (`clock`) when it is past the latest clock the saved log records: the paint flowed on after the
-    /// last logged item before this save dried it, and a reader's replay steps to it (`wetJSON`).
+    /// (`clock`) whenever the saved log has wet paint, or the clock is past the latest one it records:
+    /// a reader's replay steps to it, and the check of an opened document compares wet areas at it
+    /// exactly (`wetJSON`, #883).
     func wetJSON(_ d: PaintDocumentState, savesLog: Bool) -> JSONValue? {
         let logged = loggedWetClock(strokes: savesLog ? d.strokes : [], wetEvents: d.wetEvents)
-        let clock: Int? = wet.clock > logged ? wet.clock : nil
+        let wetLog = savesLog ? hasWetLog(d) : !(d.wetEvents ?? []).isEmpty
+        let clock: Int? = wetLog || wet.clock > logged ? wet.clock : nil
         var layers = JSONObject()
         for (id, s) in wet.settings where findLayer(doc.layers, id) != nil {
             var params = s.params

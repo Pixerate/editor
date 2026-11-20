@@ -564,6 +564,42 @@ final class PaintColorSchemeTests: XCTestCase {
         XCTAssertNil(e.doc.unlogged)
     }
 
+    /// A wet stroke over pixels the log doesn't have (an ink stroke left out of it), flowing on before the save.
+    private func importedUnderWet() throws -> (json: JSONObject, layer: String) {
+        let c = try wetEditor()
+        let layer = c.doc.activeLayerId!
+        var ink = PaintStrokeInit(color: "#ca8a04", seed: 2)
+        ink.brushId = "ink-pen"
+        _ = try c.paintStroke(ink, points: wave(40, 6, 60, 90))
+        try paint(c, [.stroke(y: 40, color: nil, dual: blue, seed: 3), .wait(30)])
+        guard case .object(let json) = older(c.toJSON(), dropSeed: 2) else { throw XCTSkip("not an object") }
+        return (json, layer)
+    }
+
+    func testComparesWetPaintExactlyWhenTheDocumentSavedItsWetClock() async throws {
+        let p = try importedUnderWet()
+        XCTAssertNotNil(p.json["wet"]?["clock"])
+        let d = try wetEditor("dark")
+        try d.loadJSON(.object(p.json))
+        let view = await d.colorSchemeViewReady()
+        XCTAssertEqual(view.layers.map(\.layerId), [p.layer])
+        XCTAssertEqual(view.layers.map(\.view), ["kept"])
+        XCTAssertEqual(view.layers.first?.reason, CHECK_MISMATCH_REASON)
+    }
+
+    func testLeavesOutPaintStillFlowingWhenAnOlderDocumentSavedNoWetClock() async throws {
+        var p = try importedUnderWet()
+        guard case .object(var wet)? = p.json["wet"] else { return XCTFail("no wet settings") }
+        wet["clock"] = nil
+        p.json["wet"] = .object(wet)
+        let d = try wetEditor("dark")
+        try d.loadJSON(.object(p.json))
+        let view = await d.colorSchemeViewReady()
+        // The imported pixels lie under paint the replay still has flowing: not compared, so the layer is replayed.
+        XCTAssertEqual(view.layers.map(\.view), ["replay"])
+        XCTAssertEqual(view.layers.first?.state, "ready")
+    }
+
     func testNeverRecoloursPlainColours() async throws {
         let c = try wetEditor()
         try paint(c, [.stroke(y: 40, color: "#1d4ed8", dual: nil, seed: 3)])

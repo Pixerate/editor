@@ -146,7 +146,7 @@ import {
   type LivePatternsSettings,
 } from '../paint/live-patterns';
 import { wetSupport } from '../paint/wet/wasm';
-import { buildTimeLapse, emptiedLayers, loggedWetClock, MAX_WET_CLOCK, openedWetLog, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
+import { buildTimeLapse, emptiedLayers, hasWetLog, loggedWetClock, MAX_WET_CLOCK, openedWetLog, replayPainting, type TimeLapse, type TimeLapseOptions } from './replay';
 import { pixelsMatch, SchemeReplay, type SchemeReplayHost, type SchemeReplayState } from './scheme-replay';
 import { WET_TILE } from '../paint/wet/model';
 import { EffectsSlot, pathControlsOf, resolveEffectValues } from '../effects/helpers.js';
@@ -7164,12 +7164,13 @@ export class PaintEditorController {
 
   /**
    * Wet settings saved with the document (`undefined` when they are all defaults), with the wet
-   * clock (`clock`) when it is past the latest clock the saved log records: the paint flowed on
-   * after the last logged item before this save dried it, and a reader's replay steps to it.
+   * clock (`clock`) whenever the saved log has wet paint, or the clock is past the latest one it
+   * records: a reader's replay steps to it (the paint flowed on after the last logged item before
+   * this save dried it), and the check of an opened document compares wet areas at it exactly (#883).
    */
   private wetJSON(state: PaintDocumentState, strokes: StrokeLogOption | undefined, extensions: PaintDocumentExtensions): unknown {
     const savedLog = savesStrokeLog(state, { strokes, extensions }) ? state : { strokes: [], wetEvents: state.wetEvents };
-    const clock = this.wet.clock > loggedWetClock(savedLog) ? this.wet.clock : null;
+    const clock = hasWetLog(savedLog) || this.wet.clock > loggedWetClock(savedLog) ? this.wet.clock : null;
     const layers: Record<string, WetLayerSettings> = {};
     for (const [id, set] of this.wet.settings) {
       if (!findLayer(this.doc.layers, id)) continue;
@@ -7550,7 +7551,7 @@ export class PaintEditorController {
    * or event names can't come from the log, so it is marked now (saved with the document); one the
    * log names is checked against a replay of the log once the scheme needs it (`openedCheck`).
    */
-  private openLedger(complete: boolean, wetLog: ReturnType<typeof openedWetLog> = null): void {
+  private openLedger(complete: boolean, wetLog: ReturnType<typeof openedWetLog> = null, savedClock = false): void {
     this.openedCheck?.replay?.dispose();
     this.openedCheck = null;
     if (complete || this.replayTarget) return;
@@ -7577,17 +7578,21 @@ export class PaintEditorController {
       else unlogged[l.id] = label;
     }
     if (Object.keys(unlogged).length) this.doc = { ...d, unlogged };
-    // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`), but not the
-    // dry that ends it: an older document doesn't say how long its paint flowed on before it was saved.
-    const checked = wetLog ? { ...this.doc, strokes: wetLog.strokes, wetEvents: wetLog.wetEvents.slice(0, -1) } : this.doc;
-    if (pending.size) this.openedCheck = { doc: checked, pending, events: new Set(d.paintEvents ?? []), results: null, running: null, replay: null, revision: 0 };
+    // The check replays the log as opened with its sessions' clocks in order (`openedWetLog`). A document
+    // that saved its wet clock (`savedClock`) says when the save dried its paint: the dry that ends the log
+    // is replayed and wet areas compared exactly. An older one doesn't say how long its paint flowed on, so
+    // the dry is left out and paint still flowing at the end isn't compared (#883).
+    const exact = Boolean(wetLog) && savedClock;
+    const checked = wetLog ? { ...this.doc, strokes: wetLog.strokes, wetEvents: exact ? wetLog.wetEvents : wetLog.wetEvents.slice(0, -1) } : this.doc;
+    if (pending.size) this.openedCheck = { doc: checked, pending, events: new Set(d.paintEvents ?? []), results: null, running: null, replay: null, revision: 0, exact };
   }
 
   /**
    * Checks the opened layers (`openedCheck`) once: the log as it was opened is replayed with every
    * stroke as recorded (the frozen `SchemeReplay`, in the background) and each layer compared with
-   * its opened pixels (`pixelsMatch`), leaving out paint the replay still has wet or drying, which
-   * flowed on after the last logged item for an unknown time before the save dried it.
+   * its opened pixels (`pixelsMatch`). For a document without its saved wet clock, paint the replay
+   * still has wet or drying is left out: it flowed on after the last logged item for an unknown time
+   * before the save dried it.
    */
   private startOpenedCheck(): void {
     const check = this.openedCheck;
@@ -7600,7 +7605,7 @@ export class PaintEditorController {
         check.replay = r;
         r.kick();
         await r.whenIdle();
-        for (const id of check.pending) results.set(id, r.state === 'ready' ? this.checkOpenedLayer(r, check.doc, id) : checkFailedReason(r.error ?? 'it stopped'));
+        for (const id of check.pending) results.set(id, r.state === 'ready' ? this.checkOpenedLayer(r, check.doc, id, check.exact) : checkFailedReason(r.error ?? 'it stopped'));
       } catch (e) {
         for (const id of check.pending) results.set(id, checkFailedReason(e instanceof Error ? e.message : String(e)));
       } finally {
@@ -7619,13 +7624,13 @@ export class PaintEditorController {
   }
 
   /** `null` when a replay of the opened log gives the layer's opened pixels, else why it is kept. */
-  private checkOpenedLayer(r: SchemeReplay, doc: PaintDocumentState, id: string): string | null {
+  private checkOpenedLayer(r: SchemeReplay, doc: PaintDocumentState, id: string, exact: boolean): string | null {
     const l = findLayer(doc.layers, id)?.layer;
     if (!isPixelLayer(l)) return null;
     const got = r.checkedLayer(id);
     const opened = translateSurface(l.surface, l.offset.x, l.offset.y);
-    const f = got?.flowing ?? null;
-    // Flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
+    const f = exact ? null : got?.flowing ?? null;
+    // Without the saved clock, flow after the last logged item is not in the log: within a wet tile of paint still flowing, anything goes.
     const skip = f ? { x: f.x - WET_TILE, y: f.y - WET_TILE, width: f.width + 2 * WET_TILE, height: f.height + 2 * WET_TILE } : null;
     return pixelsMatch(opened, got?.surface ?? emptySurface(4), skip) ? null : CHECK_MISMATCH_REASON;
   }
@@ -7669,7 +7674,7 @@ export class PaintEditorController {
     if (unlogged) this.doc = { ...this.doc, unlogged };
     // The wet clock goes on from where the document's left it, and its log ends with the dry the save did (#720).
     const wetLog = openedWetLog(this.doc, wetClock);
-    this.openLedger(loaded.extensions.unloggedComplete === true, wetLog);
+    this.openLedger(loaded.extensions.unloggedComplete === true, wetLog, wetClock !== null);
     if (wetLog) this.doc = { ...this.doc, strokes: wetLog.strokes, wetEvents: wetLog.wetEvents };
     this.openedDry = wetLog?.dry ?? null;
     this.wet.setClock(wetLog?.clock ?? wetClock ?? 0);
@@ -10536,6 +10541,8 @@ interface OpenedCheck {
   replay: SchemeReplay | null;
   /** Bumped when the results come in. */
   revision: number;
+  /** The document saved its wet clock: the replay ends with the save's dry and wet areas are compared too (#883). */
+  exact: boolean;
 }
 
 /** The change a layer marked on opening a document whose stroke log names it nowhere is said to come from. */

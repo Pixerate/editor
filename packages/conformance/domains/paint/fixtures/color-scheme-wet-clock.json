@@ -2550,6 +2550,14 @@
             ],
             "unloggedComplete": true,
             "version": 2,
+            "wet": {
+              "clock": 36,
+              "layers": {},
+              "tilt": {
+                "angle": 0,
+                "direction": 0
+              }
+            },
             "wetEvents": [
               {
                 "at": 2,
