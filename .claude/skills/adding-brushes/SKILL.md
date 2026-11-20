@@ -110,9 +110,10 @@ Facets are listed in the same order in several places (the schema's properties, 
 | `brushes/ui.ts` | The brush editor's toggle and sliders (scoped by the profile), `setBrushEditorValue`'s toggle case, and its name in the refused-facet labels. For specialty paint, `specialty.ts` and the `SPECIALTY_*` tables instead. | no |
 | `brushes/preview.ts` | Only if it changes how a preview reads (`brushPreviewsOnDark`, preview colours). | no |
 | `paint-editor/brush-model.ts` | The engine field: `PaintBrush`, `PaintBrushInput` and `normalizePaintBrush`. Make it optional (present only when the facet is) unless every brush has it, or every resolved brush in the contracts changes. | only through a preset |
-| `paint-editor/*`, `paint/*` | The engine that paints it, with its own tests. | your tests |
+| `paint-editor/engine.ts` and the rest | The engine that paints it (a dab facet goes in `DryStroke.mark`, after the grain), with its own tests. | only through a scenario |
+| A pixel scenario | `packages/conformance/domains/paint/fixtures/<facet>.json`: `setup` (64 × 64, `paper`) and a `paint_stroke` step with the preset's `brushId`, a `seed` and `"pixels": true`. `record-conformance` fills in `expect` and writes `png/<facet>.1.png`. It's the only thing that holds the Swift engine to the TS one. | |
 | React and Svelte | Nothing for the facet itself: `BrushEditor` in both renders `brushEditorSections` from `ui.ts`. A facet with editor-level settings (a panel like `CulturePanel`, paper or document state) needs that panel in both (AGENTS.md section 3). | no |
-| Swift | `Sources/PixeratePaint/Brushes/Normalize.swift`, `Migrate.swift`, `Resolve.swift`, `Profiles.swift`, `LibraryTools.swift`, and the engine field in `Editor/Brushes.swift`; then the engine. | partly, see below |
+| Swift | See **Porting to Swift** below. | yes, with a preset and a scenario |
 | Generated files | Rebuild core, then `node scripts/export-contracts.mjs`, `node scripts/record-conformance.mjs` and `pnpm gen:swift`. Commit every diff. | yes |
 | `parity/features.json` | Its row, then `node scripts/parity.mjs`. | no |
 | Skills and docs | A row in `pixerate-brushes`'s facet table, `pixerate-paint-editor/references/brush-facets.md` (and its own reference file if it's big), `pixerate-brushes-design`'s decision table if it changes how a request is met, and `docs/paint-editor.md`. | no |
@@ -126,17 +127,40 @@ Facets are listed in the same order in several places (the schema's properties, 
   `PaintToolArguments.swift` comes from `pnpm gen:swift`; `swift-generated.test.ts` fails without it.
 - **Until a preset uses the facet, almost nothing fails.** The TS facet can be half-wired (missing
   from `ordered()`, `resolve.ts` or the engine model) and all tests pass. Add the preset early.
+- **No TS test sees what the engine paints.** Write the pixel scenario. Without the Swift engine
+  port, `PaintConformanceTests` then fails on that step (`pixels differ by up to …`); with it, the
+  pixels match within `maxDelta` 2.
 - **Swift checks resolve, normalize and host support.** With a preset, `BrushModelTests` fails
-  until Swift's `Normalize`, `Migrate`, `Resolve` and engine model know the facet, and
+  until Swift's `Normalize`, `Resolve` and engine model know the facet, and
   `BrushHostCheckTests` fails until `Profiles.swift` has the profile field (its value on every
   host matching `profiles.json`) and the `checkBrush` line: it runs Swift's `checkBrush` on every
   preset and host and compares `ok` and each issue's facet and severity with `checks.json`. The
   contracts don't record an issue's reason or fix, so port those words from `profiles.ts` by hand,
   and give `degrade` the case that strips the facet (the test checks it drops every refusal). Swift
   has no brush editor sections.
+- **A Swift scenario can fail once under load** (`effect-authoring` did in the trial); rerun
+  `PaintConformanceTests` before chasing a failure that has nothing to do with the facet.
 - No test checks the schema descriptions, `patch.ts`, the editor controls, the parity row or
   the skills. Check them by hand: `create_brush` and `update_brush` (with `unset`) on the new
   facet, `check_brush` on every host, and the brush editor in the demo.
+
+### Porting to Swift
+
+The Swift port reads the brush schema and presets from the contracts, so it needs no schema code.
+For a facet that a dab engine paints, a trial needed these, under
+`packages/swift/Sources/PixeratePaint/`:
+
+| File | What |
+| --- | --- |
+| `Brushes/Normalize.swift` | `BRUSH_KEY_ORDER` and `UNSETTABLE_BRUSH_FACETS` (Swift's copies of the TS lists; its order differs from TS, so match the neighbour, not the index), and any clamp or drop `normalize.ts` does. |
+| `Brushes/Resolve.swift` | The field mapping (`f(...)` / `each(...)`) and the presence block, as in `resolve.ts`. Swift keeps its own copies of the engine lists (`ALL`, `DABS`, `FILM`…): keep them equal to TS's, and use the engines `resolve.ts` names. A mismatch only shows in a scenario that paints with that engine (#940). |
+| `Brushes/Profiles.swift` | The `BrushHostProfile` property, its `init` parameter, its value in each profile (`PAINT_PROFILE`…), the `feature(...)` line and the `degrade` case. |
+| `Editor/Brushes.swift` | The engine field on `PaintBrush`, its key in `json()` at the spot TS's resolved brush has it, and reading it in the engine normalize (with `null` removing it). |
+| `Editor/Engine.swift` and the rest | The same painting code. Match TS's arithmetic: TS stores into a `Float32Array` after double math, so write `Float(Double(buf[k]) * x)`. |
+| `Tests/PixeratePaintTests/BrushHostCheckTests.swift` | `optionalSupport` and `profile()` list the optional profile fields by hand: add the new one to both. The test says so (`profiles.json has a field BrushHostProfile doesn't`). |
+
+`Migrate.swift` and `LibraryTools.swift` only change when the facet needs a migration or a tool
+summary of its own. Run `swift test --filter PixeratePaintTests`.
 
 ## Checks before pushing
 
