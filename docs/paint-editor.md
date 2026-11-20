@@ -38,6 +38,8 @@ The paint editor adds no storage or compositor of its own. Paper is a compositor
 - **Antimatter** (`antimatter`, #682): a `marks.kind: 'antimatter'` brush that does nothing over bare canvas, but where it touches existing paint across any visible layer (`1 - Π(1 - α_i · opacity_i)` weighted by quantised coverage), accumulates fuel and detonates noise-edged radial blasts combined by maximum in a per-stroke heat field. Each blast inverts core colours (`rgb` or `oklab`), destroys alpha (`annihilate`, respecting transparency locks), burns a sooty scorch ring, clears `doc.light`, carves impasto relief craters (`doc.thick`), and launches white-hot sparks cooling to the brush colour on the active layer. It dries visible wet paint first and commits all affected visible editable pixel layers in one undo step (`RecordedStroke.targets`).
 - **Library**: built-in presets, saving and removing brushes, JSON import / export and thumbnails rendered from a test stroke.
 
+To add or change a built-in brush, or add a brush facet, follow the [`adding-brushes`](../.claude/skills/adding-brushes/SKILL.md) project skill: it lists every file, generated contract, Swift port and test involved, and which mistakes no test catches.
+
 Every engine is deterministic: jitter is a hash of the stroke's seed and the dab index, and simulations step by distance travelled, not by input sampling. That is what makes replay, undo and agent painting exact.
 
 ## Guides, stencils and colour

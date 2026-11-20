@@ -9,6 +9,10 @@
  * turns a brush into the flat form the paint engine reads (`ResolvedBrush`).
  *
  * Type-only imports keep this module free of the renderers.
+ *
+ * Adding a facet touches far more than this file (schema, normalize, resolve, host profiles, the
+ * brush editor, the engine, the Swift port and a pixel scenario): follow
+ * `.claude/skills/adding-brushes/SKILL.md`.
  */
 
 import type { ColorValue } from '../color/dual';

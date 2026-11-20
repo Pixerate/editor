@@ -6,6 +6,9 @@
  * defaults is written down.
  *
  * Our own settings; none come from another product.
+ *
+ * Adding or changing a preset: follow `.claude/skills/adding-brushes/SKILL.md` (family, colour,
+ * hosts, regenerated contracts, tests, the brush skills and an eval task).
  */
 
 import type { Brush } from './types';

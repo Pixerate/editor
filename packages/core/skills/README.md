@@ -111,6 +111,10 @@ A skill is part of its domain's agent path (see section 4 of `AGENTS.md`). When 
 rename or remove a tool or command, or change how one should be used, update the skill in the
 same change.
 
+These skills ship to people using the library. Skills for working on this repo live in
+`.claude/skills/`: [`adding-brushes`](../../../.claude/skills/adding-brushes/SKILL.md) covers
+adding a built-in brush or a brush facet, including which of these skills to update.
+
 - **Format.** YAML frontmatter with `name` (the directory name) and `description` (what the
   skill covers and when to use it, at most 1024 characters), then: a mental model, a working
   method, best practices, a tool reference, commands (if any) and pitfalls. Keep `SKILL.md`
