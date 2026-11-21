@@ -164,6 +164,34 @@ describe('React SelectionOptionsBar', () => {
   });
 });
 
+describe('React SelectionOptionsBar: Generative Fill', () => {
+  it('shows only with a provider and fills the selection with the prompt', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    await act(async () => root.render(<Bar controller={controller} />));
+    expect(container.querySelector('[data-testid="generative-fill"]')).toBeNull();
+
+    const calls: unknown[][] = [];
+    controller.generativeFill = (async (...args: unknown[]) => {
+      calls.push(args);
+      throw new Error('The model is busy.');
+    }) as any;
+    controller.setGenerativeFillProvider({ fill: async () => '' });
+    await act(async () => root.render(<Bar controller={controller} />));
+    const input = container.querySelector('input[aria-label="What to generate in the selection"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    await act(async () => setValue(input, 'a wooden bench'));
+    expect(button('Generative Fill').disabled).toBe(true); // nothing selected
+    await act(async () => controller.selectRect({ x: 0, y: 0, width: 4, height: 4 }));
+    await act(async () => {
+      button('Generative Fill').click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('a wooden bench');
+    expect(container.querySelector('[data-testid="generative-fill"] [role="status"]')!.textContent).toContain('The model is busy.');
+  });
+});
+
 describe('React SelectionOptionsBar: Select Subject', () => {
   it('selects the subject that stands out without a model, and the described one with a model', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

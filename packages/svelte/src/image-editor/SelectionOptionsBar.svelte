@@ -185,6 +185,31 @@
     }
   }
 
+  // Edit › Generative Fill (only with a generative fill provider).
+  const canGenerate = $derived.by(() => {
+    void tick;
+    return Boolean(controller.generativeFillProvider);
+  });
+  let fillPrompt = $state('');
+  let generating = $state(false);
+  let generateStatus = $state<string | null>(null);
+  let generateAbort: AbortController | null = null;
+  async function generativeFill() {
+    const prompt = fillPrompt.trim();
+    if (!prompt || generating || !sel) return;
+    generating = true;
+    generateStatus = null;
+    generateAbort = new AbortController();
+    try {
+      await controller.generativeFill(prompt, { signal: generateAbort.signal });
+    } catch (err) {
+      generateStatus = failure(err);
+    } finally {
+      generateAbort = null;
+      generating = false;
+    }
+  }
+
   const MODIFY_OPS: { op: SelectionModifyOp; label: string }[] = [
     { op: 'expand', label: 'Expand' },
     { op: 'contract', label: 'Contract' },
@@ -582,6 +607,37 @@
       <ContentAwareFillWorkspace {controller} onclose={() => (fillWorkspace = false)} />
     {/if}
   </div>
+  {#if canGenerate}
+    <form
+      data-testid="generative-fill"
+      class="flex flex-col gap-1"
+      onsubmit={(e) => {
+        e.preventDefault();
+        void generativeFill();
+      }}
+    >
+      <div class="flex gap-1">
+        <input
+          type="text"
+          aria-label="What to generate in the selection"
+          placeholder="Generate, e.g. a wooden bench"
+          maxlength="1000"
+          bind:value={fillPrompt}
+          disabled={generating}
+          class="min-w-0 flex-1 bg-background border border-border rounded px-2 py-1 text-foreground"
+        />
+        <button type="submit" class={btn(false)} disabled={generating || !sel || !fillPrompt.trim()} aria-busy={generating} title={sel ? undefined : 'Select an area first'}>
+          {generating ? 'Generating…' : 'Generative Fill'}
+        </button>
+        {#if generating}
+          <button type="button" class={btn(false)} onclick={() => generateAbort?.abort()}>Cancel</button>
+        {/if}
+      </div>
+      {#if generateStatus}
+        <p role="status" class="text-muted-foreground">{generateStatus}</p>
+      {/if}
+    </form>
+  {/if}
   <div role="group" aria-label="Clipboard" class="flex flex-wrap gap-1">
     <button type="button" class={btn(false)} onclick={() => edit(() => controller.copyPixels())}>Copy</button>
     <button type="button" class={btn(false)} onclick={() => edit(() => controller.copyPixels({ merged: true }))}>Copy Merged</button>

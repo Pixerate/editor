@@ -143,6 +143,27 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
       setSegmenting(false);
     }
   };
+  // Edit › Generative Fill (only with a generative fill provider).
+  const [fillPrompt, setFillPrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [generateStatus, setGenerateStatus] = useState<string | null>(null);
+  const generateAbort = useRef<AbortController | null>(null);
+  const generativeFill = async () => {
+    const prompt = fillPrompt.trim();
+    if (!prompt || generating || !sel) return;
+    setGenerating(true);
+    setGenerateStatus(null);
+    const abort = new AbortController();
+    generateAbort.current = abort;
+    try {
+      await controller.generativeFill(prompt, { signal: abort.signal });
+    } catch (err) {
+      setGenerateStatus(failure(err));
+    } finally {
+      generateAbort.current = null;
+      setGenerating(false);
+    }
+  };
   const [workspace, setWorkspace] = useState(false);
   const [fillWorkspace, setFillWorkspace] = useState(false);
   const [skying, setSkying] = useState(false);
@@ -598,6 +619,42 @@ export const SelectionOptionsBar: React.FC<SelectionOptionsBarProps> = ({
         </button>
         {fillWorkspace && <ContentAwareFillWorkspace controller={controller} onClose={() => setFillWorkspace(false)} />}
       </div>
+      {controller.generativeFillProvider && (
+        <form
+          data-testid="generative-fill"
+          className="flex flex-col gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void generativeFill();
+          }}
+        >
+          <div className="flex gap-1">
+            <input
+              type="text"
+              aria-label="What to generate in the selection"
+              placeholder="Generate, e.g. a wooden bench"
+              maxLength={1000}
+              value={fillPrompt}
+              disabled={generating}
+              onChange={(e) => setFillPrompt(e.currentTarget.value)}
+              className="min-w-0 flex-1 bg-background border border-border rounded px-2 py-1 text-foreground"
+            />
+            <button type="submit" className={btn(false)} disabled={generating || !sel || !fillPrompt.trim()} aria-busy={generating} title={sel ? undefined : 'Select an area first'}>
+              {generating ? 'Generating…' : 'Generative Fill'}
+            </button>
+            {generating && (
+              <button type="button" className={btn(false)} onClick={() => generateAbort.current?.abort()}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {generateStatus && (
+            <p role="status" className="text-muted-foreground">
+              {generateStatus}
+            </p>
+          )}
+        </form>
+      )}
       <div role="group" aria-label="Clipboard" className="flex flex-wrap gap-1">
         <button type="button" className={btn(false)} onClick={() => edit(() => controller.copyPixels())}>
           Copy
