@@ -531,7 +531,7 @@
   },
   "devDependencies": {
     "@anthropic-ai/sdk": "1.6.0",
-    "@dagrejs/dagre": "^1.1.8",
+    "@dagrejs/dagre": "^3.1.3",
     "@pixerate/markdown-conformance": "workspace:*",
     "@tiptap/core": "^2.27.3",
     "@tiptap/extension-character-count": "^2.27.3",
@@ -573,7 +573,7 @@
     "vitest": "^5.1.0"
   },
   "peerDependencies": {
-    "@dagrejs/dagre": "^1.1.8",
+    "@dagrejs/dagre": "^3.1.3",
     "@tiptap/core": "^2.27.3",
     "@tiptap/extension-character-count": "^2.27.3",
     "@tiptap/extension-color": "^2.27.3",
