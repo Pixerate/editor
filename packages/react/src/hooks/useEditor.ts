@@ -41,6 +41,10 @@ export function useEditor(options: UseRichEditorProps = {}) {
   const combinedExtensions = [...preset, ...extensions];
 
   return useTipTapEditor({
+    // TipTap v3 stopped re-rendering on every transaction; toolbars that read
+    // `editor.isActive()` while rendering rely on it, so keep v2's behaviour
+    // unless the caller opts out (`shouldRerenderOnTransaction: false`).
+    shouldRerenderOnTransaction: true,
     extensions: combinedExtensions,
     ...editorOptions,
   });

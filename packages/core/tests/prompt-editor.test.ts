@@ -7,6 +7,7 @@ import {
   promptMilestones,
   resolvePromptTemplateColorMap,
   syncPromptEditor,
+  promptEditorPlaceholder,
   PROMPT_EDITOR_DEFAULT_CLASS_NAME,
   PROMPT_EDITOR_DEFAULT_PLACEHOLDER,
   type PromptEditorConfig,
@@ -45,8 +46,9 @@ describe("createPromptEditorOptions", () => {
     expect(editor.isEditable).toBe(true);
     expect(editor.view.dom.getAttribute("role")).toBe("textbox");
     expect(editor.view.dom.getAttribute("class")).toContain(PROMPT_EDITOR_DEFAULT_CLASS_NAME);
-    const placeholder = editor.extensionManager.extensions.find((e) => e.name === "placeholder");
-    expect(placeholder?.options.placeholder).toBe(PROMPT_EDITOR_DEFAULT_PLACEHOLDER);
+    expect(promptEditorPlaceholder(editor)).toBe(PROMPT_EDITOR_DEFAULT_PLACEHOLDER);
+    // TipTap v3's StarterKit extras stay out of prompts
+    for (const name of ["link", "underline", "trailingNode"]) expect(editor.extensionManager.extensions.some((e) => e.name === name)).toBe(false);
     expect(editor.extensionManager.extensions.some((e) => e.name === "fileImport")).toBe(false);
     expect(editor.extensionManager.extensions.some((e) => e.name === "heading")).toBe(false);
   });
@@ -122,8 +124,7 @@ describe("syncPromptEditor", () => {
     syncPromptEditor(editor, { content: "x", onContentChange: () => {}, isEditing: false, className: "b", placeholder: "p" });
     expect(editor.isEditable).toBe(false);
     expect(editor.view.dom.classList.contains("b")).toBe(true);
-    const placeholder = editor.extensionManager.extensions.find((e) => e.name === "placeholder");
-    expect(placeholder?.options.placeholder).toBe("p");
+    expect(promptEditorPlaceholder(editor)).toBe("p");
   });
 
   it("applies parent content changes and ignores echoes and unchanged content", () => {

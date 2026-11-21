@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Editor } from "@tiptap/core";
-  import { BubbleMenuPlugin } from "@tiptap/extension-bubble-menu";
+  import { BubbleMenuPlugin, type BubbleMenuPluginProps } from "@tiptap/extension-bubble-menu";
 
   interface Props {
     editor?: Editor;
@@ -8,7 +8,10 @@
     pluginKey?: any;
     shouldShow?: ((props: any) => boolean) | null;
     updateDelay?: number;
-    tippyOptions?: Record<string, any>;
+    /** Floating UI options: placement, offset, flip, shift and the rest (TipTap v3; replaces v2's `tippyOptions`). */
+    options?: BubbleMenuPluginProps["options"];
+    /** Where to append the menu (default: `document.body`). */
+    appendTo?: BubbleMenuPluginProps["appendTo"];
     children?: import("svelte").Snippet;
   }
 
@@ -18,7 +21,8 @@
     pluginKey = "bubbleMenu",
     shouldShow = null,
     updateDelay = 250,
-    tippyOptions = {},
+    options = {},
+    appendTo = () => document.body,
     children,
   }: Props = $props();
 
@@ -30,11 +34,8 @@
         pluginKey,
         editor,
         element: menuElement,
-        tippyOptions: {
-          duration: 100,
-          appendTo: () => document.body,
-          ...tippyOptions,
-        },
+        appendTo,
+        options,
         shouldShow,
         updateDelay,
       });

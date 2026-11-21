@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { Editor } from "@tiptap/core";
+  import type { BubbleMenuPluginProps } from "@tiptap/extension-bubble-menu";
   import { shouldShowTableBubbleMenu, type TableToolbarItem } from "@pixerate/editor";
   import BubbleMenu from "../BubbleMenu.svelte";
   import TableToolbar from "./TableToolbar.svelte";
@@ -10,7 +11,10 @@
     class?: string;
     pluginKey?: any;
     updateDelay?: number;
-    tippyOptions?: Record<string, any>;
+    /** Floating UI options (TipTap v3; replaces v2's `tippyOptions`). */
+    options?: BubbleMenuPluginProps["options"];
+    /** Where to append the menu (default: `document.body`). */
+    appendTo?: BubbleMenuPluginProps["appendTo"];
     /** Buttons of the default toolbar. */
     items?: readonly TableToolbarItem[];
     /** Custom content (default: a `TableToolbar`). */
@@ -22,7 +26,8 @@
     class: className = "flex h-fit w-fit items-center gap-1 rounded-md border border-gray-200 bg-white p-1 shadow-md",
     pluginKey = "tableBubbleMenu",
     updateDelay = 250,
-    tippyOptions = {},
+    options,
+    appendTo,
     items,
     children,
   }: Props = $props();
@@ -34,7 +39,7 @@
   own plugin key (`tableBubbleMenu`), so it can be combined with the
   formatting `BubbleMenu`.
 -->
-<BubbleMenu {editor} class={className} {pluginKey} {updateDelay} {tippyOptions} shouldShow={shouldShowTableBubbleMenu}>
+<BubbleMenu {editor} class={className} {pluginKey} {updateDelay} {options} {appendTo} shouldShow={shouldShowTableBubbleMenu}>
   {#if children}
     {@render children()}
   {:else}

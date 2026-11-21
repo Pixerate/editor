@@ -53,7 +53,18 @@ function dropPosition(view: EditorView, event: DragEvent): number | undefined {
  * `createRichTextPreset`. Only drops where every file has a `document`
  * adapter are handled; anything else (e.g. images) falls through.
  */
-export const FileImport = Extension.create<FileImportOptions>({
+/** Runtime state of `FileImport`: `asPlainText` can be turned on after creation (an `EditorController` in plain-text mode does). */
+export interface FileImportStorage {
+  asPlainText: boolean;
+}
+
+declare module "@tiptap/core" {
+  interface Storage {
+    fileImport?: FileImportStorage;
+  }
+}
+
+export const FileImport = Extension.create<FileImportOptions, FileImportStorage>({
   name: "fileImport",
 
   addOptions() {
@@ -68,14 +79,20 @@ export const FileImport = Extension.create<FileImportOptions>({
     };
   },
 
+  addStorage() {
+    return { asPlainText: !!this.options.asPlainText };
+  },
+
   addProseMirrorPlugins() {
     const options = this.options;
+    // TipTap v3 copies options, so a later switch to plain text lives in storage.
+    const storage = this.storage;
     const registry = () => options.registry ?? defaultImportRegistry;
     const run = (view: EditorView, files: File[], at?: number) => {
       void importFilesIntoEditor(view, files, {
         registry: registry(),
         at,
-        asPlainText: options.asPlainText,
+        asPlainText: storage.asPlainText || !!options.asPlainText,
         adapterOptions: options.adapterOptions,
         onImport: options.onImport,
         onError: options.onImportError,

@@ -373,7 +373,7 @@ describe("ParagraphStyles extension", () => {
     expect(editor.commands.createParagraphStyleFromSelection("Callout box")).toBe(true);
     const style = registry.get("Calloutbox")!;
     expect(style).toMatchObject({ name: "Callout box", basedOn: "Normal", kind: "paragraph", quick: true });
-    expect(style.character?.color).toBe("rgb(255, 0, 0)");
+    expect(style.character?.color).toBe("#ff0000"); // TipTap v3 keeps colours as written
     expect(style.paragraph?.textAlign).toBe("center");
     expect(styleAt(editor)).toBe("Calloutbox");
     expect(editor.commands.createParagraphStyleFromSelection("  ")).toBe(false);

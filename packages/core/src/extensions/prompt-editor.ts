@@ -1,6 +1,6 @@
 import type { Editor, EditorOptions } from "@tiptap/core";
 import * as _StarterKit from "@tiptap/starter-kit";
-import * as _Placeholder from "@tiptap/extension-placeholder";
+import * as _Extensions from "@tiptap/extensions";
 import { Slice } from "@tiptap/pm/model";
 import type { ColorGradient, Template } from "../grammar/tokens";
 import { tokenizePrompt } from "../grammar/tokenizer";
@@ -20,7 +20,7 @@ const resolveExt = (mod: any, name: string) =>
         : mod?.default?.default ?? mod?.default ?? mod;
 
 const StarterKit = resolveExt(_StarterKit, "StarterKit");
-const Placeholder = resolveExt(_Placeholder, "Placeholder");
+const Placeholder = resolveExt(_Extensions, "Placeholder");
 
 /**
  * The framework-independent options of a prompt editor: the plain-text editor behind React's
@@ -176,8 +176,14 @@ export function createPromptEditorOptions(
     enableInputRules: false,
     editable: config.isEditing ?? true,
     extensions: [
-      StarterKit.configure({ heading: false, codeBlock: false }),
-      Placeholder.configure({ placeholder: config.placeholder ?? PROMPT_EDITOR_DEFAULT_PLACEHOLDER }),
+      // TipTap v3's StarterKit adds Link, Underline and a trailing paragraph; prompts have none of them.
+      StarterKit.configure({ heading: false, codeBlock: false, link: false, underline: false, trailingNode: false }),
+      // A function, so `syncPromptEditor` can change the text later: TipTap v3 copies extension
+      // options, so assigning to `options.placeholder` no longer reaches the plugin.
+      Placeholder.configure({
+        placeholder: ({ editor }: { editor: Editor }) =>
+          livePlaceholders.get(editor) ?? config.placeholder ?? PROMPT_EDITOR_DEFAULT_PLACEHOLDER,
+      }),
       GradientText.configure({
         templateColorMap: resolvePromptTemplateColorMap(templates, config.templateColorMap),
         speed: config.speed ?? 2,
@@ -326,7 +332,7 @@ export function syncPromptEditor(
     normalizeNewlines(config.content) !== getEditorText(editor)
   ) {
     const { from, to } = editor.state.selection;
-    editor.commands.setContent(plainTextToTipTapHtml(config.content), false);
+    editor.commands.setContent(plainTextToTipTapHtml(config.content), { emitUpdate: false });
     const max = editor.state.doc.content.size;
     editor.commands.setTextSelection({ from: Math.min(from, max), to: Math.min(to, max) });
   }
@@ -343,10 +349,19 @@ export function syncPromptEditor(
   }
 
   const placeholder = config.placeholder ?? PROMPT_EDITOR_DEFAULT_PLACEHOLDER;
-  const placeholderExt = editor.extensionManager.extensions.find((ext) => ext.name === "placeholder");
-  if (placeholderExt && placeholderExt.options.placeholder !== placeholder) {
-    placeholderExt.options.placeholder = placeholder;
+  if (promptEditorPlaceholder(editor) !== placeholder) {
+    livePlaceholders.set(editor, placeholder);
     // Re-run decorations so the new placeholder renders.
     editor.view.dispatch(editor.state.tr);
   }
+}
+
+/** Placeholders set by `syncPromptEditor` after the editor was created. */
+const livePlaceholders = new WeakMap<Editor, string>();
+
+/** The placeholder a prompt editor shows when it is empty. */
+export function promptEditorPlaceholder(editor: Editor): string {
+  const ext = editor.extensionManager.extensions.find((e) => e.name === "placeholder");
+  const value = ext?.options.placeholder;
+  return typeof value === "function" ? value({ editor, node: editor.state.doc.firstChild, pos: 0, hasAnchor: false }) : (value ?? "");
 }

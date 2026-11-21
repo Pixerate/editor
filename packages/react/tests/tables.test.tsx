@@ -174,7 +174,7 @@ describe("TableBubbleMenu", () => {
       </TableBubbleMenu>,
     );
     expect(editor.state.plugins.some((p) => (p as any).key?.startsWith("tableBubbleMenu"))).toBe(true);
-    // The menu element (portal target) holds the toolbar until tippy shows it.
+    // The menu element (portal target) holds the toolbar until the bubble menu shows it.
     expect(toolbar!.querySelector('[data-table-toolbar] [data-action="addRowAfter"]')).not.toBeNull();
   });
 

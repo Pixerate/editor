@@ -70,7 +70,9 @@ export class EditorController {
             stripPrototypeKeys(content);
 
     this.editor = new Editor({
-      element: element || undefined,
+      // TipTap v3: an explicit `element: undefined` overrides its detached-div
+      // default and leaves the editor without a view, so only pass a real one.
+      ...(element ? { element } : {}),
       content: initialContent,
       extensions,
       ...editorOptions,
@@ -95,10 +97,8 @@ export class EditorController {
     // Opt-in rich clipboard / file import must not bypass the plain-text invariant.
     const richClipboard = this.editor.storage?.richClipboard;
     if (richClipboard) richClipboard.plainTextMode = true;
-    const fileImport = this.editor.extensionManager?.extensions.find(
-      (ext) => ext.name === "fileImport",
-    );
-    if (fileImport) fileImport.options.asPlainText = true;
+    const fileImport = this.editor.storage?.fileImport;
+    if (fileImport) fileImport.asPlainText = true;
 
     this.editor.setOptions({
       editorProps: {
@@ -153,7 +153,7 @@ export class EditorController {
 
   public setPlainText(text: string, emitUpdate = true) {
     const html = plainTextToTipTapHtml(text);
-    this.editor.commands.setContent(html, emitUpdate);
+    this.editor.commands.setContent(html, { emitUpdate });
   }
 
   public getMarkdown(): string {
@@ -162,10 +162,10 @@ export class EditorController {
 
   public setMarkdown(markdown: string, emitUpdate = true) {
     if (this.editor.storage?.markdown?.parser) {
-      this.editor.commands.setContent(markdown, emitUpdate);
+      this.editor.commands.setContent(markdown, { emitUpdate });
     } else {
       const html = markdownToTipTapHtml(markdown);
-      this.editor.commands.setContent(html, emitUpdate);
+      this.editor.commands.setContent(html, { emitUpdate });
     }
   }
 

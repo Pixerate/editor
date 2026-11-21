@@ -48,6 +48,8 @@ export function usePromptEditor(props: UsePromptEditorProps) {
   const editor = useEditor(
     {
       immediatelyRender: false,
+      // TipTap v3 no longer re-renders on every transaction; the prompt UI reads editor state while rendering.
+      shouldRerenderOnTransaction: true,
       ...createPromptEditorOptions(() => propsRef.current, {
         loadingNodeView,
         reachedMilestones: reachedMilestonesRef.current,

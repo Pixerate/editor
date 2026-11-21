@@ -1,3 +1,4 @@
+import { promptEditorPlaceholder } from "@pixerate/editor";
 // @vitest-environment jsdom
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import React, { act, useState } from "react";
@@ -90,10 +91,7 @@ describe("usePromptEditor", () => {
     await render({ onEditor, placeholder: "two", className: "b" });
 
     expect(editor).toBe(first);
-    const placeholder = first.extensionManager.extensions.find(
-      (ext) => ext.name === "placeholder",
-    );
-    expect(placeholder?.options.placeholder).toBe("two");
+    expect(promptEditorPlaceholder(first)).toBe("two");
     expect(first.view.dom.classList.contains("b")).toBe(true);
     expect(first.view.dom.classList.contains("a")).toBe(false);
   });

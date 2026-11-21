@@ -158,7 +158,7 @@ describe("TableBubbleMenu", () => {
     select(editor, posOf(editor, "Apples") + 1);
     render(TableBubbleMenu, { editor });
     expect(editor.state.plugins.some((p) => (p as any).key?.startsWith("tableBubbleMenu"))).toBe(true);
-    // The plugin detaches the menu element until tippy shows it.
+    // The plugin detaches the menu element until the bubble menu shows it.
     const view = (editor.view as any).pluginViews.find((v: any) => v.element?.querySelector?.("[data-table-toolbar]"));
     expect(view.element.querySelector('[data-action="addRowAfter"]')).not.toBeNull();
   });

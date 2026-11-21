@@ -23,8 +23,10 @@ export const initiateEditor = (
   });
 
   const editor = new Editor({
-    element,
-    content,
+    // TipTap v3: an explicit `undefined` overrides the defaults (a detached element, empty content)
+    // and leaves the editor without a view, so only pass what was given.
+    ...(element ? { element } : {}),
+    ...(content !== undefined ? { content } : {}),
     extensions: [
       ...defaultPreset,
       ...(extensions ?? []),

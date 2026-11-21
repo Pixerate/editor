@@ -139,7 +139,8 @@ describe("createRichTextPreset({ table })", () => {
     });
     expect(fixed.state.plugins.some((p) => (p as any).key?.startsWith("tableColumnResizing"))).toBe(false);
     expect(fixed.getHTML()).toContain('class="my-table"');
-    expect(fixed.getHTML()).toContain('<td class="c" colspan="1" rowspan="1">');
+    // TipTap v3 leaves default spans out of the HTML
+    expect(fixed.getHTML()).toContain('<td class="c">');
     fixed.destroy();
   });
 });
@@ -162,8 +163,8 @@ describe("table HTML", () => {
       { type: "tableCell", colspan: 1, rowspan: 1, colwidth: null, align: "right", backgroundColor: null },
     ]);
     const out = editor.getHTML();
-    expect(out).toMatch(/<th colspan="2" rowspan="1" style="text-align: center;?">/);
-    expect(out).toContain('<th colspan="1" rowspan="2">');
+    expect(out).toMatch(/<th colspan="2" style="text-align: center;?">/);
+    expect(out).toContain('<th rowspan="2">');
     expect(out).toContain('data-background-color=');
     // Serialized HTML parses back to the same document.
     const again = makeEditor(out);
@@ -638,7 +639,7 @@ describe("tables with the rich clipboard and paragraph styles", () => {
     const editor = makeEditor(TABLE, { paragraphStyles: true });
     at(editor, "Apples");
     expect(editor.commands.setParagraphStyle("Heading2")).toBe(true);
-    expect(editor.getHTML()).toMatch(/<td colspan="1" rowspan="1"><h2[^>]*>Apples<\/h2><\/td>/);
+    expect(editor.getHTML()).toMatch(/<td><h2[^>]*>Apples<\/h2><\/td>/);
     editor.destroy();
   });
 });

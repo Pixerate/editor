@@ -10,7 +10,13 @@ export interface BubbleMenuProps {
   editor: Editor | null;
   className?: string;
   children: React.ReactNode;
-  tippyOptions?: BubbleMenuPluginProps["tippyOptions"];
+  /**
+   * Floating UI options: placement, offset, flip, shift and the rest (TipTap v3;
+   * replaces v2's `tippyOptions`). Default `{}`.
+   */
+  options?: BubbleMenuPluginProps["options"];
+  /** Where to append the menu (default: the editor's parent element). */
+  appendTo?: BubbleMenuPluginProps["appendTo"];
   shouldShow?: BubbleMenuPluginProps["shouldShow"];
   pluginKey?: BubbleMenuPluginProps["pluginKey"];
   updateDelay?: BubbleMenuPluginProps["updateDelay"];
@@ -20,7 +26,8 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
   editor,
   className = "flex items-center gap-1 bg-popover text-popover-foreground border shadow-md rounded-md p-1",
   children,
-  tippyOptions = { duration: 100 },
+  options,
+  appendTo,
   shouldShow = null,
   pluginKey = "bubbleMenu",
   updateDelay,
@@ -44,7 +51,8 @@ export const BubbleMenu: React.FC<BubbleMenuProps> = ({
       editor,
       element,
       pluginKey,
-      tippyOptions,
+      options,
+      appendTo,
       shouldShow,
       updateDelay,
     });

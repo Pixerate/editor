@@ -63,6 +63,12 @@ export function writeRichClipboard(
  * Opt-in: add it to `extensions` or pass `richClipboard: true` to
  * `createRichTextPreset`.
  */
+declare module "@tiptap/core" {
+  interface Storage {
+    richClipboard?: RichClipboardStorage;
+  }
+}
+
 export const RichClipboard = Extension.create<RichClipboardOptions, RichClipboardStorage>({
   name: "richClipboard",
 
