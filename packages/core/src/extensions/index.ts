@@ -24,3 +24,4 @@ export * from "./paragraph-styles";
 export * from "./table";
 export * from "./chart";
 export * from "./agent-caret";
+export * from "./transform-aware-scroll";

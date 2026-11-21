@@ -28,6 +28,19 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.createDirtyTracker).toBeDefined();
   });
 
+  it("exports transform-aware scroll functions and plugin", () => {
+    expect(SvelteEditor.createTransformAwareScrollPlugin).toBeDefined();
+    expect(SvelteEditor.transformAwareScrollPluginKey).toBeDefined();
+    expect(SvelteEditor.TransformAwareScroll).toBeDefined();
+    expect(SvelteEditor.createTransformAwareScrollExtension).toBeDefined();
+    expect(SvelteEditor.scrollCaretIntoView).toBeDefined();
+    expect(SvelteEditor.scrollCaretIntoViewNow).toBeDefined();
+    expect(SvelteEditor.findScrollContainer).toBeDefined();
+    expect(SvelteEditor.isScaledScrollContainer).toBeDefined();
+    expect(SvelteEditor.calculateTransformScrollAdjustment).toBeDefined();
+    expect(SvelteEditor.cancelScheduledScroll).toBeDefined();
+  });
+
   it("exports createHistory, createHistoryShortcuts, and HistoryManager", () => {
     expect(SvelteEditor.createHistory).toBeDefined();
     expect(SvelteEditor.createHistoryShortcuts).toBeDefined();

@@ -177,6 +177,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "Planned (#546)"
       },
       {
+        "feature": "Transform-Aware Caret Scrolling (the caret stays in view when the editor's scroll container is drawn scaled: pan/zoom canvases, diagram nodes; `TransformAwareScroll`, on by default in the preset, `transformAwareScroll: false` turns it off)",
+        "core": "`createTransformAwareScrollPlugin`",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "— (native text views scroll themselves)"
+      },
+      {
         "feature": "Smilies (`:)` -> `🙂`) & Hex Highlighter",
         "core": "✅",
         "react": "✅",

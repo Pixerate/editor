@@ -6,6 +6,7 @@
     ImageOptions,
     FileImportOptions,
     RichClipboardOptions,
+    TransformAwareScrollOptions,
   } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte.js";
@@ -33,6 +34,8 @@
     fileImport?: FileImportOptions | boolean;
     /** Copy/paste lossless ProseMirror slices between editors (opt-in). */
     richClipboard?: RichClipboardOptions | boolean;
+    /** Transform-aware caret scroll into view plugin (enabled by default; pass false to opt out). */
+    transformAwareScroll?: boolean | TransformAwareScrollOptions;
   }
 
   let {
@@ -56,6 +59,7 @@
     onUploadError = undefined,
     fileImport = undefined,
     richClipboard = undefined,
+    transformAwareScroll = undefined,
   }: EditorProps = $props();
 
   let element = $state<HTMLElement>();
@@ -91,6 +95,7 @@
           ...(richClipboard !== undefined ? { richClipboard } : {}),
           ...richTextOptions,
         },
+        transformAwareScroll,
         editable,
         autofocus,
         // TipTap registers these as event listeners; passing `undefined`
