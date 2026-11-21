@@ -1196,6 +1196,25 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
       });
     },
   };
+  const generativeFillTool: AgentTool = {
+    name: 'generative_fill',
+    title: 'Generative Fill',
+    description:
+      'Edit › Generative Fill: paints what prompt describes into the selection with the generative fill model the host has set (an AI image model), on a new pixel layer above the active layer, limited to the selection, so it can be masked, hidden or removed. Select the area first (select_rect, select_object, select_subject…), a little larger than what should change. Use it to add or replace things; to remove something and rebuild what is behind it from the image itself, use content_aware_fill. Fails without a model, without a selection or with an empty prompt. One undo step; can be cancelled. Returns the new layerId, the filled bounds and the provider name. Then check the result with capture_view.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', minLength: 1, maxLength: 1000, description: 'What to paint into the selection, in words (e.g. "a red kite in the sky"). Describe the content, not the edit.' },
+      },
+      required: ['prompt'],
+      additionalProperties: false,
+    },
+    annotations: { ...writeAnnotations('Generative Fill'), idempotentHint: false, openWorldHint: true },
+    handler: async (args, context) => {
+      if (typeof args.prompt !== 'string' || !args.prompt.trim()) throw new Error('prompt must describe what to paint into the selection.');
+      return controller.generativeFill(args.prompt, { signal: context?.signal });
+    },
+  };
   const separateTool: AgentTool = {
     name: 'separate_subject',
     title: 'Separate the subject from its background',
@@ -1488,6 +1507,7 @@ export function createImageSelectionTools(controller: ImageEditorController): Ag
     strokeTool,
     cropTool,
     fillTool,
+    generativeFillTool,
     separateTool,
     copyTool,
     cutTool,

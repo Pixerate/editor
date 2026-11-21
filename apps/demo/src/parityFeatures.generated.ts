@@ -2033,6 +2033,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "react": "`<SelectionOptionsBar>`",
         "svelte": "`<SelectionOptionsBar>`",
         "swift": "Planned (#533)"
+      },
+      {
+        "feature": "Image Generative Fill (with a `GenerativeFillProvider` (`generativeFill` option, `setGenerativeFillProvider`), `generativeFill(prompt)` sends the composite of the layers, the selection as a mask and its bounds to the provider and puts what it paints on a new pixel layer above the active one, limited to the selection the call began with; one undo step, cancellable; the `generative_fill` agent tool fails with the reason when no provider is set; the Selection panel has a prompt field and Generative Fill button when a provider is set)",
+        "core": "`generative_fill`, `generativeFill`, `GenerativeFillProvider`",
+        "react": "`<SelectionOptionsBar>`",
+        "svelte": "`<SelectionOptionsBar>`",
+        "swift": "Planned (#533)"
       }
     ]
   },

@@ -19,6 +19,7 @@ import {
   LegacySerializedImageEditorState,
   SerializedImageEditorState,
   DocumentOpener,
+  GenerativeFillProvider,
 } from './types';
 import { inspectMaskEdge as inspectEdge, type InspectMaskEdgeOptions, type MaskEdgeReport } from './selection/inspect';
 import { describeRecipe, isShapeStep, readRecipeStep, replaySelectionRecipe, samplingKey, stepNeedsPixels, type RecipeCombine, type RecipeSampling, type SelectionRecipeStep } from './selection/recipe';
@@ -1595,6 +1596,8 @@ export class ImageEditorController {
   private compositor = new LayerCompositor();
   /** The segmentation provider behind `selectSubject` (see `setSegmentationProvider`). */
   private segmentation: SegmentationProvider | null = null;
+  /** The generative fill provider behind `generativeFill` (see `setGenerativeFillProvider`). */
+  private generativeFillModel: GenerativeFillProvider | null = null;
   private selectionWorker: SelectionWorkerClient | null = null;
   private documentOpener: DocumentOpener | null = null;
   /** The effects provider slot (see `setEffectsProvider`). */
@@ -1612,6 +1615,7 @@ export class ImageEditorController {
     this.effectsEngine.subscribe(() => this.queueEffectRefresh('incomplete'));
     if (options.effects) this.effects.set(options.effects);
     if (options.segmentation) this.segmentation = options.segmentation;
+    if (options.generativeFill) this.generativeFillModel = options.generativeFill;
     if (options.selectionWorker) this.selectionWorker = new SelectionWorkerClient(options.selectionWorker);
     if (options.openDocument) this.documentOpener = options.openDocument;
     this.maxHistoryDepth = options.maxHistoryDepth ?? 50;
@@ -1938,6 +1942,18 @@ export class ImageEditorController {
   public setSegmentationProvider(provider: SegmentationProvider | null): void {
     if (this.segmentation === provider) return;
     this.segmentation = provider;
+    this.notify();
+  }
+
+  /** The registered generative fill provider, or `null` (then `generativeFill` is unavailable). */
+  public get generativeFillProvider(): GenerativeFillProvider | null {
+    return this.generativeFillModel;
+  }
+
+  /** Registers (or with `null` removes) the generative fill provider. Not an edit: no undo step. */
+  public setGenerativeFillProvider(provider: GenerativeFillProvider | null): void {
+    if (this.generativeFillModel === provider) return;
+    this.generativeFillModel = provider;
     this.notify();
   }
 
@@ -7568,13 +7584,46 @@ export class ImageEditorController {
       await this.replaceSource(newDataUrl, true);
       return;
     }
+    const sel = this.state.selection?.bounds ? this.state.selection : null;
+    return this.addPixelLayer({ name: 'Inpaint', pixels: await this.clippedResult(newDataUrl, sel) });
+  }
+
+  /** An AI result decoded and resampled to the image, with its alpha limited to `sel` when given. */
+  private async clippedResult(dataUrl: string, sel: SelectionMask | null): Promise<PixelBuffer> {
     const { width, height } = this.naturalSize;
-    let px = await this.decodeImage(newDataUrl);
+    let px = await this.decodeImage(dataUrl);
     if (px.width !== width || px.height !== height) px = resizePixels(px, width, height);
     const data = new Uint8ClampedArray(px.data as ArrayLike<number>);
-    const sel = this.state.selection?.bounds ? this.state.selection : null;
     if (sel) for (let p = 0, i = 3; p < width * height; p++, i += 4) data[i] = Math.round((data[i] * sel.data[p]) / 255);
-    return this.addPixelLayer({ name: 'Inpaint', pixels: { width, height, data } });
+    return { width, height, data };
+  }
+
+  /**
+   * Edit › Generative Fill: sends the composite of the layers, the selection as a mask and
+   * `prompt` to the generative fill provider (which must be set), and puts what it paints on a
+   * new pixel layer above the active one, limited to the selection as it was when the call began.
+   * One undo step; `signal` cancels it with nothing changed. Resolves to the new layer's id, the
+   * filled bounds and the provider's name.
+   */
+  public async generativeFill(prompt: string, options: { signal?: AbortSignal } = {}): Promise<{ layerId: string; bounds: CropBox; provider?: string }> {
+    const provider = this.generativeFillModel;
+    if (!provider) throw new LayerOperationError('Generative Fill needs a generative fill model, and the host has not set one. To remove something, use Content-Aware Fill instead.');
+    const text = typeof prompt === 'string' ? prompt.trim() : '';
+    if (!text) throw new LayerOperationError('Describe what to paint into the selection (the prompt is empty).');
+    const sel = this.state.selection?.bounds ? this.state.selection : null;
+    if (!sel?.bounds) throw new LayerOperationError('Nothing is selected: select the area to fill first (select_rect, select_object, select_subject…).');
+    const bounds = { ...sel.bounds };
+    const { width, height } = this.naturalSize;
+    const image = await this.toAIInputDataURL({ target: 'new-layer' });
+    const mask = pngDataUrl(sel.width, sel.height, sel.data, 1);
+    options.signal?.throwIfAborted();
+    const result = await provider.fill({ prompt: text, image, mask, bounds, width, height, signal: options.signal });
+    options.signal?.throwIfAborted();
+    if (typeof result !== 'string' || !result.trim()) throw new LayerOperationError(`${provider.name ?? 'The generative fill model'} returned no image.`);
+    const pixels = await this.clippedResult(result, sel);
+    options.signal?.throwIfAborted();
+    const layerId = this.addPixelLayer({ name: text.length > 40 ? `${text.slice(0, 39)}…` : text, pixels });
+    return { layerId, bounds, ...(provider.name ? { provider: provider.name } : {}) };
   }
 
   /**

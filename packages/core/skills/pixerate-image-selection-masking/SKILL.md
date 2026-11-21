@@ -83,7 +83,7 @@ step 5, then refine. For a layer mask, `load_selection_from_mask`, refine, then 
      a tight edge; check the result with `set_mask_view` before you go on.
    - Painting or fills inside it: keep the selection active and paint; `stroke_selection` for
      an outline that follows it.
-   - Removing what it covers: `content_aware_fill` `output: "new-layer"`.
+   - Removing what it covers: `content_aware_fill` `output: "new-layer"`; replacing it from words: `generative_fill`.
    - A copy elsewhere: `copy_pixels`, then `paste_pixels` (`into` masks it by a selection).
    Soften with the mask's own `feather` / `density` rather than `modify_selection` `feather`, so
    it stays adjustable.
@@ -248,7 +248,7 @@ step 5, then refine. For a layer mask, `load_selection_from_mask`, refine, then 
 - `set_smart_filter_mask`: limit smart filters
 - `layer_via_copy`: lift the selection onto a new layer
 - `stroke_selection`, `crop_to_selection`: an outline along the selection edge; crop to its bounds
-- `content_aware_fill`, `separate_subject`: remove what is selected; split a subject from a filled background
+- `content_aware_fill`, `generative_fill`, `separate_subject`: remove what is selected; replace it from words (host model); split a subject from a filled background
 - `copy_pixels`, `cut_pixels`, `paste_pixels`: the editor clipboard
 - `add_adjustment_layer`, `apply_effect`, `add_smart_filter`: masked by an active selection
 - `paint_stroke`: paint on a mask with `channel: "mask"`

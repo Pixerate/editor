@@ -222,6 +222,41 @@ describe('Svelte SelectionOptionsBar: Select Subject', () => {
   });
 });
 
+describe('Svelte SelectionOptionsBar: Generative Fill', () => {
+  it('shows only with a provider and fills the selection with the prompt', async () => {
+    const controller = new ImageEditorController({ image: fakeImage(20, 10) });
+    const props = $state({
+      controller,
+      options: { ...DEFAULT_SELECTION_TOOL_OPTIONS } as SelectionToolOptions,
+      onOptionsChange: (next: SelectionToolOptions) => {
+        props.options = next;
+      },
+    });
+    component = mount(SelectionOptionsBar, { target, props });
+    flushSync();
+    expect(target.querySelector('[data-testid="generative-fill"]')).toBeNull();
+
+    const calls: unknown[][] = [];
+    controller.generativeFill = (async (...args: unknown[]) => {
+      calls.push(args);
+      throw new Error('The model is busy.');
+    }) as any;
+    controller.setGenerativeFillProvider({ fill: async () => '' });
+    flushSync();
+    const input = target.querySelector('input[aria-label="What to generate in the selection"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    setValue(input, 'a wooden bench');
+    expect(button('Generative Fill').disabled).toBe(true); // nothing selected
+    controller.selectRect({ x: 0, y: 0, width: 4, height: 4 });
+    flushSync();
+    click(button('Generative Fill'));
+    await settle();
+    expect(calls).toHaveLength(1);
+    expect(calls[0][0]).toBe('a wooden bench');
+    expect(target.querySelector('[data-testid="generative-fill"] [role="status"]')!.textContent).toContain('The model is busy.');
+  });
+});
+
 describe('Svelte SelectionOptionsBar: Select Sky', () => {
   it('selects the sky with the options bar mode and shows why when there is none', async () => {
     const controller = new ImageEditorController({ image: fakeImage(20, 10) });

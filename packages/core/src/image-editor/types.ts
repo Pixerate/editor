@@ -581,6 +581,12 @@ export interface ImageEditorOptions {
    */
   segmentation?: SegmentationProvider | null;
   /**
+   * A generative fill provider (an AI image model that paints what a prompt describes into a
+   * region) for Edit › Generative Fill (`generativeFill`, the `generative_fill` tool). Optional;
+   * without one Generative Fill is unavailable. Change it later with `setGenerativeFillProvider`.
+   */
+  generativeFill?: GenerativeFillProvider | null;
+  /**
    * Makes the Web Worker the long selections run in (Select Subject, Object Selection, Focus
    * Area, Select Sky, Quick Selection, the Select and Mask preview), e.g. with Vite
    * `() => new SelectionWorker()` from `@pixerate/editor/image-editor/selection-worker?worker`.
@@ -617,6 +623,33 @@ export interface RemoveBackgroundOptions {
 
 export type InpaintHook = (options: InpaintOptions) => Promise<string | void> | string | void;
 export type RemoveBackgroundHook = (options: RemoveBackgroundOptions) => Promise<string | void> | string | void;
+
+/** What a generative fill provider is asked for (see `GenerativeFillProvider`). */
+export interface GenerativeFillRequest {
+  /** What to paint into the selected area, in words. */
+  prompt: string;
+  /** The composite of the layers (no annotations) at the image's natural size, as a PNG data URL. */
+  image: string;
+  /** The selection at the same size as a PNG data URL: white is selected, black is not. */
+  mask: string;
+  /** The selection's bounding box in natural pixels. */
+  bounds: CropBox;
+  /** The image's natural size in pixels. */
+  width: number;
+  height: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Paints what a prompt describes into a region of an image: an AI image model behind
+ * `ImageEditorController.generativeFill`. `fill` resolves to the whole edited image (any size;
+ * it is resampled to the image), as a data URL; only the selected area of it is kept.
+ */
+export interface GenerativeFillProvider {
+  /** Shown in the UI and in tool results (e.g. "Gemini"). */
+  readonly name?: string;
+  fill(request: GenerativeFillRequest): Promise<string>;
+}
 
 export interface ImageEditorAIHooks {
   onInpaint?: InpaintHook;
