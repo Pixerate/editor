@@ -66,6 +66,7 @@ import { FindReplace, type FindReplaceOptions } from "./find-replace/extension";
 import { ParagraphStyles, type ParagraphStylesOptions } from "./paragraph-styles/extension";
 import { createTableExtensions, type RichTextTableOptions } from "./table/extension";
 import { Chart, Sparkline, type ChartNodeOptions, type SparklineNodeOptions } from "./chart";
+import { TransformAwareScroll, type TransformAwareScrollOptions } from "./transform-aware-scroll";
 
 /**
  * The TipTap packages whose commands the preset installs. Exported only so the
@@ -109,6 +110,12 @@ export interface RichTextPresetOptions {
   fileImport?: FileImportOptions | boolean;
   /** Copy/paste lossless ProseMirror slices between editors (opt-in). */
   richClipboard?: RichClipboardOptions | boolean;
+  /**
+   * Scroll the caret into view correctly when the editor's scroll container is drawn scaled
+   * (a pan/zoom canvas, a diagram node). On by default; it only acts when the container is
+   * scaled and leaves ProseMirror's own scrolling alone otherwise. Pass `false` to turn it off.
+   */
+  transformAwareScroll?: TransformAwareScrollOptions | boolean;
   /**
    * Word-style AutoCorrect (smart quotes, symbols, fractions, sentence
    * capitalization, ...). Off by default. Replaces the Typography extension
@@ -259,6 +266,10 @@ export function createRichTextPreset(
 
   if (enableColorHighlighter) {
     extensions.push(ColorHighlighter);
+  }
+
+  if (options.transformAwareScroll !== false) {
+    extensions.push(TransformAwareScroll.configure(optionObject(options.transformAwareScroll)));
   }
 
   if (options.mention) {

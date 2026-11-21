@@ -204,13 +204,14 @@ Every feature is available from core and from both framework packages, except wh
 </details>
 
 <details>
-<summary><strong>Rich text</strong> (16)</summary>
+<summary><strong>Rich text</strong> (17)</summary>
 
 | Feature | Core | React | Svelte | Swift |
 | :--- | :---: | :---: | :---: | :---: |
 | Floating Bubble Formatting Menu | Headless | Component | Component | Planned (#546) |
 | Markdown format commands and editing (`@pixerate/markdown-conformance`: the format-command manifest with labels, groups and shortcuts, and its editing corpus: toggles, links, blocks, code blocks, Return, Tab / Shift-Tab and Backspace) | `createFormatCommands`, `formatCommandsFor` | Via core (`formatCommandsFor`) | Via core (`formatCommandsFor`) | `FormatManifest`, `FormatCommandEdits` and `MarkdownEditingCommands` on raw Markdown, in the PixerateMarkdown engine shared with Swash; runs the corpus. Agent tools with the web names in PixerateMarkdownTools: `createMarkdownCommandToolProvider` (`list_commands` / `run_command` over `createMarkdownFormatCommands`), `createMarkdownToolProvider` (`get_text`, `find_text`, `replace_range`, `format_text`, `set_block_type`…) and `createMarkdownTextMechanicsToolProvider` (#609) |
 | Rich Text Preset (Headings, Lists, Task Lists, Links) | ✅ | ✅ | ✅ | Planned (#546) |
+| Transform-Aware Caret Scrolling (the caret stays in view when the editor's scroll container is drawn scaled: pan/zoom canvases, diagram nodes; `TransformAwareScroll`, on by default in the preset, `transformAwareScroll: false` turns it off) | `createTransformAwareScrollPlugin` | Via core | Via core | — (native text views scroll themselves) |
 | Smilies (`:)` -> `🙂`) & Hex Highlighter | ✅ | ✅ | ✅ | Planned (#546) |
 | Heading Outline & Navigation Panel (`outline`) | Headless (`createOutlineStore`) | `<OutlinePanel />` & `useOutline` | `<OutlinePanel />` & `createOutline` | Planned (#546) |
 | Table of Contents Block (`tableOfContents`, `[[toc]]`) | ✅ | ✅ | ✅ | Planned (#546) |
