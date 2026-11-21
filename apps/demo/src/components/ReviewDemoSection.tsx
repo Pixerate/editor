@@ -37,7 +37,7 @@ const MOVE_EXAMPLE = `<h3>Tracked moves</h3>
  */
 function runMoveExample(editor: Editor) {
   editor.commands.setTrackChanges(false);
-  editor.commands.setContent(MOVE_EXAMPLE);
+  editor.commands.setContent(MOVE_EXAMPLE, { emitUpdate: false });
   editor.commands.setTrackChanges(true);
   const doc = editor.state.doc;
   const starts: number[] = [];

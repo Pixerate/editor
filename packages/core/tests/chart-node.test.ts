@@ -379,7 +379,8 @@ describe("document chart tools", () => {
     expect(await error("update_chart_in_document", { changes: { type: "line" } })).toMatch(/Pass chartId or pos.*none; add one with insert_chart/);
     const { id, pos } = await ok("insert_chart", { spec: { categories: ["a"], series: [{ name: "S", values: [1] }] } });
     expect(await error("update_chart_in_document", { chartId: "nope", changes: { type: "line" } })).toContain(`"${id}" at ${pos}`);
-    expect(await error("update_chart_in_document", { pos: 0, changes: { type: "line" } })).toMatch(/no chart at position 0/);
+    const noChart = pos === 0 ? 1 : 0; // TipTap v3 puts a block inserted at the start of a paragraph before it
+    expect(await error("update_chart_in_document", { pos: noChart, changes: { type: "line" } })).toMatch(new RegExp(`no chart at position ${noChart}`));
     expect(await error("update_chart_in_document", { chartId: id })).toMatch(/Nothing to change/);
     expect(await error("update_chart_in_document", { chartId: id, changes: { innerRadius: 2 } })).toMatch(/maximum|innerRadius/);
     expect(await error("update_chart_in_document", { chartId: id, changes: { bogus: 1 } })).toMatch(/bogus/);

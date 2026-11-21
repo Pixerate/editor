@@ -541,7 +541,7 @@ const RichDocumentDemo: React.FC = () => {
           <TableBubbleMenu
             editor={editor}
             className="bg-slate-800 text-slate-100 border border-slate-700 shadow-xl rounded-md p-1"
-            tippyOptions={{ duration: 100, placement: "bottom" }}
+            options={{ placement: "bottom" }}
           >
             <TableToolbar
               editor={editor}

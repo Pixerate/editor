@@ -17,3 +17,16 @@ const resolveExt = (mod: any, name: string) =>
 export const Markdown = resolveExt(TipTapMarkdown, "Markdown");
 
 export type { TipTapMarkdownOptions as MarkdownOptions };
+
+/** What the Markdown extension keeps in `editor.storage.markdown` (TipTap v3 types storage per extension). */
+export interface MarkdownExtensionStorage {
+  getMarkdown(): string;
+  parser?: unknown;
+  serializer?: unknown;
+}
+
+declare module "@tiptap/core" {
+  interface Storage {
+    markdown?: MarkdownExtensionStorage;
+  }
+}

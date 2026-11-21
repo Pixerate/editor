@@ -44,9 +44,9 @@ describe('richTextStyleState', () => {
 		const [h, p] = state.blocks;
 		expect(editor.state.doc.textBetween(richTextBlockPos(h, 4), richTextBlockPos(h, 8))).toBe('news');
 		expect(editor.state.doc.textBetween(richTextBlockPos(p, 6), richTextBlockPos(p, 9))).toBe('red');
-		// The DOM reads inline colours back as rgb(); the colour checks parse either.
-		expect(state.runs).toEqual([{ text: 'red', from: richTextBlockPos(p, 6), to: richTextBlockPos(p, 9), color: 'rgb(255, 0, 0)' }]);
-		expect(richTextStyleSurface(state).colors).toEqual([{ color: 'rgb(255, 0, 0)', label: 'Text "red"', target: { from: state.runs[0].from, to: state.runs[0].to }, use: 'text' }]);
+		// TipTap v3 keeps inline colours as written (v2 read them back from the DOM as rgb()); the colour checks parse either.
+		expect(state.runs).toEqual([{ text: 'red', from: richTextBlockPos(p, 6), to: richTextBlockPos(p, 9), color: '#ff0000' }]);
+		expect(richTextStyleSurface(state).colors).toEqual([{ color: '#ff0000', label: 'Text "red"', target: { from: state.runs[0].from, to: state.runs[0].to }, use: 'text' }]);
 	});
 });
 

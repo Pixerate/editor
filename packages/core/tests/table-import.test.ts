@@ -126,7 +126,7 @@ describe("import → editor: tables survive", () => {
       [["td", "x", 1, 1], ["td", "y", 1, 1]],
     ]);
     // The serialized document keeps the spans.
-    expect(editor.getHTML()).toContain('<td colspan="1" rowspan="2"><p>tall</p></td><td colspan="2" rowspan="1"><p>wide</p></td>');
+    expect(editor.getHTML()).toContain('<td rowspan="2"><p>tall</p></td><td colspan="2"><p>wide</p></td>'); // TipTap v3 omits default spans
     editor.destroy();
   });
 

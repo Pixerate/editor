@@ -1,3 +1,4 @@
+import { promptEditorPlaceholder } from "@pixerate/editor";
 import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { flushSync } from "svelte";
 import type { Editor } from "@tiptap/core";
@@ -91,10 +92,7 @@ describe("usePromptEditor (Svelte)", () => {
     flushSync();
 
     expect(prompt.editor).toBe(first);
-    const placeholderExt = first.extensionManager.extensions.find(
-      (ext) => ext.name === "placeholder",
-    );
-    expect(placeholderExt?.options.placeholder).toBe("two");
+    expect(promptEditorPlaceholder(first)).toBe("two");
     expect(first.view.dom.classList.contains("b")).toBe(true);
     expect(first.view.dom.classList.contains("a")).toBe(false);
   });

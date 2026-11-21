@@ -289,12 +289,11 @@
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
     "@pixerate/editor": ">=0.342.0 <1.0.0-0",
-    "@tiptap/core": "^2.27.3",
-    "@tiptap/extension-bubble-menu": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/pm": "^2.27.3",
-    "@tiptap/react": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3",
+    "@tiptap/core": "^3.35.0",
+    "@tiptap/extension-bubble-menu": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/react": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
     "@xyflow/react": "^12.0.0",
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
@@ -307,9 +306,6 @@
       "optional": true
     },
     "@tiptap/extension-bubble-menu": {
-      "optional": true
-    },
-    "@tiptap/extension-placeholder": {
       "optional": true
     },
     "@tiptap/pm": {
@@ -327,12 +323,11 @@
   },
   "devDependencies": {
     "@pixerate/editor": "workspace:*",
-    "@tiptap/core": "^2.27.3",
-    "@tiptap/extension-bubble-menu": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/pm": "^2.27.3",
-    "@tiptap/react": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3",
+    "@tiptap/core": "^3.35.0",
+    "@tiptap/extension-bubble-menu": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/react": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "react": "^19.3.1",

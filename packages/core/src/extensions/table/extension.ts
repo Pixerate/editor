@@ -1,18 +1,15 @@
 import { getHTMLFromFragment, type Extensions } from "@tiptap/core";
 import { Fragment, type Node as ProsemirrorNode } from "@tiptap/pm/model";
 import * as _Table from "@tiptap/extension-table";
-import * as _TableRow from "@tiptap/extension-table-row";
-import * as _TableHeader from "@tiptap/extension-table-header";
-import * as _TableCell from "@tiptap/extension-table-cell";
 import { createTableNestingPlugin } from "./nesting";
 
 const resolveExt = (mod: any, name: string) =>
   mod?.[name] || mod?.default?.[name] || mod?.default?.default || mod?.default || mod;
 
 const BaseTable = resolveExt(_Table, "Table");
-const BaseTableRow = resolveExt(_TableRow, "TableRow");
-const BaseTableHeader = resolveExt(_TableHeader, "TableHeader");
-const BaseTableCell = resolveExt(_TableCell, "TableCell");
+const BaseTableRow = resolveExt(_Table, "TableRow");
+const BaseTableHeader = resolveExt(_Table, "TableHeader");
+const BaseTableCell = resolveExt(_Table, "TableCell");
 
 /** Horizontal alignment of a table cell (`align` attribute). */
 export type TableCellAlignment = "left" | "center" | "right" | "justify";

@@ -7,7 +7,7 @@ Framework bindings: [`@pixerate/editor-react`](https://www.npmjs.com/package/@pi
 ```bash
 npm install @pixerate/editor
 # only if you use rich text or prompts (the root entry, /extensions, /serializers, /agent, /compare):
-npm install @tiptap/core @tiptap/pm @tiptap/starter-kit @tiptap/suggestion @tiptap/extension-character-count @tiptap/extension-color @tiptap/extension-highlight @tiptap/extension-image @tiptap/extension-link @tiptap/extension-mention @tiptap/extension-placeholder @tiptap/extension-subscript @tiptap/extension-superscript @tiptap/extension-table @tiptap/extension-table-cell @tiptap/extension-table-header @tiptap/extension-table-row @tiptap/extension-task-item @tiptap/extension-task-list @tiptap/extension-text-align @tiptap/extension-text-style @tiptap/extension-typography @tiptap/extension-underline markdown-it markdown-it-task-lists prosemirror-markdown
+npm install @tiptap/core@^3 @tiptap/pm@^3 @tiptap/starter-kit@^3 @tiptap/suggestion@^3 @tiptap/extensions@^3 @tiptap/extension-list@^3 @tiptap/extension-highlight@^3 @tiptap/extension-image@^3 @tiptap/extension-link@^3 @tiptap/extension-mention@^3 @tiptap/extension-subscript@^3 @tiptap/extension-superscript@^3 @tiptap/extension-table@^3 @tiptap/extension-text-align@^3 @tiptap/extension-text-style@^3 @tiptap/extension-typography@^3 markdown-it markdown-it-task-lists prosemirror-markdown
 # only if you use @pixerate/editor/canvas (or the agent canvas planner):
 npm install @dagrejs/dagre
 ```

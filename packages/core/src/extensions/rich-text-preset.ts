@@ -4,17 +4,13 @@ import {
   type Extensions,
 } from "@tiptap/core";
 import * as _StarterKit from "@tiptap/starter-kit";
-import * as _Color from "@tiptap/extension-color";
 import * as _Highlight from "@tiptap/extension-highlight";
 import * as _Link from "@tiptap/extension-link";
-import * as _TaskList from "@tiptap/extension-task-list";
-import * as _TaskItem from "@tiptap/extension-task-item";
+import * as _List from "@tiptap/extension-list";
 import * as _TextAlign from "@tiptap/extension-text-align";
-import * as _TextStyle from "@tiptap/extension-text-style";
+import * as _TextStyleKit from "@tiptap/extension-text-style";
 import * as _Typography from "@tiptap/extension-typography";
-import * as _Underline from "@tiptap/extension-underline";
-import * as _Placeholder from "@tiptap/extension-placeholder";
-import * as _CharacterCount from "@tiptap/extension-character-count";
+import * as _Extensions from "@tiptap/extensions";
 
 const resolveExt = (mod: any, name: string) =>
   mod?.[name] ||
@@ -24,17 +20,16 @@ const resolveExt = (mod: any, name: string) =>
   mod;
 
 const StarterKit = resolveExt(_StarterKit, "StarterKit");
-const Color = resolveExt(_Color, "Color");
+const Color = resolveExt(_TextStyleKit, "Color");
 const Highlight = resolveExt(_Highlight, "Highlight");
 const Link = resolveExt(_Link, "Link");
-const TaskList = resolveExt(_TaskList, "TaskList");
-const TaskItem = resolveExt(_TaskItem, "TaskItem");
+const TaskList = resolveExt(_List, "TaskList");
+const TaskItem = resolveExt(_List, "TaskItem");
 const TextAlign = resolveExt(_TextAlign, "TextAlign");
-const TextStyle = resolveExt(_TextStyle, "TextStyle");
+const TextStyle = resolveExt(_TextStyleKit, "TextStyle");
 const Typography = resolveExt(_Typography, "Typography");
-const Underline = resolveExt(_Underline, "Underline");
-const Placeholder = resolveExt(_Placeholder, "Placeholder");
-const CharacterCount = resolveExt(_CharacterCount, "CharacterCount");
+const Placeholder = resolveExt(_Extensions, "Placeholder");
+const CharacterCount = resolveExt(_Extensions, "CharacterCount");
 
 import { SmilieReplacer } from "./SmilieReplacer";
 import { ColorHighlighter } from "./ColorHighlighter";
@@ -77,18 +72,14 @@ import { Chart, Sparkline, type ChartNodeOptions, type SparklineNodeOptions } fr
  */
 export type RichTextPresetCommandPackages = [
   typeof import("@tiptap/starter-kit"),
-  typeof import("@tiptap/extension-color"),
   typeof import("@tiptap/extension-highlight"),
   typeof import("@tiptap/extension-image"),
   typeof import("@tiptap/extension-link"),
-  typeof import("@tiptap/extension-task-list"),
+  typeof import("@tiptap/extension-list"),
   typeof import("@tiptap/extension-text-align"),
   typeof import("@tiptap/extension-text-style"),
-  typeof import("@tiptap/extension-underline"),
   typeof import("@tiptap/extension-table"),
-  typeof import("@tiptap/extension-table-row"),
-  typeof import("@tiptap/extension-table-header"),
-  typeof import("@tiptap/extension-table-cell"),
+  typeof import("@tiptap/extensions"),
 ];
 
 export interface RichTextPresetOptions {
@@ -169,6 +160,10 @@ export function createRichTextPreset(
 
   const extensions: Extensions = [
     StarterKit.configure({
+      // Link is added below with its own input rule; TipTap v3's trailing
+      // paragraph would change every saved document.
+      link: false,
+      trailingNode: false,
       orderedList: {
         HTMLAttributes: {
           class: "list-decimal pl-4",
@@ -189,7 +184,6 @@ export function createRichTextPreset(
     TextStyle,
     Color,
     Highlight.configure({ multicolor: true }),
-    Underline,
     ...(options.autocorrect ? [] : [Typography]),
     TextAlign.configure({
       types: ["heading", "paragraph"],

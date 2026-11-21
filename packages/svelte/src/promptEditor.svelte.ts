@@ -72,7 +72,8 @@ export function usePromptEditor(
         loadingNodeView: p.loadingIndicator ? dynamicLoadingNodeView : null,
         reachedMilestones,
       }),
-      element: p.element ?? mountedElement,
+      // TipTap v3: `element: undefined` would leave the editor without a view; let it use its detached div.
+      ...((p.element ?? mountedElement) ? { element: p.element ?? mountedElement } : {}),
     });
   }
 

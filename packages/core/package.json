@@ -533,29 +533,22 @@
     "@anthropic-ai/sdk": "1.6.0",
     "@dagrejs/dagre": "^1.1.8",
     "@pixerate/markdown-conformance": "workspace:*",
-    "@tiptap/core": "^2.27.3",
-    "@tiptap/extension-character-count": "^2.27.3",
-    "@tiptap/extension-color": "^2.27.3",
-    "@tiptap/extension-highlight": "^2.27.3",
-    "@tiptap/extension-image": "^2.27.3",
-    "@tiptap/extension-link": "^2.27.3",
-    "@tiptap/extension-mention": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/extension-subscript": "^2.27.3",
-    "@tiptap/extension-superscript": "^2.27.3",
-    "@tiptap/extension-table": "^2.27.3",
-    "@tiptap/extension-table-cell": "^2.27.3",
-    "@tiptap/extension-table-header": "^2.27.3",
-    "@tiptap/extension-table-row": "^2.27.3",
-    "@tiptap/extension-task-item": "^2.27.3",
-    "@tiptap/extension-task-list": "^2.27.3",
-    "@tiptap/extension-text-align": "^2.27.3",
-    "@tiptap/extension-text-style": "^2.27.3",
-    "@tiptap/extension-typography": "^2.27.3",
-    "@tiptap/extension-underline": "^2.27.3",
-    "@tiptap/pm": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3",
-    "@tiptap/suggestion": "^2.27.3",
+    "@tiptap/core": "^3.35.0",
+    "@tiptap/extension-highlight": "^3.35.0",
+    "@tiptap/extension-image": "^3.35.0",
+    "@tiptap/extension-link": "^3.35.0",
+    "@tiptap/extension-list": "^3.35.0",
+    "@tiptap/extension-mention": "^3.35.0",
+    "@tiptap/extension-subscript": "^3.35.0",
+    "@tiptap/extension-superscript": "^3.35.0",
+    "@tiptap/extension-table": "^3.35.0",
+    "@tiptap/extension-text-align": "^3.35.0",
+    "@tiptap/extension-text-style": "^3.35.0",
+    "@tiptap/extension-typography": "^3.35.0",
+    "@tiptap/extensions": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
+    "@tiptap/suggestion": "^3.35.0",
     "@types/dagre": "^0.7.54",
     "@types/markdown-it": "^14.2.0",
     "@types/node": "^26.6.6",
@@ -567,36 +560,29 @@
     "mermaid": "12.3.0",
     "prosemirror-markdown": "^1.13.9",
     "three": "0.186.1",
-    "tiptap-markdown": "^0.8.10",
+    "tiptap-markdown": "^0.9.0",
     "tsup": "^9.0.0",
     "typescript": "^5.7.3",
     "vitest": "^5.1.0"
   },
   "peerDependencies": {
     "@dagrejs/dagre": "^1.1.8",
-    "@tiptap/core": "^2.27.3",
-    "@tiptap/extension-character-count": "^2.27.3",
-    "@tiptap/extension-color": "^2.27.3",
-    "@tiptap/extension-highlight": "^2.27.3",
-    "@tiptap/extension-image": "^2.27.3",
-    "@tiptap/extension-link": "^2.27.3",
-    "@tiptap/extension-mention": "^2.27.3",
-    "@tiptap/extension-placeholder": "^2.27.3",
-    "@tiptap/extension-subscript": "^2.27.3",
-    "@tiptap/extension-superscript": "^2.27.3",
-    "@tiptap/extension-table": "^2.27.3",
-    "@tiptap/extension-table-cell": "^2.27.3",
-    "@tiptap/extension-table-header": "^2.27.3",
-    "@tiptap/extension-table-row": "^2.27.3",
-    "@tiptap/extension-task-item": "^2.27.3",
-    "@tiptap/extension-task-list": "^2.27.3",
-    "@tiptap/extension-text-align": "^2.27.3",
-    "@tiptap/extension-text-style": "^2.27.3",
-    "@tiptap/extension-typography": "^2.27.3",
-    "@tiptap/extension-underline": "^2.27.3",
-    "@tiptap/pm": "^2.27.3",
-    "@tiptap/starter-kit": "^2.27.3",
-    "@tiptap/suggestion": "^2.27.3",
+    "@tiptap/core": "^3.35.0",
+    "@tiptap/extension-highlight": "^3.35.0",
+    "@tiptap/extension-image": "^3.35.0",
+    "@tiptap/extension-link": "^3.35.0",
+    "@tiptap/extension-list": "^3.35.0",
+    "@tiptap/extension-mention": "^3.35.0",
+    "@tiptap/extension-subscript": "^3.35.0",
+    "@tiptap/extension-superscript": "^3.35.0",
+    "@tiptap/extension-table": "^3.35.0",
+    "@tiptap/extension-text-align": "^3.35.0",
+    "@tiptap/extension-text-style": "^3.35.0",
+    "@tiptap/extension-typography": "^3.35.0",
+    "@tiptap/extensions": "^3.35.0",
+    "@tiptap/pm": "^3.35.0",
+    "@tiptap/starter-kit": "^3.35.0",
+    "@tiptap/suggestion": "^3.35.0",
     "markdown-it": "^15.0.3",
     "markdown-it-task-lists": "^2.1.1",
     "prosemirror-markdown": "^1.13.9",
@@ -609,12 +595,6 @@
     "@tiptap/core": {
       "optional": true
     },
-    "@tiptap/extension-character-count": {
-      "optional": true
-    },
-    "@tiptap/extension-color": {
-      "optional": true
-    },
     "@tiptap/extension-highlight": {
       "optional": true
     },
@@ -624,10 +604,10 @@
     "@tiptap/extension-link": {
       "optional": true
     },
-    "@tiptap/extension-mention": {
+    "@tiptap/extension-list": {
       "optional": true
     },
-    "@tiptap/extension-placeholder": {
+    "@tiptap/extension-mention": {
       "optional": true
     },
     "@tiptap/extension-subscript": {
@@ -639,21 +619,6 @@
     "@tiptap/extension-table": {
       "optional": true
     },
-    "@tiptap/extension-table-cell": {
-      "optional": true
-    },
-    "@tiptap/extension-table-header": {
-      "optional": true
-    },
-    "@tiptap/extension-table-row": {
-      "optional": true
-    },
-    "@tiptap/extension-task-item": {
-      "optional": true
-    },
-    "@tiptap/extension-task-list": {
-      "optional": true
-    },
     "@tiptap/extension-text-align": {
       "optional": true
     },
@@ -663,7 +628,7 @@
     "@tiptap/extension-typography": {
       "optional": true
     },
-    "@tiptap/extension-underline": {
+    "@tiptap/extensions": {
       "optional": true
     },
     "@tiptap/pm": {

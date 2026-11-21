@@ -21,7 +21,7 @@ export function createRichTextEditorDocument(editor: Editor): EditorDocument<JSO
 			} catch (error) {
 				throw new Error(`A rich text document is ProseMirror JSON ({ "type": "doc", "content": [...] }) as get_rich_text_document returns it: ${error instanceof Error ? error.message : String(error)}`);
 			}
-			editor.commands.setContent(document as JSONContent, true);
+			editor.commands.setContent(document as JSONContent, { emitUpdate: true });
 			// A fresh state drops the undo history (and any plugin state tied to the old document).
 			if (history === 'reset') editor.view.updateState(EditorState.create({ doc: editor.state.doc, plugins: editor.state.plugins }));
 		},
