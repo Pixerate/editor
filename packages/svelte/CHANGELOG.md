@@ -1,5 +1,16 @@
 # @pixerate/editor-svelte
 
+## 0.227.0
+
+### Minor Changes
+
+- 948beda: Transform-aware caret scrolling: the caret now stays in view while typing when the editor's scroll container is drawn scaled (a pan/zoom canvas, a SvelteFlow node, a diagram card), where ProseMirror's own scrolling over- or under-shoots by the scale. `TransformAwareScroll` (with `createTransformAwareScrollPlugin`, `scrollCaretIntoView` and `calculateTransformScrollAdjustment`) is in `@pixerate/editor` and on by default in `createRichTextPreset`, so React and Svelte editors get it too; it only acts when the scroll container is scaled and otherwise leaves scrolling to ProseMirror. Turn it off with `transformAwareScroll: false` (a preset option, and a shorthand on Svelte's `initiateEditor` and `EditableTextNodeEditor`).
+
+### Patch Changes
+
+- Updated dependencies [948beda]
+  - @pixerate/editor@0.343.0
+
 ## 0.226.1
 
 ### Patch Changes
