@@ -1,5 +1,16 @@
 # @pixerate/editor-react
 
+## 0.214.0
+
+### Minor Changes
+
+- ecae5c9: Image editor: Generative Fill. Hosts set a `GenerativeFillProvider` (`generativeFill` option or `setGenerativeFillProvider`); `controller.generativeFill(prompt)` sends the layer composite, the selection as a mask and its bounds to it and puts the result on a new layer limited to the selection, as one undo step. Agents get the `generative_fill` tool, and the Selection panel (`<SelectionOptionsBar>`) shows a prompt field and Generative Fill button when a provider is set.
+
+### Patch Changes
+
+- Updated dependencies [ecae5c9]
+  - @pixerate/editor@0.345.0
+
 ## 0.213.0
 
 ### Minor Changes
