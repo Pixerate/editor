@@ -1,12 +1,9 @@
 import { Editor, type Content, type EditorOptions, type Extensions } from "@tiptap/core";
-import { createRichTextPreset, type RichTextPresetOptions } from "@pixerate/editor";
-import {
-  TransformAwareScroll,
-  type TransformAwareScrollOptions,
-} from "./transformAwareScroll.js";
+import { createRichTextPreset, type RichTextPresetOptions, type TransformAwareScrollOptions } from "@pixerate/editor";
 
 export interface SvelteInitiateEditorOptions extends Partial<EditorOptions> {
   richTextOptions?: RichTextPresetOptions;
+  /** Shorthand for `richTextOptions.transformAwareScroll` (on by default; `false` turns it off). */
   transformAwareScroll?: boolean | TransformAwareScrollOptions;
 }
 
@@ -20,23 +17,16 @@ export const initiateEditor = (
   options?: SvelteInitiateEditorOptions,
 ): Editor => {
   const { richTextOptions, transformAwareScroll, ...editorOptions } = options || {};
-  const defaultPreset = createRichTextPreset(richTextOptions);
-
-  const scrollExtensions =
-    transformAwareScroll !== false
-      ? [
-          TransformAwareScroll.configure(
-            typeof transformAwareScroll === "object" ? transformAwareScroll : {}
-          ),
-        ]
-      : [];
+  const defaultPreset = createRichTextPreset({
+    ...richTextOptions,
+    ...(transformAwareScroll !== undefined ? { transformAwareScroll } : {}),
+  });
 
   const editor = new Editor({
     element,
     content,
     extensions: [
       ...defaultPreset,
-      ...scrollExtensions,
       ...(extensions ?? []),
     ],
     autofocus: false,

@@ -10,7 +10,21 @@ import type StylesGalleryComponent from "./StylesGallery.svelte";
 import type ExportDocxButtonComponent from "./ExportDocxButton.svelte";
 
 export * from "./editor.svelte.js";
-export * from "./transformAwareScroll.js";
+export {
+  TransformAwareScroll,
+  createTransformAwareScrollExtension,
+  createTransformAwareScrollPlugin,
+  transformAwareScrollPluginKey,
+  scrollCaretIntoView,
+  scrollCaretIntoViewNow,
+  cancelScheduledScroll,
+  findScrollContainer,
+  isScaledScrollContainer,
+  calculateTransformScrollAdjustment,
+  type TransformAwareScrollOptions,
+  type TransformScrollAdjustmentParams,
+  type TransformScrollAdjustmentResult,
+} from "@pixerate/editor";
 export * from "./promptEditor.svelte.js";
 export * from "./navigationGuard.js";
 export * from "./createNavigationGuard.svelte.js";

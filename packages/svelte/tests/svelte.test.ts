@@ -36,6 +36,7 @@ describe("@pixerate/editor-svelte Distribution Exports", () => {
     expect(SvelteEditor.scrollCaretIntoView).toBeDefined();
     expect(SvelteEditor.scrollCaretIntoViewNow).toBeDefined();
     expect(SvelteEditor.findScrollContainer).toBeDefined();
+    expect(SvelteEditor.isScaledScrollContainer).toBeDefined();
     expect(SvelteEditor.calculateTransformScrollAdjustment).toBeDefined();
     expect(SvelteEditor.cancelScheduledScroll).toBeDefined();
   });

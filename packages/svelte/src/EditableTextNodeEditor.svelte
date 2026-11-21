@@ -6,10 +6,10 @@
     ImageOptions,
     FileImportOptions,
     RichClipboardOptions,
+    TransformAwareScrollOptions,
   } from "@pixerate/editor";
   import { onDestroy, onMount } from "svelte";
   import { initiateEditor } from "./editor.svelte.js";
-  import type { TransformAwareScrollOptions } from "./transformAwareScroll.js";
 
   interface EditorProps {
     class?: string;
