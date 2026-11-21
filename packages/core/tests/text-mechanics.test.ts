@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { markdownProseMap } from '../src/tools/markdown-prose';
-import { applyTextMechanicsEdits, textMechanicsCheckedRange, textMechanicsEditsAt, textMechanicsFindings } from '../src/tools/text-mechanics';
+import { applyTextMechanicsEdits, textMechanicsCheckedRange, textMechanicsEditsAt, textMechanicsFindings, textMechanicsWordEnd } from '../src/tools/text-mechanics';
 import { createTextMechanicsToolProvider } from '../src/tools/text-mechanics-tools';
 import { lexiconTagger, runTextMechanicsScenario, textMechanicsContracts, TEXT_MECHANICS_LEXICON, TEXT_MECHANICS_SCENARIOS } from '../src/tools/text-mechanics-contracts';
 
@@ -40,8 +40,11 @@ const EXPECTED: Record<string, string> = {
 	'a heading': '# Hello there ',
 	'a list item': '- Buy milk ',
 	'a quote': '> Quoted text ',
-	'bold that starts a paragraph stays': '**bold** start ',
+	'closed bold that starts a paragraph gets its capital': '**Bold** start ',
 	'bold being typed': '**Bold start ',
+	'a word inside closing bold': "I **don't** care ",
+	'a word inside closing underscores': "_I don't know_ ",
+	'closing underscores inside an identifier stay': 'See snake_case_name_ now ',
 	'a code span': '`dont i` ',
 	'a code block': '```\ndont i \n',
 	math: '$x i y$ ',
@@ -104,6 +107,11 @@ const EXPECTED: Record<string, string> = {
 	'typography is off by default': 'Wait -- "what" ',
 	'chat shorthand is not spelling': 'lol the cat ',
 	"chat leaves Slack's syntax alone": "ping <!here> don't ",
+	'chat: a word inside Slack bold': "*don't* ",
+	'chat: words inside Slack italics': "_I don't know_ ",
+	'chat: a word inside Slack strikethrough': "~can't~ ",
+	'chat: double underscores are emphasis': "__don't__ ",
+	'chat: an identifier with an underscore stays': 'file_dont ',
 	'no typography in chat': "wait -- don't "
 };
 
@@ -190,6 +198,23 @@ describe('textMechanicsCheckedRange', () => {
 		expect(textMechanicsCheckedRange('see `code` ', 10)).toBeNull();
 		expect(textMechanicsCheckedRange('https://x.y/dont ', 16)).toBeNull();
 		expect(textMechanicsCheckedRange('a\n\n', 2)).toBeNull();
+	});
+
+	it('is the word inside closing emphasis markers, not the markers (#899)', () => {
+		expect(textMechanicsCheckedRange('so *dont* ', 9)).toEqual({ from: 4, to: 8 });
+		expect(textMechanicsCheckedRange('_i dont_ ', 8)).toEqual({ from: 3, to: 7 });
+		expect(textMechanicsCheckedRange('snake_case_ ', 11)).toBeNull();
+	});
+});
+
+describe('textMechanicsWordEnd', () => {
+	it('steps back over closing emphasis only when the same markers open a token on the line', () => {
+		expect(textMechanicsWordEnd('**dont** ', 8)).toBe(6);
+		expect(textMechanicsWordEnd('_i ~cant~ ', 9)).toBe(8);
+		expect(textMechanicsWordEnd('a_b_ ', 4)).toBe(4); // intraword: no opener
+		expect(textMechanicsWordEnd('*x\ndont* ', 8)).toBe(8); // the opener is on another line
+		expect(textMechanicsWordEnd('dont ', 4)).toBe(4);
+		expect(textMechanicsWordEnd('a ** ', 4)).toBe(4);
 	});
 });
 

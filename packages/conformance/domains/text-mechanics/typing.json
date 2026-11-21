@@ -317,11 +317,13 @@
     }
   },
   {
-    "name": "bold that starts a paragraph stays",
+    "name": "closed bold that starts a paragraph gets its capital",
     "typed": "**bold** start ",
     "expect": {
-      "text": "**bold** start ",
-      "checks": []
+      "text": "**Bold** start ",
+      "checks": [
+        "sentence-case"
+      ]
     }
   },
   {
@@ -329,6 +331,37 @@
     "typed": "**bold start ",
     "expect": {
       "text": "**Bold start ",
+      "checks": [
+        "sentence-case"
+      ]
+    }
+  },
+  {
+    "name": "a word inside closing bold",
+    "typed": "I **dont** care ",
+    "expect": {
+      "text": "I **don't** care ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "a word inside closing underscores",
+    "typed": "_i dont know_ ",
+    "expect": {
+      "text": "_I don't know_ ",
+      "checks": [
+        "pronoun-i",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "closing underscores inside an identifier stay",
+    "typed": "see snake_case_name_ now ",
+    "expect": {
+      "text": "See snake_case_name_ now ",
       "checks": [
         "sentence-case"
       ]
@@ -947,6 +980,60 @@
       "checks": [
         "contractions"
       ]
+    }
+  },
+  {
+    "name": "chat: a word inside Slack bold",
+    "typed": "*dont* ",
+    "profile": "chat",
+    "expect": {
+      "text": "*don't* ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "chat: words inside Slack italics",
+    "typed": "_i dont know_ ",
+    "profile": "chat",
+    "expect": {
+      "text": "_I don't know_ ",
+      "checks": [
+        "pronoun-i",
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "chat: a word inside Slack strikethrough",
+    "typed": "~cant~ ",
+    "profile": "chat",
+    "expect": {
+      "text": "~can't~ ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "chat: double underscores are emphasis",
+    "typed": "__dont__ ",
+    "profile": "chat",
+    "expect": {
+      "text": "__don't__ ",
+      "checks": [
+        "contractions"
+      ]
+    }
+  },
+  {
+    "name": "chat: an identifier with an underscore stays",
+    "typed": "file_dont ",
+    "profile": "chat",
+    "expect": {
+      "text": "file_dont ",
+      "checks": []
     }
   },
   {

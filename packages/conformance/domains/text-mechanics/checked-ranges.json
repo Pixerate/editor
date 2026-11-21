@@ -34,5 +34,26 @@
     "text": "a\n\n",
     "boundary": 2,
     "expect": null
+  },
+  {
+    "text": "so *dont* ",
+    "boundary": 9,
+    "expect": {
+      "from": 4,
+      "to": 8
+    }
+  },
+  {
+    "text": "_i dont_ ",
+    "boundary": 8,
+    "expect": {
+      "from": 3,
+      "to": 7
+    }
+  },
+  {
+    "text": "snake_case_ ",
+    "boundary": 11,
+    "expect": null
   }
 ]
