@@ -192,8 +192,12 @@ export const TEXT_MECHANICS_SCENARIOS: readonly TextMechanicsScenario[] = [
 	{ name: 'a heading', typed: '# hello there ' },
 	{ name: 'a list item', typed: '- buy milk ' },
 	{ name: 'a quote', typed: '> quoted text ' },
-	{ name: 'bold that starts a paragraph stays', typed: '**bold** start ' },
+	{ name: 'closed bold that starts a paragraph gets its capital', typed: '**bold** start ' },
 	{ name: 'bold being typed', typed: '**bold start ' },
+	// The word inside closing emphasis markers, never the markers (#899)
+	{ name: 'a word inside closing bold', typed: 'I **dont** care ' },
+	{ name: 'a word inside closing underscores', typed: '_i dont know_ ' },
+	{ name: 'closing underscores inside an identifier stay', typed: 'see snake_case_name_ now ' },
 
 	// Never in code, math, links' addresses, HTML or URLs
 	{ name: 'a code span', typed: '`dont i` ' },
@@ -316,6 +320,11 @@ export const TEXT_MECHANICS_SCENARIOS: readonly TextMechanicsScenario[] = [
 	// Chat
 	{ name: 'chat shorthand is not spelling', typed: 'lol teh cat ', profile: 'chat', spelling: { lol: 'LOL', teh: 'the' } },
 	{ name: "chat leaves Slack's syntax alone", typed: 'ping <!here> dont ', profile: 'chat' },
+	{ name: 'chat: a word inside Slack bold', typed: '*dont* ', profile: 'chat' },
+	{ name: 'chat: words inside Slack italics', typed: '_i dont know_ ', profile: 'chat' },
+	{ name: 'chat: a word inside Slack strikethrough', typed: '~cant~ ', profile: 'chat' },
+	{ name: 'chat: double underscores are emphasis', typed: '__dont__ ', profile: 'chat' },
+	{ name: 'chat: an identifier with an underscore stays', typed: 'file_dont ', profile: 'chat' },
 	{ name: 'no typography in chat', typed: 'wait -- dont ', profile: 'chat', enable: TYPOGRAPHY },
 
 	// Checks turned off
@@ -352,7 +361,11 @@ const CHECKED_CASES: readonly { text: string; boundary: number }[] = [
 	{ text: 'see `code` ', boundary: 10 },
 	{ text: 'https://x.y/dont ', boundary: 16 },
 	{ text: '\n', boundary: 0 },
-	{ text: 'a\n\n', boundary: 2 }
+	{ text: 'a\n\n', boundary: 2 },
+	// The word inside closing emphasis markers (#899)
+	{ text: 'so *dont* ', boundary: 9 },
+	{ text: '_i dont_ ', boundary: 8 },
+	{ text: 'snake_case_ ', boundary: 11 }
 ];
 
 /** Whole texts checked at once. */

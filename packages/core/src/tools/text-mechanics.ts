@@ -279,11 +279,40 @@ function isProse({ text, map, chat }: Source, from: number, to: number): boolean
 		if (c === 0x20 || c === 0x09 || c === NEWLINE) break;
 		tokenStart--;
 	}
+	// Emphasis opening the token (`_word`, `**word`) isn't part of it (#899)
+	while (tokenStart < from && isEmphasisDelimiter(text.charCodeAt(tokenStart))) tokenStart++;
 	const token = text.slice(tokenStart, to);
 	if (/[/@#\\:_]/.test(token)) return false;
 	if (chat && /[<>]/.test(token)) return false; // Slack's <@user>, <#channel>, <!here>, <url|label>
 	if (token.slice(0, token.length - (to - from)).includes('.')) return false; // file.name, e.g.word
 	return true;
+}
+
+const isEmphasisDelimiter = (c: number) => c === 0x2a || c === 0x5f || c === 0x7e;
+
+/**
+ * Where the word a boundary ends stops (#899): before the closing emphasis markers right before
+ * the boundary (`*dont*`, `_know_`, `~cant~`, `**dont**`), when the same markers open a token
+ * earlier on the line; otherwise the boundary itself. Up to three markers, and only after a
+ * letter, so `snake_case_` and a lone `**` are left as they are. Text only, so the Swift port
+ * finds the same word whatever its parser makes of the markers.
+ */
+export function textMechanicsWordEnd(text: string, boundary: number): number {
+	let end = boundary;
+	while (end > 0 && boundary - end < 3 && isEmphasisDelimiter(text.charCodeAt(end - 1))) end--;
+	if (end === boundary || end === 0 || !isTextMechanicsWordCharacter(text.charCodeAt(end - 1))) return boundary;
+	const opener = Array.from(text.slice(end, boundary)).reverse().join('');
+	let start = end;
+	while (start > 0 && isTextMechanicsWordCharacter(text.charCodeAt(start - 1))) start--;
+	for (let at = start - opener.length; at >= 0; at--) {
+		if (text.charCodeAt(at) === NEWLINE) break;
+		if (text.slice(at, at + opener.length) !== opener) continue;
+		const before = at > 0 ? text.charCodeAt(at - 1) : NEWLINE;
+		const after = text.charCodeAt(at + opener.length);
+		const opens = before === NEWLINE || before === 0x20 || before === 0x09 || before === 0x28 || before === 0x22 || before === 0x201c;
+		if (opens && after !== 0x20 && after !== 0x09 && after !== NEWLINE && !isEmphasisDelimiter(after)) return end;
+	}
+	return boundary;
 }
 
 /**
@@ -538,10 +567,11 @@ export function textMechanicsEditsAt(text: string, boundary: number, options: Te
 	const on = (c: TextMechanicsCheckId) =>
 		c === 'spelling' && !options.spelling ? false : chat && TEXT_MECHANICS_OFF_BY_DEFAULT.has(c) ? false : (options.enabled?.(c) ?? !TEXT_MECHANICS_OFF_BY_DEFAULT.has(c));
 
-	let start = boundary;
+	const end = textMechanicsWordEnd(text, boundary);
+	let start = end;
 	while (start > 0 && isTextMechanicsWordCharacter(text.charCodeAt(start - 1))) start--;
-	if (start === boundary || !isProse(source, start, boundary) || insideUnclosedSpan(text, start)) return typographyAt(source, boundary, null, on);
-	const word = text.slice(start, boundary);
+	if (start === end || !isProse(source, start, end) || insideUnclosedSpan(text, start)) return typographyAt(source, boundary, null, on);
+	const word = text.slice(start, end);
 	const edits: TextMechanicsEdit[] = [];
 
 	let replacement = word;
@@ -568,7 +598,7 @@ export function textMechanicsEditsAt(text: string, boundary: number, options: Te
 		replacement = capitalise(replacement);
 		checks.push('sentence-case');
 	}
-	if (checks.length && replacement !== word) edits.push({ from: start, to: boundary, replacement, checks });
+	if (checks.length && replacement !== word) edits.push({ from: start, to: end, replacement, checks });
 
 	if (options.tagger) {
 		if (on('contractions')) {
@@ -596,8 +626,8 @@ export function textMechanicsEditsAt(text: string, boundary: number, options: Te
 			}
 		}
 	}
-	const wordEdit = edits.find((e) => e.from === start && e.to === boundary) ?? null;
-	return [...edits, ...typographyAt(source, boundary, wordEdit ? { from: start, to: boundary } : null, on)];
+	const wordEdit = edits.find((e) => e.from === start && e.to === end) ?? null;
+	return [...edits, ...typographyAt(source, boundary, wordEdit ? { from: start, to: end } : null, on)];
 }
 
 const isAlphanumeric = (c: string | undefined) => !!c && /^[\p{L}\p{N}]$/u.test(c);
@@ -669,10 +699,11 @@ export function textMechanicsCheckedRange(text: string, boundary: number, prose?
 		return isProse(source, last, last + 1) ? { from: lineStart, to: boundary } : null;
 	}
 	if (!isTextMechanicsBoundary(typed)) return null;
-	let start = boundary;
+	const end = textMechanicsWordEnd(text, boundary);
+	let start = end;
 	while (start > 0 && isTextMechanicsWordCharacter(text.charCodeAt(start - 1))) start--;
-	if (start === boundary || !isProse(source, start, boundary) || insideUnclosedSpan(text, start)) return null;
-	return { from: start, to: boundary };
+	if (start === end || !isProse(source, start, end) || insideUnclosedSpan(text, start)) return null;
+	return { from: start, to: end };
 }
 
 /** A finding over a whole text: a fix with a sentence saying what it does. */

@@ -120,9 +120,10 @@ public enum TextMechanics {
             return options.enabled(check)
         }
 
-        var start = boundary
+        let end = wordEnd(at: boundary, ns: ns)
+        var start = end
         while start > 0, isWordCharacter(ns.character(at: start - 1)) { start -= 1 }
-        let wordRange = NSRange(location: start, length: boundary - start)
+        let wordRange = NSRange(location: start, length: end - start)
         guard wordRange.length > 0, isProse(wordRange, ns: ns, document: document, chat: chat), !insideUnclosedSpan(before: start, ns: ns) else {
             return typography(at: boundary, ns: ns, document: document, skip: nil, on: on)
         }
@@ -267,9 +268,10 @@ public enum TextMechanics {
             return isProse(NSRange(location: last, length: 1), ns: ns, document: document) ? line : nil
         }
         guard isBoundary(typed) else { return nil }
-        var start = boundary
+        let end = wordEnd(at: boundary, ns: ns)
+        var start = end
         while start > 0, isWordCharacter(ns.character(at: start - 1)) { start -= 1 }
-        let word = NSRange(location: start, length: boundary - start)
+        let word = NSRange(location: start, length: end - start)
         guard word.length > 0, isProse(word, ns: ns, document: document), !insideUnclosedSpan(before: start, ns: ns) else { return nil }
         return word
     }
@@ -490,6 +492,8 @@ public enum TextMechanics {
             if c == 0x20 || c == 0x09 || c == newline { break }
             tokenStart -= 1
         }
+        // Emphasis opening the token (`_word`, `**word`) isn't part of it (#899)
+        while tokenStart < range.location, isEmphasisDelimiter(ns.character(at: tokenStart)) { tokenStart += 1 }
         let token = ns.substring(with: NSRange(location: tokenStart, length: NSMaxRange(range) - tokenStart))
         if token.contains("/") || token.contains("@") || token.contains("#") || token.contains("\\") || token.contains(":") || token.contains("_") {
             return false
@@ -497,6 +501,37 @@ public enum TextMechanics {
         if chat, token.contains("<") || token.contains(">") { return false } // Slack's <@user>, <#channel>, <!here>, <url|label>
         if (token as NSString).substring(to: (token as NSString).length - range.length).contains(".") { return false } // file.name, e.g.word
         return true
+    }
+
+    private static func isEmphasisDelimiter(_ c: unichar) -> Bool { c == 0x2A || c == 0x5F || c == 0x7E } // * _ ~
+
+    /// Where the word a boundary ends stops (#899): before the closing emphasis markers right
+    /// before the boundary (`*dont*`, `_know_`, `~cant~`, `**dont**`), when the same markers open
+    /// a token earlier on the line; otherwise the boundary itself. Up to three markers, and only
+    /// after a letter, so `snake_case_` and a lone `**` are left as they are. A port of
+    /// `textMechanicsWordEnd`, reading the text rather than `MarkdownDocument`'s markers so both
+    /// cores find the same word whatever the parsers make of the markers.
+    public static func wordEnd(at boundary: Int, ns: NSString) -> Int {
+        var end = boundary
+        while end > 0, boundary - end < 3, isEmphasisDelimiter(ns.character(at: end - 1)) { end -= 1 }
+        guard end < boundary, end > 0, isWordCharacter(ns.character(at: end - 1)) else { return boundary }
+        let closing = ns.substring(with: NSRange(location: end, length: boundary - end))
+        let opener = String(closing.reversed())
+        let length = boundary - end
+        var start = end
+        while start > 0, isWordCharacter(ns.character(at: start - 1)) { start -= 1 }
+        var at = start - length
+        while at >= 0 {
+            if ns.character(at: at) == newline { break }
+            if ns.substring(with: NSRange(location: at, length: length)) == opener {
+                let before: unichar = at > 0 ? ns.character(at: at - 1) : newline
+                let after = ns.character(at: at + length)
+                let opens = before == newline || before == 0x20 || before == 0x09 || before == 0x28 || before == 0x22 || before == 0x201C
+                if opens, after != 0x20, after != 0x09, after != newline, !isEmphasisDelimiter(after) { return end }
+            }
+            at -= 1
+        }
+        return boundary
     }
 
     /// The text at `location` is a text node outside code, math, HTML, front matter, images, tables,
