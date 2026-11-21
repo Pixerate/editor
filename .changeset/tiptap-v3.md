@@ -1,7 +1,7 @@
 ---
-"@pixerate/editor": major
-"@pixerate/editor-react": major
-"@pixerate/editor-svelte": major
+"@pixerate/editor": minor
+"@pixerate/editor-react": minor
+"@pixerate/editor-svelte": minor
 ---
 
 Move to TipTap v3 (#921). Consumers must upgrade every `@tiptap/*` package to `^3.35.0` together (one ProseMirror copy).
