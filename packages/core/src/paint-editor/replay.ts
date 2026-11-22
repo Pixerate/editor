@@ -234,29 +234,31 @@ export interface ReplayItemOptions {
  * yet, its clock is set there. Returns how far the clock moved.
  */
 export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
-  const start = target.wet.clock;
+  const getClock = () => target.wet.clock ?? target.getState().wet.clock;
+  const start = getClock();
   let left = clock - start;
   if (left <= 0) return 0;
-  if (!target.wet.world) {
+  if (target.wet.world === null) {
     target.wet.setClock(clock);
-    return target.wet.clock - start;
+    return getClock() - start;
   }
-  await target.wet.world.ready;
-  if (!target.wet.isWet()) {
+  if (target.wet.world) await target.wet.world.ready;
+  const hasIsWet = typeof target.wet.isWet === 'function';
+  if (hasIsWet && !target.wet.isWet()) {
     if (options.headless) await target.advanceWetStepsHeadless(left);
     else await target.advanceWet({ steps: left });
-    return target.wet.clock - start;
+    return getClock() - start;
   }
   const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
   while (left > 0) {
-    if (!target.wet.isWet()) {
+    if (hasIsWet && !target.wet.isWet()) {
       if (options.headless) await target.advanceWetStepsHeadless(left);
       else await target.advanceWet({ steps: left });
       break;
     }
     const n = Math.min(left, chunk);
     const ran = options.headless ? await target.advanceWetStepsHeadless(n) : (await target.advanceWet({ steps: n })).steps;
-    if (Number.isFinite(chunk)) await options.onWetSteps?.(target.wet.clock);
+    if (Number.isFinite(chunk)) await options.onWetSteps?.(getClock());
     if (ran <= 0) {
       // No simulation yet: nothing flows, but the clock goes on (a world made later starts there, as it did).
       target.wet.setClock(clock);
@@ -264,7 +266,7 @@ export async function advanceReplayClock(target: PaintEditorController, clock: n
     }
     left -= ran;
   }
-  return target.wet.clock - start;
+  return getClock() - start;
 }
 
 /** What a recorded stroke replays with (`beginStroke` / `paintStroke` options without the points), at `scale`. */
