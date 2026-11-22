@@ -274,6 +274,47 @@ describe('wet dual-colour paint follows the scheme through a replay of the strok
     expect(pixels(c).equals(light)).toBe(true);
     c.dispose();
   }, 60000);
+
+  it('builds headless without WebGPU, intermediate display shading, or stepping dry clock gaps in 2-step chunks', async () => {
+    const c = editor();
+    await c.wetReady();
+    const probe = c.createReplayTarget(1);
+    expect(probe.wet.gpuMode).toBe('off');
+    probe.dispose();
+
+    // Paint a live wet stroke across multiple clock steps, let it dry completely, then jump clock far ahead.
+    await paint(c, [{ kind: 'live', y: 50, color: BLUE, seed: 11 }, { kind: 'wait', steps: 400 }]);
+    expect(c.wet.isWet()).toBe(false);
+    c.wet.setClock(50000);
+    const json = c.toJSON();
+    c.dispose();
+
+    const d = editor('dark');
+    let advanceWetCalls = 0;
+    const origCreate = d.createReplayTarget.bind(d);
+    vi.spyOn(d, 'createReplayTarget').mockImplementation((scale, doc) => {
+      const t = origCreate(scale, doc);
+      const origAdv = t.advanceWet.bind(t);
+      vi.spyOn(t, 'advanceWet').mockImplementation((opts) => {
+        advanceWetCalls++;
+        return origAdv(opts);
+      });
+      return t;
+    });
+
+    d.loadJSON(json);
+    const t0 = performance.now();
+    const view = await d.colorSchemeViewReady();
+    const elapsed = performance.now() - t0;
+
+    expect(view.replay.state).toBe('ready');
+    // Headless build never calls `advanceWet` (which shades every tile + computes stats every chunk),
+    // and jumps the 50,000-step dry clock gap in O(1).
+    expect(advanceWetCalls).toBe(0);
+    expect(elapsed).toBeLessThan(5000);
+    expect(dried(d).equals((await fresh([{ kind: 'live', y: 50, color: BLUE, seed: 11 }, { kind: 'wait', steps: 400 }], 'dark')).dried)).toBe(true);
+    d.dispose();
+  }, 60000);
 });
 
 describe('get_color_scheme_view', () => {

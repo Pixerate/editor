@@ -63,6 +63,8 @@ export interface ViewportBox {
 
 type Mode =
   | { kind: 'stroke'; pointerId: number }
+  /** A brush stroke started while a wet simulation batch is running: samples queue until `wetIdle()` settles. */
+  | { kind: 'pending-stroke'; pointerId: number; samples: PenPoint[]; ended: boolean; cancelled: boolean }
   /** Filling a region: dragging horizontally adjusts the tolerance live (one undo step). */
   /** `committed`: the last fill made an undo step (an empty or refused fill makes none, so there is nothing to undo). */
   | { kind: 'fill'; pointerId: number; startX: number; p: Point2; baseTolerance: number; lastTolerance: number; committed: boolean }
@@ -83,6 +85,9 @@ export class PaintGesture {
   private mode: Mode = null;
   private penAt: Point2 | null = null;
   private penDown = false;
+  /** Queued strokes not yet begun, and the chain that begins them in order. */
+  private pendingStrokes = 0;
+  private strokeQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly controller: PaintEditorController,
@@ -128,8 +133,25 @@ export class PaintGesture {
     }
     if (tool === 'fill') return this.fillDown(e);
     if (tool === 'sticker') return this.stickerDown(e);
+    const p = this.pen(e);
+    // A stroke queued earlier that has not begun yet goes first, so this one queues behind it.
+    if (this.pendingStrokes > 0 || this.controller.wet.busy || this.controller.activeStroke?.pendingEnd) {
+      const pending = { kind: 'pending-stroke' as const, pointerId: e.pointerId, samples: [p], ended: false, cancelled: false };
+      this.mode = pending;
+      this.pendingStrokes++;
+      this.strokeQueue = this.strokeQueue.then(() =>
+        this.startPendingStroke(pending)
+          .catch((err) => {
+            if (this.mode === pending) this.mode = null;
+            this.error = err instanceof Error ? err.message : String(err);
+          })
+          .finally(() => {
+            this.pendingStrokes--;
+          })
+      );
+      return true;
+    }
     try {
-      const p = this.pen(e);
       const session = this.controller.beginStroke({ start: p });
       session.push([p]);
       this.mode = { kind: 'stroke', pointerId: e.pointerId };
@@ -137,6 +159,32 @@ export class PaintGesture {
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
       return false;
+    }
+  }
+
+  private async startPendingStroke(pending: Extract<NonNullable<Mode>, { kind: 'pending-stroke' }>): Promise<void> {
+    const release = await this.controller.wet.whenIdleForEdit();
+    try {
+      while (this.controller.activeStroke?.pendingEnd) {
+        await this.controller.wetIdle();
+        this.controller.activeStroke?.completeWetEnd();
+      }
+      if (pending.cancelled) return;
+      const session = this.controller.beginStroke({ start: pending.samples[0] });
+      session.push(pending.samples);
+      if (pending.ended) {
+        session.end();
+        this.controller.strokeRendering?.catch((err) => {
+          this.error = err instanceof Error ? err.message : String(err);
+        });
+      } else if (this.mode === pending) {
+        this.mode = { kind: 'stroke', pointerId: pending.pointerId };
+      }
+    } catch (err) {
+      if (this.mode === pending) this.mode = null;
+      this.error = err instanceof Error ? err.message : String(err);
+    } finally {
+      release();
     }
   }
 
@@ -271,6 +319,13 @@ export class PaintGesture {
       }
       return;
     }
+    if (m.kind === 'pending-stroke') {
+      const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
+      m.samples.push(...(events.length ? events : [e]).map((ev) => this.pen(ev)));
+      const predicted = typeof e.getPredictedEvents === 'function' ? e.getPredictedEvents() : [];
+      this.predicted = predicted.map((ev) => this.pen(ev));
+      return;
+    }
     const session = this.controller.activeStroke;
     if (!session) return;
     const events = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : [];
@@ -285,6 +340,10 @@ export class PaintGesture {
     if (!m || m.pointerId !== e.pointerId) return;
     this.mode = null;
     this.predicted = [];
+    if (m.kind === 'pending-stroke') {
+      m.ended = true;
+      return;
+    }
     if (m.kind === 'stroke') {
       this.controller.activeStroke?.end();
       this.controller.strokeRendering?.catch((err) => {
@@ -324,6 +383,7 @@ export class PaintGesture {
   cancel(): void {
     this.penDown = false;
     this.predicted = [];
+    if (this.mode?.kind === 'pending-stroke') this.mode.cancelled = true;
     if (this.mode?.kind === 'stroke') this.controller.activeStroke?.cancel();
     if (this.mode?.kind === 'fill' && this.mode.committed) this.controller.undo();
     if (this.mode?.kind === 'sticker') this.controller.cancelStickerPreview();

@@ -80,7 +80,7 @@ export interface StrokeSessionInit {
    * Wet brushes: the driver that applies the stroke to the wet layer, and the layer's current
    * pixels (the wet layer's display). The session's own surface is not used.
    */
-  wet?: { driver: WetStrokeDriver; surface: () => TiledSurface };
+  wet?: { driver: WetStrokeDriver; surface: () => TiledSurface; deferDisplay?: () => boolean };
   /** Scraper brushes: the driver that cuts down through visible unlocked layers. */
   scraper?: { driver: ScraperStrokeDriver };
   /** Impasto brushes: the layer's thick-paint channels before the stroke. */
@@ -610,6 +610,7 @@ export class PaintStrokeSession {
   wetUpdate(rects: RasterRect[]): void {
     if (!rects.length || !this.init.wet) return;
     for (const r of rects) this.bounds = union(this.bounds, r);
+    if (this.init.wet.deferDisplay?.()) return;
     this.host.update(this.layerId, this.init.wet.surface(), rects);
   }
 

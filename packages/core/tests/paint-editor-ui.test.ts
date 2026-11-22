@@ -177,6 +177,89 @@ describe('PaintGesture', () => {
     expect(g.active).toBe(false);
   });
 
+  it('queues a new stroke when wet paint is mid-step instead of refusing with Wet paint is mid-step', async () => {
+    const { c, g } = setup();
+    c.setBrush({ id: 'watercolor-round' });
+    await c.wet.ensureWorld().ready;
+    c.paintStroke({ points: [{ x: 20, y: 20 }, { x: 80, y: 20 }], brushId: 'watercolor-round', color: '#1d4ed8' });
+
+    let finishBatch!: () => void;
+    const batchGate = new Promise<void>((r) => {
+      finishBatch = r;
+    });
+    const w = c.wet.world!;
+    const origStep = w.step.bind(w);
+    vi.spyOn(w, 'step').mockImplementationOnce(async (n) => {
+      (w as unknown as { busyFlag: boolean }).busyFlag = true;
+      await batchGate;
+      (w as unknown as { busyFlag: boolean }).busyFlag = false;
+      return origStep(n);
+    });
+
+    await c.tickWet(100);
+    const inFlight = c.tickWet(200);
+    expect(c.wet.busy).toBe(true);
+
+    // Start, drag and finish a second wet stroke while the batch is still running.
+    expect(g.down(ev(15, 60))).toBe(true);
+    expect(g.error).toBeNull();
+    g.move(ev(55, 60));
+    g.up(ev(95, 60));
+
+    finishBatch();
+    await inFlight;
+    await c.wetIdle();
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(g.error).toBeNull();
+    expect(c.getStrokes()).toHaveLength(2);
+    expect(c.getStrokes()[1].points.map((p) => p.x)).toEqual([15, 55]);
+    c.dispose();
+  });
+
+  it('keeps queued strokes in order when another starts before the first has begun', async () => {
+    const { c, g } = setup();
+    c.setBrush({ id: 'watercolor-round' });
+    await c.wet.ensureWorld().ready;
+    c.paintStroke({ points: [{ x: 20, y: 20 }, { x: 80, y: 20 }], brushId: 'watercolor-round', color: '#1d4ed8' });
+
+    let finishBatch!: () => void;
+    const batchGate = new Promise<void>((r) => {
+      finishBatch = r;
+    });
+    const w = c.wet.world!;
+    const origStep = w.step.bind(w);
+    vi.spyOn(w, 'step').mockImplementationOnce(async (n) => {
+      (w as unknown as { busyFlag: boolean }).busyFlag = true;
+      await batchGate;
+      (w as unknown as { busyFlag: boolean }).busyFlag = false;
+      return origStep(n);
+    });
+
+    await c.tickWet(100);
+    const inFlight = c.tickWet(200);
+    expect(c.wet.busy).toBe(true);
+
+    // Two quick strokes while the batch runs: the second must queue behind the first.
+    expect(g.down(ev(15, 60))).toBe(true);
+    g.move(ev(55, 60));
+    g.up(ev(95, 60));
+    expect(g.down(ev(15, 90))).toBe(true);
+    g.move(ev(55, 90));
+    g.up(ev(95, 90));
+
+    finishBatch();
+    await inFlight;
+    for (let i = 0; i < 5; i++) {
+      await c.wetIdle();
+      await new Promise((r) => setTimeout(r, 0));
+    }
+
+    expect(g.error).toBeNull();
+    expect(c.getStrokes().map((s) => s.points[0].y)).toEqual([20, 60, 90]);
+    c.dispose();
+  });
+
   it('shortcuts: tools, undo / redo, brush size, swap, mirror', () => {
     const { c, g } = setup();
     c.paintStroke({ points: [{ x: 5, y: 5 }] });

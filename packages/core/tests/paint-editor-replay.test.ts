@@ -105,26 +105,60 @@ describe('replay agent tools', () => {
 
 describe('advanceReplayClock (#855)', () => {
   /** A target whose wet clock moves by the steps asked for, counting the calls. */
-  const fake = (limit = Infinity) => {
+  const fake = (limit = Infinity, { world = true, wet = true }: { world?: boolean; wet?: boolean } = {}) => {
     let clock = 0;
     const calls: number[] = [];
+    const headless: number[] = [];
+    const mutations: number[] = [];
+    const step = (steps: number) => {
+      const ran = Math.max(0, Math.min(steps, limit - clock));
+      clock += ran;
+      return ran;
+    };
     const target = {
-      getState: () => ({ wet: { clock } }),
       advanceWet: async ({ steps }: { steps: number }) => {
-        const ran = Math.max(0, Math.min(steps, limit - clock));
+        // As the controller: at most 100000 steps a call.
+        if (steps > 100000) throw new Error(`steps ${steps} is out of range; use 0..100000 (or seconds).`);
         calls.push(steps);
-        clock += ran;
-        return { steps: ran };
+        return { steps: step(steps) };
       },
+      advanceWetStepsHeadless: async (steps: number) => {
+        headless.push(steps);
+        return step(steps);
+      },
+      advanceMutations: (seconds: number) => void mutations.push(seconds),
       wet: {
+        get clock() {
+          return clock;
+        },
+        speed: 10,
+        world: world ? { ready: Promise.resolve() } : null,
+        isWet: () => wet,
         setClock: (c: number) => {
           clock = c;
           return true;
         },
       },
     };
-    return { target: target as unknown as PaintEditorController, calls };
+    return { target: target as unknown as PaintEditorController, calls, headless, mutations };
   };
+
+  it('jumps a dry gap without chunks, within advanceWet’s 100000-step limit', async () => {
+    const { target, calls } = fake(Infinity, { wet: false });
+    expect(await advanceReplayClock(target, 250000, { wetChunk: 2 })).toBe(250000);
+    expect(calls).toEqual([100000, 100000, 50000]);
+    const h = fake(Infinity, { wet: false });
+    expect(await advanceReplayClock(h.target, 250000, { wetChunk: 2, headless: true })).toBe(250000);
+    expect(h.headless).toEqual([250000]);
+    expect(h.calls).toEqual([]);
+  });
+
+  it('without a world, sets the clock and still advances time-based mutations', async () => {
+    const { target, calls, mutations } = fake(Infinity, { world: false });
+    expect(await advanceReplayClock(target, 30)).toBe(30);
+    expect(calls).toEqual([]);
+    expect(mutations).toEqual([3]);
+  });
 
   it('steps all at once without a wetChunk', async () => {
     const { target, calls } = fake();

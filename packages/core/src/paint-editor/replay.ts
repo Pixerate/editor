@@ -225,20 +225,58 @@ export interface ReplayItemOptions {
   pointChunk?: number;
   /** Called between two chunks of a wet stroke's points (with `pointChunk`). */
   onPoints?: () => Promise<void> | void;
+  /** Skip intermediate wet display shading and stats while building a replay in the background. */
+  headless?: boolean;
 }
+
+/** The most steps `PaintEditorController.advanceWet` takes in one call. */
+const MAX_ADVANCE_STEPS = 100000;
 
 /**
  * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`); without a simulation
  * yet, its clock is set there. Returns how far the clock moved.
  */
 export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
-  const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
-  const start = target.getState().wet.clock;
+  const start = target.wet.clock;
   let left = clock - start;
+  if (left <= 0) return 0;
+  if (!target.wet.world) {
+    // No simulation yet: nothing flows, but the clock (and time-based mutations) go on.
+    target.advanceMutations(left / target.wet.speed);
+    target.wet.setClock(clock);
+    return target.wet.clock - start;
+  }
+  await target.wet.world.ready;
+  // Nothing wet: the world jumps its clock without stepping, so no need for chunks or yields.
+  const jumpDry = async (steps: number) => {
+    if (options.headless) {
+      await target.advanceWetStepsHeadless(steps);
+      return;
+    }
+    // `advanceWet` takes at most MAX_ADVANCE_STEPS at a time.
+    for (let rest = steps; rest > 0; ) {
+      const n = Math.min(rest, MAX_ADVANCE_STEPS);
+      const ran = (await target.advanceWet({ steps: n })).steps;
+      if (ran <= 0) {
+        target.wet.setClock(clock);
+        break;
+      }
+      rest -= ran;
+    }
+  };
+  if (!target.wet.isWet()) {
+    await jumpDry(left);
+    return target.wet.clock - start;
+  }
+  const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
   while (left > 0) {
+    if (!target.wet.isWet()) {
+      await jumpDry(left);
+      break;
+    }
     const n = Math.min(left, chunk);
-    const ran = (await target.advanceWet({ steps: n })).steps;
-    if (Number.isFinite(chunk)) await options.onWetSteps?.(target.getState().wet.clock);
+    const ran = options.headless ? await target.advanceWetStepsHeadless(n) : (await target.advanceWet({ steps: n })).steps;
+    if (Number.isFinite(chunk)) await options.onWetSteps?.(target.wet.clock);
     if (ran <= 0) {
       // No simulation yet: nothing flows, but the clock goes on (a world made later starts there, as it did).
       target.wet.setClock(clock);
@@ -246,7 +284,7 @@ export async function advanceReplayClock(target: PaintEditorController, clock: n
     }
     left -= ran;
   }
-  return target.getState().wet.clock - start;
+  return target.wet.clock - start;
 }
 
 /** What a recorded stroke replays with (`beginStroke` / `paintStroke` options without the points), at `scale`. */
@@ -290,6 +328,7 @@ export async function replayItem(target: PaintEditorController, item: ReplayItem
   const advanceTo = (clock: number) => advanceReplayClock(target, clock, options);
   const sr = (r: { x: number; y: number; width: number; height: number }) => ({ x: r.x * s, y: r.y * s, width: r.width * s, height: r.height * s });
   if (item.kind === 'paint') {
+    if (options.headless && target.wet.wetLayerIds().length) target.wet.syncDisplays();
     const e = item.event;
     if (e.kind === 'magnets') {
       const d = e.data as { magnets?: PaintMagnet[]; advect?: boolean } | undefined;
@@ -421,22 +460,29 @@ export async function replayItem(target: PaintEditorController, item: ReplayItem
     // Each point at the clock it was recorded at, the simulation stepped in between.
     await target.wetIdle();
     await advanceTo(st.steps[0]);
-    const session = target.beginStroke({ ...init, start: st.points[0] });
-    // Points applied at the same clock go in together (the same dabs as one by one, without a display update each).
-    for (let i = 0; i < st.points.length; ) {
-      let j = i + 1;
-      while (j < st.points.length && st.steps[j] === st.steps[i] && j - i < (options.pointChunk ?? Infinity)) j++;
-      await advanceTo(st.steps[i]);
-      await target.wetIdle();
-      session.push(st.points.slice(i, j) as PenPoint[]);
-      if (options.pointChunk && j < st.points.length) await options.onPoints?.();
-      i = j;
+    const prevDefer = target.deferWetStrokeDisplay;
+    if (options.headless) target.deferWetStrokeDisplay = true;
+    try {
+      const session = target.beginStroke({ ...init, start: st.points[0] });
+      // Points applied at the same clock go in together (the same dabs as one by one, without a display update each).
+      for (let i = 0; i < st.points.length; ) {
+        let j = i + 1;
+        while (j < st.points.length && st.steps[j] === st.steps[i] && j - i < (options.pointChunk ?? Infinity)) j++;
+        await advanceTo(st.steps[i]);
+        await target.wetIdle();
+        session.push(st.points.slice(i, j) as PenPoint[]);
+        if (options.pointChunk && j < st.points.length) await options.onPoints?.();
+        i = j;
+      }
+      // The pen lifted later than the last point: the paint flowed under the open stroke until then.
+      if (st.endStep !== undefined) await advanceTo(st.endStep);
+      await finishReplayStroke(target, session);
+    } finally {
+      target.deferWetStrokeDisplay = prevDefer;
     }
-    // The pen lifted later than the last point: the paint flowed under the open stroke until then.
-    if (st.endStep !== undefined) await advanceTo(st.endStep);
-    await finishReplayStroke(target, session);
   } else {
     await target.wetIdle();
+    if (options.headless && target.wet.wetLayerIds().length) target.wet.syncDisplays();
     target.paintStroke({ ...init, points: st.points });
   }
 }

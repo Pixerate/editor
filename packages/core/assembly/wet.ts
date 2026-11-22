@@ -135,10 +135,42 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
   for (let y: i32 = 1; y <= 256; y++) {
     for (let x: i32 = 1; x <= 256; x += 4) {
       const c: usize = <usize>(y * S + x) * 4;
-      const hx = ld(hP + c);
-      const kx = f32x4.mul(blockScale, hx);
       const rx = ld(rhoS + c);
       const sx = ld(swS + c);
+      const rAny = v128.or(
+        v128.or(
+          v128.or(rx, sx),
+          v128.or(ld(rhoS + c - 4), ld(rhoS + c + 4))
+        ),
+        v128.or(
+          v128.or(ld(rhoS + c - row - 4), ld(rhoS + c - row + 4)),
+          v128.or(ld(rhoS + c + row - 4), ld(rhoS + c + row + 4))
+        )
+      );
+      if (!v128.any_true(rAny)) {
+        const pAny = v128.or(
+          v128.or(v128.or(ld(pS + c), ld(pS + PLANE + c)), v128.or(ld(pS + 2 * PLANE + c), ld(pS + 3 * PLANE + c))),
+          ld(pS + 4 * PLANE + c)
+        );
+        if (!v128.any_true(pAny)) {
+          const dAny = v128.or(
+            v128.or(
+              v128.or(ld(dst + P_RHO * PLANE + c), ld(dst + P_SW * PLANE + c)),
+              v128.or(ld(dst + P_EDGE * PLANE + c), v128.or(ld(dst + P_UX * PLANE + c), ld(dst + P_UY * PLANE + c)))
+            ),
+            v128.or(
+              v128.or(v128.or(ld(dst + P_P0 * PLANE + c), ld(dst + (P_P0 + 1) * PLANE + c)), v128.or(ld(dst + (P_P0 + 2) * PLANE + c), ld(dst + (P_P0 + 3) * PLANE + c))),
+              ld(dst + (P_P0 + 4) * PLANE + c)
+            )
+          );
+          if (v128.any_true(dAny)) {
+            for (let k: usize = 0; k < 19; k++) v128.store(dst + k * PLANE + c, zero);
+          }
+          continue;
+        }
+      }
+      const hx = ld(hP + c);
+      const kx = f32x4.mul(blockScale, hx);
       const damp = f32x4.max(zero, f32x4.sub(one, f32x4.mul(sx, invCap)));
       const pinX = f32x4.mul(f32x4.add(pinT, f32x4.mul(rough, hx)), damp);
       const rxDry = f32x4.lt(rx, eps);
@@ -203,8 +235,6 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
 
       // 5. pigment and light: upwind advection with the last step's velocities, plus bleed
       const rxWet = v128.not(rxDry);
-      const uxc = ld(uxS + c);
-      const uyc = ld(uyS + c);
       const pc0 = ld(pS + c);
       const pc1 = ld(pS + PLANE + c);
       const pc2 = ld(pS + 2 * PLANE + c);
@@ -215,51 +245,63 @@ export function step(base: usize, parity: i32, prm: usize): i32 {
       let p2 = pc2;
       let p3 = pc3;
       let p4 = pc4;
-      let nb: usize;
-      let open: v128;
-      let uf: v128;
-      let pos: v128;
-      let pn: v128;
-      // east (outgoing): p − (uf > 0 ? uf·pc : uf·pn) + bleed·(pn − pc)
-      nb = c + 4;
-      open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
-      uf = f32x4.mul(mobility, f32x4.add(uxc, ld(uxS + nb)));
-      pos = f32x4.gt(uf, zero);
-      pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.sub(p0, sel(f32x4.mul(uf, pc0), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
-      pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
-      pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
-      pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
-      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
-      // west (incoming): p + (uf > 0 ? uf·pn : uf·pc) + bleed·(pn − pc)
-      nb = c - 4;
-      open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
-      uf = f32x4.mul(mobility, f32x4.add(ld(uxS + nb), uxc));
-      pos = f32x4.gt(uf, zero);
-      pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.add(p0, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc0), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
-      pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
-      pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
-      pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
-      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
-      // south (y + 1, outgoing)
-      nb = c + row;
-      open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
-      uf = f32x4.mul(mobility, f32x4.add(uyc, ld(uyS + nb)));
-      pos = f32x4.gt(uf, zero);
-      pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.sub(p0, sel(f32x4.mul(uf, pc0), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
-      pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
-      pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
-      pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
-      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
-      // north (y − 1, incoming)
-      nb = c - row;
-      open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
-      uf = f32x4.mul(mobility, f32x4.add(ld(uyS + nb), uyc));
-      pos = f32x4.gt(uf, zero);
-      pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.add(p0, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc0), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
-      pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
-      pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
-      pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
-      pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
+      if (v128.any_true(rxWet)) {
+        const uxc = ld(uxS + c);
+        const uyc = ld(uyS + c);
+        let nb: usize;
+        let open: v128;
+        let uf: v128;
+        let pos: v128;
+        let pn: v128;
+        // east (outgoing): p − (uf > 0 ? uf·pc : uf·pn) + bleed·(pn − pc)
+        nb = c + 4;
+        open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
+        if (v128.any_true(open)) {
+          uf = f32x4.mul(mobility, f32x4.add(uxc, ld(uxS + nb)));
+          pos = f32x4.gt(uf, zero);
+          pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.sub(p0, sel(f32x4.mul(uf, pc0), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
+          pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
+          pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
+          pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+          pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
+        }
+        // west (incoming): p + (uf > 0 ? uf·pn : uf·pc) + bleed·(pn − pc)
+        nb = c - 4;
+        open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
+        if (v128.any_true(open)) {
+          uf = f32x4.mul(mobility, f32x4.add(ld(uxS + nb), uxc));
+          pos = f32x4.gt(uf, zero);
+          pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.add(p0, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc0), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
+          pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
+          pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
+          pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+          pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
+        }
+        // south (y + 1, outgoing)
+        nb = c + row;
+        open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
+        if (v128.any_true(open)) {
+          uf = f32x4.mul(mobility, f32x4.add(uyc, ld(uyS + nb)));
+          pos = f32x4.gt(uf, zero);
+          pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.sub(p0, sel(f32x4.mul(uf, pc0), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
+          pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.sub(p1, sel(f32x4.mul(uf, pc1), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
+          pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.sub(p2, sel(f32x4.mul(uf, pc2), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
+          pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.sub(p3, sel(f32x4.mul(uf, pc3), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+          pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.sub(p4, sel(f32x4.mul(uf, pc4), f32x4.mul(uf, pn), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
+        }
+        // north (y − 1, incoming)
+        nb = c - row;
+        open = v128.and(rxWet, f32x4.ge(ld(rhoS + nb), eps));
+        if (v128.any_true(open)) {
+          uf = f32x4.mul(mobility, f32x4.add(ld(uyS + nb), uyc));
+          pos = f32x4.gt(uf, zero);
+          pn = ld(pS + nb); p0 = sel(f32x4.add(f32x4.add(p0, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc0), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc0))), p0, open);
+          pn = ld(pS + PLANE + nb); p1 = sel(f32x4.add(f32x4.add(p1, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc1), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc1))), p1, open);
+          pn = ld(pS + 2 * PLANE + nb); p2 = sel(f32x4.add(f32x4.add(p2, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc2), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc2))), p2, open);
+          pn = ld(pS + 3 * PLANE + nb); p3 = sel(f32x4.add(f32x4.add(p3, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc3), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc3))), p3, open);
+          pn = ld(pS + 4 * PLANE + nb); p4 = sel(f32x4.add(f32x4.add(p4, sel(f32x4.mul(uf, pn), f32x4.mul(uf, pc4), pos)), f32x4.mul(bleed, f32x4.sub(pn, pc4))), p4, open);
+        }
+      }
 
       // 6. deposition and pickup
       const dryNow = f32x4.lt(rhoNew, eps);

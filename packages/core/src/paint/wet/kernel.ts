@@ -112,10 +112,30 @@ export function stepSlotTs(f: Float32Array, base: number, parity: number, prm: F
   for (let y = 1; y <= 256; y++) {
     for (let x = 1; x <= 256; x++) {
       const c = y * S + x;
-      const hx = f[hP + c];
-      const kx = F(blockScale * hx);
       const rx = f[rhoS + c];
       const sx = f[swS + c];
+      if (
+        rx === 0 &&
+        sx === 0 &&
+        f[rhoS + c - 1] === 0 &&
+        f[rhoS + c + 1] === 0 &&
+        f[rhoS + c - S - 1] === 0 &&
+        f[rhoS + c - S] === 0 &&
+        f[rhoS + c - S + 1] === 0 &&
+        f[rhoS + c + S - 1] === 0 &&
+        f[rhoS + c + S] === 0 &&
+        f[rhoS + c + S + 1] === 0 &&
+        f[pS + c] === 0 &&
+        f[pS + PLANE + c] === 0 &&
+        f[pS + 2 * PLANE + c] === 0 &&
+        f[pS + 3 * PLANE + c] === 0 &&
+        f[pS + 4 * PLANE + c] === 0
+      ) {
+        for (let k = 0; k < SET_PLANES; k++) f[dst + k * PLANE + c] = 0;
+        continue;
+      }
+      const hx = f[hP + c];
+      const kx = F(blockScale * hx);
       const damp = Math.max(0, F(1 - F(sx * invCap)));
       const pinX = F(F(pinT + F(rough * hx)) * damp);
       const rxDry = rx < EPS;
