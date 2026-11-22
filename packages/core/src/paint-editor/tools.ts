@@ -75,6 +75,21 @@ export interface PaintEditorToolProviderOptions {
   origin?: PaintOrigin;
   /** Bare tool names to leave out (e.g. `new_canvas`, `export_psd` when the host owns the canvas). */
   exclude?: readonly string[];
+  /**
+   * Loads an image that `place_image`, `set_tracing_image` and `add_reference_image` are given by
+   * reference instead of as a PNG: an http(s) or asset URL, or a host id such as a canvas node's.
+   * Agents can name an image but cannot write out its bytes, so without this they can only use
+   * PNGs they produced themselves. Return `null` when there is no such image; throw (or reject)
+   * with a sentence when it cannot be loaded. `maxPixels` is the most the tools take: scale larger
+   * images down to fit. A PNG (a data URL, or base64) still decodes at once, so those calls stay
+   * synchronous.
+   */
+  resolveImage?: PaintImageResolver;
+  /**
+   * What `resolveImage` accepts, for the image argument's description (default "an image URL"),
+   * e.g. "the id of an image node on the canvas, or an http(s) URL".
+   */
+  imageReferences?: string;
   /** Called after each successful write (every tool not marked read-only), e.g. so the host can save. */
   onChange?: (info: { tool: string }) => void;
 }
@@ -111,6 +126,15 @@ function loadResult(load: MixerLoad) {
   return { reservoir: hex(load.reservoir), amount: Math.round(load.amount * 1000) / 1000, pickup: hex(load.pickup) };
 }
 
+
+/** An image a host loaded for a reference: RGBA pixels, or a PNG (data URL or bytes). */
+export type PaintResolvedImage = { image: { width: number; height: number; data: ArrayLike<number> } } | { png: string | Uint8Array };
+
+/** See `PaintEditorToolProviderOptions.resolveImage`. */
+export type PaintImageResolver = (ref: string, options: { maxPixels: number }) => PaintResolvedImage | null | undefined | Promise<PaintResolvedImage | null | undefined>;
+
+/** The most pixels an image given by reference is loaded at (4096 × 4096). */
+export const PAINT_IMAGE_MAX_PIXELS = 4096 * 4096;
 
 /**
  * Agent tools for one paint editor. Pass a getter to create the document lazily: it is first
@@ -473,6 +497,7 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
       required: ['png'],
       additionalProperties: false,
     },
+    image: 'png',
     annotations: { title: 'Place an image on a new layer', ...WRITE },
     coordinates: { out: ['bounds'] },
     handler: (a) => c.placeImage(a),
@@ -1237,8 +1262,57 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
     title: 'Paint editor',
     description: options.origin ? `${description} It is a layer of a larger canvas: every position is in canvas coordinates.` : description,
     skill: 'pixerate-paint-editor',
-    tools: tools.filter((t) => !exclude.has(t.name)).map((t) => hostTool(t, options)),
+    tools: tools.filter((t) => !exclude.has(t.name)).map((t) => hostTool(imageTool(t, options), options)),
   }, { director: !!options.director, surface: options.playbackSurface });
+}
+
+/** A PNG given inline: a data URL, or base64 that starts with the PNG signature. */
+const INLINE_PNG = /^(data:|iVBORw0KGgo)/i;
+
+/**
+ * Lets a tool's image argument (`tool.image`) take a reference the host's `resolveImage` loads,
+ * passing the pixels on as `pixels`. PNGs given inline go through unchanged (and synchronously).
+ */
+function imageTool({ image: arg, ...tool }: PaintAgentTool, { resolveImage, imageReferences }: PaintEditorToolProviderOptions): PaintAgentTool {
+  if (!arg || !resolveImage) return tool;
+  const schema = tool.inputSchema as { properties?: Record<string, Record<string, unknown>> };
+  const param = schema.properties?.[arg];
+  const inputSchema = param
+    ? {
+        ...schema,
+        properties: {
+          ...schema.properties,
+          [arg]: { ...param, description: `The image: a PNG (base64 or a data:image/png URL), or ${imageReferences ?? 'an image URL'} (loaded at up to ${PAINT_IMAGE_MAX_PIXELS / (1024 * 1024)} megapixels).` },
+        },
+      }
+    : tool.inputSchema;
+  return {
+    ...tool,
+    inputSchema: inputSchema as AgentTool['inputSchema'],
+    handler: (args, context) => {
+      const value = (args as Record<string, unknown>)[arg];
+      if (typeof value !== 'string' || INLINE_PNG.test(value.trim())) return tool.handler(args, context);
+      const ref = value.trim();
+      return (async () => {
+        let resolved: PaintResolvedImage | null | undefined;
+        try {
+          resolved = await resolveImage(ref, { maxPixels: PAINT_IMAGE_MAX_PIXELS });
+        } catch (e) {
+          throw new PaintEditorError(`The image "${ref}" could not be loaded: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        const { [arg]: _ref, ...rest } = args as Record<string, unknown>;
+        if (resolved && 'image' in resolved && resolved.image) {
+          const { width, height, data } = resolved.image;
+          return tool.handler({ ...rest, pixels: { width, height, data: new Uint8ClampedArray(data) } }, context);
+        }
+        if (resolved && 'png' in resolved && resolved.png) {
+          const png = typeof resolved.png === 'string' ? resolved.png : bytesToBase64(resolved.png);
+          return tool.handler({ ...rest, [arg]: png }, context);
+        }
+        throw new PaintEditorError(`There is no image "${ref}".`);
+      })();
+    },
+  };
 }
 
 /** Applies `origin` (positions in and out, host wording) and `onChange` to one tool. */

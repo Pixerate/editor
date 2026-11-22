@@ -17,7 +17,11 @@ export interface PaintToolCoordinates {
 }
 
 /** A paint tool with its position fields. */
-export type PaintAgentTool = AgentTool & { coordinates?: PaintToolCoordinates };
+/**
+ * A paint tool with its position fields, and `image`: the argument that takes an image as a PNG
+ * (base64 or a data URL), which also takes a reference when the host gives `resolveImage`.
+ */
+export type PaintAgentTool = AgentTool & { coordinates?: PaintToolCoordinates; image?: string };
 
 export interface PaintOrigin {
   x: number;
