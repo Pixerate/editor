@@ -72,20 +72,25 @@ const itemKey = (item: ReplayItem): object => (item.kind === 'stroke' ? item.str
 const strokeKey = (st: RecordedStroke): string => `${st.layerId}|${st.seed}|${st.brush.id}|${st.points[0]?.x},${st.points[0]?.y}`;
 /** The clock an item happens at (`null`: it doesn't depend on the clock). */
 const itemClock = (item: ReplayItem): number | null => itemClocks(item)?.first ?? null;
-const yieldToHost: () => Promise<void> = (() => {
-  const g = globalThis as { window?: unknown; MessageChannel?: typeof MessageChannel };
-  if (typeof g.window !== 'undefined' && typeof g.MessageChannel === 'function') {
-    const ch = new g.MessageChannel();
-    const queue: Array<() => void> = [];
-    ch.port1.onmessage = () => queue.shift()?.();
-    return () =>
-      new Promise<void>((r) => {
-        queue.push(r);
-        ch.port2.postMessage(null);
-      });
+/** A `MessageChannel` task in a browser (no 4 ms `setTimeout` clamp), made on first use. */
+let yieldChannel: { port: MessagePort; queue: Array<() => void> } | null | undefined;
+const yieldToHost = (): Promise<void> => {
+  if (yieldChannel === undefined) {
+    const g = globalThis as { window?: unknown; MessageChannel?: typeof MessageChannel };
+    if (typeof g.window !== 'undefined' && typeof g.MessageChannel === 'function') {
+      const ch = new g.MessageChannel();
+      const queue: Array<() => void> = [];
+      ch.port1.onmessage = () => queue.shift()?.();
+      yieldChannel = { port: ch.port2, queue };
+    } else yieldChannel = null;
   }
-  return () => new Promise<void>((r) => setTimeout(r, 0));
-})();
+  const yc = yieldChannel;
+  if (!yc) return new Promise<void>((r) => setTimeout(r, 0));
+  return new Promise<void>((r) => {
+    yc.queue.push(r);
+    yc.port.postMessage(null);
+  });
+};
 
 export class SchemeReplay {
   state: SchemeReplayState = 'building';
@@ -263,7 +268,9 @@ export class SchemeReplay {
     // first point once it is logged).
     if (this.clock() < clock && !this.live?.wet && !(now?.wet && !now.follow)) {
       if (this.state === 'building') {
+        // Catch up in one go, then look at the log again (it may have grown meanwhile).
         await advanceReplayClock(this.target, clock, this.buildOptions);
+        return true;
       } else if ((await advanceReplayClock(this.target, Math.min(clock, this.clock() + STEP_CHUNK))) > 0) {
         return true;
       }

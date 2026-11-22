@@ -229,36 +229,54 @@ export interface ReplayItemOptions {
   headless?: boolean;
 }
 
+/** The most steps `PaintEditorController.advanceWet` takes in one call. */
+const MAX_ADVANCE_STEPS = 100000;
+
 /**
  * Steps `target`'s wet simulation up to `clock` (in chunks of `wetChunk`); without a simulation
  * yet, its clock is set there. Returns how far the clock moved.
  */
 export async function advanceReplayClock(target: PaintEditorController, clock: number, options: ReplayItemOptions = {}): Promise<number> {
-  const getClock = () => target.wet.clock ?? target.getState().wet.clock;
-  const start = getClock();
+  const start = target.wet.clock;
   let left = clock - start;
   if (left <= 0) return 0;
-  if (target.wet.world === null) {
+  if (!target.wet.world) {
+    // No simulation yet: nothing flows, but the clock (and time-based mutations) go on.
+    target.advanceMutations(left / target.wet.speed);
     target.wet.setClock(clock);
-    return getClock() - start;
+    return target.wet.clock - start;
   }
-  if (target.wet.world) await target.wet.world.ready;
-  const hasIsWet = typeof target.wet.isWet === 'function';
-  if (hasIsWet && !target.wet.isWet()) {
-    if (options.headless) await target.advanceWetStepsHeadless(left);
-    else await target.advanceWet({ steps: left });
-    return getClock() - start;
+  await target.wet.world.ready;
+  // Nothing wet: the world jumps its clock without stepping, so no need for chunks or yields.
+  const jumpDry = async (steps: number) => {
+    if (options.headless) {
+      await target.advanceWetStepsHeadless(steps);
+      return;
+    }
+    // `advanceWet` takes at most MAX_ADVANCE_STEPS at a time.
+    for (let rest = steps; rest > 0; ) {
+      const n = Math.min(rest, MAX_ADVANCE_STEPS);
+      const ran = (await target.advanceWet({ steps: n })).steps;
+      if (ran <= 0) {
+        target.wet.setClock(clock);
+        break;
+      }
+      rest -= ran;
+    }
+  };
+  if (!target.wet.isWet()) {
+    await jumpDry(left);
+    return target.wet.clock - start;
   }
   const chunk = options.wetChunk ? Math.max(1, options.wetChunk) : Infinity;
   while (left > 0) {
-    if (hasIsWet && !target.wet.isWet()) {
-      if (options.headless) await target.advanceWetStepsHeadless(left);
-      else await target.advanceWet({ steps: left });
+    if (!target.wet.isWet()) {
+      await jumpDry(left);
       break;
     }
     const n = Math.min(left, chunk);
     const ran = options.headless ? await target.advanceWetStepsHeadless(n) : (await target.advanceWet({ steps: n })).steps;
-    if (Number.isFinite(chunk)) await options.onWetSteps?.(getClock());
+    if (Number.isFinite(chunk)) await options.onWetSteps?.(target.wet.clock);
     if (ran <= 0) {
       // No simulation yet: nothing flows, but the clock goes on (a world made later starts there, as it did).
       target.wet.setClock(clock);
@@ -266,7 +284,7 @@ export async function advanceReplayClock(target: PaintEditorController, clock: n
     }
     left -= ran;
   }
-  return getClock() - start;
+  return target.wet.clock - start;
 }
 
 /** What a recorded stroke replays with (`beginStroke` / `paintStroke` options without the points), at `scale`. */

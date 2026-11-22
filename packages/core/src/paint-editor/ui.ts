@@ -85,6 +85,9 @@ export class PaintGesture {
   private mode: Mode = null;
   private penAt: Point2 | null = null;
   private penDown = false;
+  /** Queued strokes not yet begun, and the chain that begins them in order. */
+  private pendingStrokes = 0;
+  private strokeQueue: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly controller: PaintEditorController,
@@ -131,10 +134,21 @@ export class PaintGesture {
     if (tool === 'fill') return this.fillDown(e);
     if (tool === 'sticker') return this.stickerDown(e);
     const p = this.pen(e);
-    if (this.controller.wet.busy || this.controller.activeStroke?.pendingEnd) {
+    // A stroke queued earlier that has not begun yet goes first, so this one queues behind it.
+    if (this.pendingStrokes > 0 || this.controller.wet.busy || this.controller.activeStroke?.pendingEnd) {
       const pending = { kind: 'pending-stroke' as const, pointerId: e.pointerId, samples: [p], ended: false, cancelled: false };
       this.mode = pending;
-      void this.startPendingStroke(pending);
+      this.pendingStrokes++;
+      this.strokeQueue = this.strokeQueue.then(() =>
+        this.startPendingStroke(pending)
+          .catch((err) => {
+            if (this.mode === pending) this.mode = null;
+            this.error = err instanceof Error ? err.message : String(err);
+          })
+          .finally(() => {
+            this.pendingStrokes--;
+          })
+      );
       return true;
     }
     try {
