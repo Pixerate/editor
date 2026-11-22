@@ -30,6 +30,7 @@ import type { PaintEditorController, ReplayCheckpoint } from './controller';
 import type { PenPoint } from './engine';
 import type { PaintStrokeSession } from './stroke';
 import type { RecordedStroke } from './strokes';
+import { FREE_INTERVAL } from '../paint/wet/model';
 import { advanceReplayClock, finishReplayStroke, itemClocks, replayItem, replayItems, replayStrokeInit, type ReplayItem, type ReplayItemOptions } from './replay';
 
 /** What a scheme replay reads from the editor it shows. */
@@ -56,10 +57,14 @@ export interface SchemeReplayHost {
 
 export type SchemeReplayState = 'building' | 'ready' | 'failed';
 
-/** Steps of catch-up (or of a replayed stroke) between two looks at the host. */
+/** Steps of catch-up (or of a replayed stroke) between two looks at the host once ready. */
 const STEP_CHUNK = 2;
-/** Points of a replayed wet stroke between two looks at the host. */
+/** Points of a replayed wet stroke between two looks at the host once ready. */
 const POINT_CHUNK = 8;
+/** Batch size and frame slice budget while building a replay in the background. */
+const BUILD_STEP_CHUNK = FREE_INTERVAL;
+const BUILD_POINT_CHUNK = 64;
+const BUILD_SLICE_MS = 12;
 /** Checkpoints kept at most (the oldest go first). */
 const MAX_CHECKPOINTS = 64;
 
@@ -67,7 +72,20 @@ const itemKey = (item: ReplayItem): object => (item.kind === 'stroke' ? item.str
 const strokeKey = (st: RecordedStroke): string => `${st.layerId}|${st.seed}|${st.brush.id}|${st.points[0]?.x},${st.points[0]?.y}`;
 /** The clock an item happens at (`null`: it doesn't depend on the clock). */
 const itemClock = (item: ReplayItem): number | null => itemClocks(item)?.first ?? null;
-const yieldToHost = () => new Promise<void>((r) => setTimeout(r, 0));
+const yieldToHost: () => Promise<void> = (() => {
+  const g = globalThis as { window?: unknown; MessageChannel?: typeof MessageChannel };
+  if (typeof g.window !== 'undefined' && typeof g.MessageChannel === 'function') {
+    const ch = new g.MessageChannel();
+    const queue: Array<() => void> = [];
+    ch.port1.onmessage = () => queue.shift()?.();
+    return () =>
+      new Promise<void>((r) => {
+        queue.push(r);
+        ch.port2.postMessage(null);
+      });
+  }
+  return () => new Promise<void>((r) => setTimeout(r, 0));
+})();
 
 export class SchemeReplay {
   state: SchemeReplayState = 'building';
@@ -80,17 +98,27 @@ export class SchemeReplay {
   private checkpoints: Array<{ count: number; cp: ReplayCheckpoint }> = [];
   private live: { key: string; session: PaintStrokeSession; wet: boolean; pushed: number } | null = null;
   /** A live stroke that could not be followed (the view shows it when it is logged). */
-  private skipKey: string | null = null;
+  private skipKey: string | null;
   private running: Promise<void> | null = null;
   private again = false;
   private disposed = false;
+  private sliceStart = 0;
   private readonly options: ReplayItemOptions;
+  private readonly buildOptions: ReplayItemOptions;
   /** A one-off replay of a document that doesn't change: no checkpoints, and nothing to roll back to. */
   private readonly frozen: boolean;
 
   constructor(readonly scheme: ColorScheme, private readonly host: SchemeReplayHost, options: { frozen?: boolean } = {}) {
     this.frozen = Boolean(options.frozen);
+    this.skipKey = null;
     this.options = { wetChunk: STEP_CHUNK, onWetSteps: () => yieldToHost(), pointChunk: POINT_CHUNK, onPoints: () => yieldToHost() };
+    const maybeYield = () => {
+      if (performance.now() - this.sliceStart < BUILD_SLICE_MS) return;
+      return yieldToHost().then(() => {
+        this.sliceStart = performance.now();
+      });
+    };
+    this.buildOptions = { headless: true, wetChunk: BUILD_STEP_CHUNK, onWetSteps: maybeYield, pointChunk: BUILD_POINT_CHUNK, onPoints: maybeYield };
     this.target = this.fresh();
   }
 
@@ -170,11 +198,13 @@ export class SchemeReplay {
   private async run(): Promise<void> {
     // Never inside the change that kicked it.
     await Promise.resolve();
+    this.sliceStart = performance.now();
     try {
       while (!this.disposed) {
         this.again = false;
         if (!(await this.step())) return;
         await yieldToHost();
+        this.sliceStart = performance.now();
       }
     } catch (e) {
       if (this.disposed) return;
@@ -232,9 +262,14 @@ export class SchemeReplay {
     // applied at, which the replay steps to before ending it; one that isn't followed replays from its
     // first point once it is logged).
     if (this.clock() < clock && !this.live?.wet && !(now?.wet && !now.follow)) {
-      if ((await advanceReplayClock(this.target, Math.min(clock, this.clock() + STEP_CHUNK))) > 0) return true;
+      if (this.state === 'building') {
+        await advanceReplayClock(this.target, clock, this.buildOptions);
+      } else if ((await advanceReplayClock(this.target, Math.min(clock, this.clock() + STEP_CHUNK))) > 0) {
+        return true;
+      }
     }
     if (this.state === 'building') {
+      if (this.target.wet.wetLayerIds().length) this.target.wet.syncDisplays();
       this.state = 'ready';
       this.host.changed('all');
     }
@@ -242,7 +277,7 @@ export class SchemeReplay {
   }
 
   private clock(): number {
-    return this.target.getState().wet.clock;
+    return this.target.wet.clock;
   }
 
   private async apply(item: ReplayItem): Promise<void> {
@@ -257,7 +292,9 @@ export class SchemeReplay {
       const d = item.event.data as { strokes?: RecordedStroke[] } | undefined;
       if (d?.strokes) it = { kind: 'paint', event: { ...item.event, data: { ...d, strokes: d.strokes.map((st) => this.host.inScheme(st)) } } };
     }
-    await replayItem(this.target, it, this.options);
+    const opts = this.state === 'building' ? this.buildOptions : this.options;
+    await replayItem(this.target, it, opts);
+    if (!this.frozen && opts.headless && this.target.wet.wetLayerIds().length) this.target.wet.syncDisplays();
     this.applied.push(itemKey(item));
     this.checkpoint();
   }

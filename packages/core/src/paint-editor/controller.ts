@@ -3877,6 +3877,8 @@ export class PaintEditorController {
   private schemeReplay: SchemeReplay | null = null;
   /** Set on the headless editors replays paint into: they never replay themselves. */
   private replayTarget = false;
+  /** @internal Skips intermediate wet display shading during `push` while a replay builds in the background. */
+  deferWetStrokeDisplay = false;
   /** The paper a scheme replay's editor was made with (a different paper means a fresh replay). */
   private replayPaper: PaperSettings | null = null;
   private schemeNeedsCache: {
@@ -4363,7 +4365,7 @@ export class PaintEditorController {
     } else if (stickerLayer) {
       throw new PaintEditorError(`Layer "${layer.name}" is a sticker layer (its pixels are drawn from its stickers); paint on another layer (add_layer).`);
     }
-    let wet: { driver: WetStrokeDriver; surface: () => TiledSurface } | undefined;
+    let wet: { driver: WetStrokeDriver; surface: () => TiledSurface; deferDisplay?: () => boolean } | undefined;
     let scraper: { driver: ScraperStrokeDriver } | undefined;
     if (brush.engine === 'scraper') {
       const { layers: scrapeLayers, stoppedAtLocked } = init.scrapeLayerIds ? { layers: scrapeLayersByIds(doc, init.scrapeLayerIds), stoppedAtLocked: null } : collectScrapeableLayers(doc);
@@ -4451,7 +4453,7 @@ export class PaintEditorController {
         speed: this.wet.speed,
       });
       init = { ...init, seed: seedW, load };
-      wet = { driver, surface: () => world.display(id).surface };
+      wet = { driver, surface: () => world.display(id).surface, deferDisplay: () => this.deferWetStrokeDisplay };
     } else if (brush.engine === 'antimatter') {
       const targetIds = new Set(this.antimatterTargetsOf(this.doc, init.targets).map((t) => t.id));
       targetIds.add(layer.id);
@@ -6354,7 +6356,7 @@ export class PaintEditorController {
     const w = Math.round(width * scale);
     const h = Math.round(height * scale);
     if (w > 16384 || h > 16384) throw new PaintEditorError(`At scale ${scale} the canvas would be ${w}×${h}; the limit is 16384 px per side. Use a smaller scale.`);
-    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: this.wetOptions, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits, authoredEffectsGPU: false });
+    const target = new PaintEditorController({ width: w, height: h, dpi: dpi * scale, brushLibrary: this.brushLibrary, wet: { ...this.wetOptions, gpu: 'off' }, authoredEffects: this.authoredPolicy, rawShaders: this.rawShaders, authoredEffectLimits: this.authoredLimits, authoredEffectsGPU: false });
     target.replayTarget = true;
     target.brushEntries = this.brushEntries;
     target.brushSources.set(this.brushSources.all());
@@ -6511,6 +6513,15 @@ export class PaintEditorController {
     this.emit();
     const st = this.wetState();
     return { steps: run, clock: st.clock, stillWet: st.wet, layers: st.layers };
+  }
+
+  /** @internal Steps wet paint during a background replay without intermediate display shading or tile stats. */
+  async advanceWetStepsHeadless(steps: number): Promise<number> {
+    const n = Math.max(0, Math.floor(steps));
+    if (n <= 0) return 0;
+    const run = await this.wet.advanceHeadless(n);
+    if (n > 0) this.advanceMutations(n / this.wet.speed);
+    return run;
   }
 
   /**

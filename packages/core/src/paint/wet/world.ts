@@ -344,6 +344,7 @@ export class WetWorld {
   private wasm: { step: (base: number, parity: number, prm: number) => number; halo: (table: number, slots: number, key: number, perLane: number, tilesX: number, tilesY: number, set: number) => void } | null = null;
   private pool: WetWorkerPool | null = null;
   private busyFlag = false;
+  private halosDirty = false;
   private destroyed = false;
   private support: WetSupport;
   private readonly prm = new Float32Array(PARAM_FLOATS);
@@ -955,8 +956,14 @@ export class WetWorld {
     } else this.haloTs(key, set);
   }
 
-  /** Refills every live slot's halo in the current set (after edits or wake-ups). */
+  /** Marks live slots' halos dirty so they are refilled once before the next step or read. */
   private refreshHalos(): void {
+    this.halosDirty = true;
+  }
+
+  private flushHalos(): void {
+    if (!this.halosDirty) return;
+    this.halosDirty = false;
     for (const key of this.active) this.halo(key, this.parity);
   }
 
@@ -977,6 +984,7 @@ export class WetWorld {
 
   /** Runs `n` steps on this thread (TypeScript or wasm kernel). */
   private runHere(n: number): void {
+    this.flushHalos();
     const l = this.layout;
     const flagsBase = l.flags >> 2;
     const lastBase = l.last >> 2;
@@ -1108,6 +1116,7 @@ export class WetWorld {
         break;
       }
       const n = this.batchSize(left);
+      this.flushHalos();
       this.gpuBatch(n);
       const ctl = this.layout.ctl >> 2;
       this.i32[ctl + 2] = 0;
@@ -1175,6 +1184,7 @@ export class WetWorld {
       return tx < x0 || tx > x1 || ty < y0 || ty > y1;
     });
     if (!held.length) return () => {};
+    this.flushHalos();
     const setFloats = SET_PLANES * PLANE;
     for (const key of held) {
       const base = this.slotBase(this.slotOf(key));
@@ -2341,6 +2351,7 @@ export class WetWorld {
 
   /** Uploads what the CPU changed since the last upload (the current set and deposits; whole slots on wake-up). */
   private gpuSync(): void {
+    this.flushHalos();
     this.gpuFinishPlan();
     const gpu = this.gpu!;
     if (!gpu.ensureSlots(this.slotCount)) {
@@ -2447,6 +2458,7 @@ export class WetWorld {
   /** A copy of everything (for undo): live slots, layers, clock and tilt. */
   snapshot(): WetSnapshot {
     this.requireIdle();
+    this.flushHalos();
     const slots = new Map<number, { planes: Float32Array; last: number }>();
     let bytes = 0;
     for (const key of this.active) {
@@ -2504,6 +2516,7 @@ export class WetWorld {
 
   /** Memory for tests and tools: the raw f32 view (read only, please). */
   get rawFloats(): Float32Array {
+    this.flushHalos();
     return this.f32;
   }
 

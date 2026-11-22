@@ -638,6 +638,7 @@ export class PaintWetLayers {
   private ticking: Promise<void> | null = null;
   private stepsOwed = 0;
   private displaying: Promise<void> | null = null;
+  private holdingTicks = 0;
   private leadAt = 0;
   gpuMode: WetGpuMode;
   gpuMinTiles: number;
@@ -833,6 +834,28 @@ export class PaintWetLayers {
       // A lead frame's failure is its own (the next batch reshades); waiting just lets it settle.
       if (this.ticking) await this.ticking;
       else await this.displaying!.catch(() => undefined);
+    }
+  }
+
+  /**
+   * Holds display ticks while waiting for the running batch to settle, so an animation frame does
+   * not start another worker batch ahead of a pointer-down stroke. Call the returned function in
+   * `finally`.
+   */
+  async whenIdleForEdit(): Promise<() => void> {
+    this.holdingTicks++;
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      this.holdingTicks = Math.max(0, this.holdingTicks - 1);
+    };
+    try {
+      while (this.busy || this.ticking || this.displaying) await this.idle();
+      return release;
+    } catch (e) {
+      release();
+      throw e;
     }
   }
 
@@ -1086,6 +1109,10 @@ export class PaintWetLayers {
     }
     // The GPU is still shading the last frame: wait for it (edits need not; they just win).
     if (this.displaying) return this.displaying;
+    if (this.holdingTicks > 0) {
+      this.flushDriver();
+      return Promise.resolve();
+    }
     const last = this.lastTick;
     this.lastTick = now;
     const w = this.world;
@@ -1182,6 +1209,38 @@ export class PaintWetLayers {
     await job;
     if (w.gpuActive) await this.syncDisplaysGpu(Infinity);
     else this.syncDisplays();
+    this.retireDry();
+    return w.clock - start;
+  }
+
+  /**
+   * Steps `steps` times without shading intermediate display tiles (for background replays that
+   * only show the result once caught up). Call `syncDisplays()` when pixels are needed.
+   */
+  async advanceHeadless(steps: number): Promise<number> {
+    await this.idle();
+    const w = this.world;
+    if (!w) return 0;
+    const n = Math.max(0, Math.floor(steps));
+    if (n <= 0) return 0;
+    if (!w.isActive()) {
+      const start = w.clock;
+      await w.step(n);
+      this.retireDry();
+      return w.clock - start;
+    }
+    await w.ready;
+    await this.idle();
+    const start = w.clock;
+    const job = (async () => {
+      try {
+        await w.step(n);
+      } finally {
+        this.ticking = null;
+      }
+    })();
+    this.ticking = job;
+    await job;
     this.retireDry();
     return w.clock - start;
   }
