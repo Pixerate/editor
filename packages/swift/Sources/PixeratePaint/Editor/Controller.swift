@@ -2426,6 +2426,35 @@ public final class PaintEditorController {
         return (tw, th, downsampleRgba(full, w, h, Double(tw), Double(th)))
     }
 
+    /// Only `rect` of the canvas (document pixels, inside the canvas), as `compositePixels` would draw it.
+    public func compositePixels(rect: RasterRect, paper: Bool? = nil, layerIds: [String]? = nil, wet wetMode: String = "dried", age: Bool? = nil) throws -> (width: Int, height: Int, data: [UInt8]) {
+        let box = try renderRect(rect)
+        let data = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds, wet: wetMode, age: age), box, sources())
+        return (box.width, box.height, data)
+    }
+
+    /// Only `rect` of the canvas, scaled so the longest side is at most `maxSide` (`renderPreview({ rect })` in TS).
+    public func renderPreview(maxSide: Double, rect: RasterRect, layerIds: [String]? = nil, paper: Bool? = nil, age: Bool? = nil) throws -> (width: Int, height: Int, data: [UInt8]) {
+        let box = try renderRect(rect)
+        let w = box.width, h = box.height
+        let full = createPaintCompositor().composite(renderLayers(paper: paper, layerIds: layerIds, age: age), box, sources())
+        let side = Swift.max(1, JS.round(maxSide))
+        let k = Swift.min(1, side / Double(Swift.max(w, h)))
+        if k >= 1 { return (w, h, full) }
+        let tw = Swift.max(1, Int(JS.round(Double(w) * k))), th = Swift.max(1, Int(JS.round(Double(h) * k)))
+        return (tw, th, downsampleRgba(full, w, h, Double(tw), Double(th)))
+    }
+
+    /// `rect` after checking it is whole pixels inside the canvas.
+    private func renderRect(_ rect: RasterRect) throws -> RasterRect {
+        let width = doc.canvas.width, height = doc.canvas.height
+        let x = rect.x, y = rect.y, w = rect.width, h = rect.height
+        if w < 1 || h < 1 || x < 0 || y < 0 || x + w > width || y + h > height {
+            throw PaintEditorError("rect \(x),\(y) \(w)×\(h) is not inside the \(width)×\(height) canvas; give whole pixels with x, y ≥ 0, width and height ≥ 1, x + width ≤ \(width) and y + height ≤ \(height).")
+        }
+        return rect
+    }
+
     /// The canvas as PNG bytes (pure Swift, the same bytes as the TS encoder), scaled down by `scale`.
     public func exportPng(scale: Double? = nil, paper: Bool? = nil, age: Bool? = nil) throws -> [UInt8] {
         let full = compositePixels(paper: paper, age: age)

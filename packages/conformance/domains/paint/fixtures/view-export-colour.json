@@ -81,6 +81,41 @@
       }
     },
     {
+      "tool": "render_preview",
+      "arguments": {
+        "maxSide": 24,
+        "rect": {
+          "x": 8,
+          "y": 4,
+          "width": 32,
+          "height": 16
+        }
+      },
+      "expect": {
+        "result": "Preview 24×12"
+      }
+    },
+    {
+      "tool": "render_preview",
+      "arguments": {
+        "rect": {
+          "x": 40,
+          "y": 0,
+          "width": 16,
+          "height": 8
+        }
+      },
+      "expect": {
+        "result": {
+          "error": {
+            "code": "tool_failed",
+            "message": "rect 40,0 16×8 is not inside the 48×32 canvas; give whole pixels with x, y ≥ 0, width and height ≥ 1, x + width ≤ 48 and y + height ≤ 32."
+          }
+        },
+        "isError": true
+      }
+    },
+    {
       "tool": "export_image",
       "arguments": {
         "format": "image/png",
@@ -376,7 +411,7 @@
           "kind": "paint"
         },
         "pixels": {
-          "file": "png/view-export-colour.12.png",
+          "file": "png/view-export-colour.14.png",
           "width": 48,
           "height": 32,
           "sha256": "d6d2ede202fb01b2c47181e76e49d1f4abb637fb8c2597ac0069cc9c4a534171",

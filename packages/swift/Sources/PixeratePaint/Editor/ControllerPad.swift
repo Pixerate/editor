@@ -167,7 +167,18 @@ func paintContentHandlers(_ c: PaintEditorController) -> [String: (JSONObject) a
     h["render_preview"] = { a in
         let ids = a["layerIds"]?.arrayValue?.compactMap(\.stringValue)
         if let ids { for id in ids where c.getLayer(id) == nil { throw PaintEditorError("Unknown layer \"\(id)\". Call list_layers for the ids.") } }
-        let img = c.renderPreview(maxSide: a["maxSide"]?.numberValue ?? 512, layerIds: ids, paper: a["paper"]?.boolValue)
+        let maxSide = a["maxSide"]?.numberValue ?? 512
+        let img: (width: Int, height: Int, data: [UInt8])
+        if let r = a["rect"]?.objectValue {
+            let n = { (k: String) in r[k]?.numberValue ?? .nan }
+            let parts = [n("x"), n("y"), n("width"), n("height")]
+            guard parts.allSatisfy({ $0.isFinite && $0 == $0.rounded() }) else {
+                throw PaintEditorError("rect \(parts.map { jsText($0) }.joined(separator: ",")) is not inside the canvas; give whole pixels.")
+            }
+            img = try c.renderPreview(maxSide: maxSide, rect: RasterRect(x: Int(parts[0]), y: Int(parts[1]), width: Int(parts[2]), height: Int(parts[3])), layerIds: ids, paper: a["paper"]?.boolValue)
+        } else {
+            img = c.renderPreview(maxSide: maxSide, layerIds: ids, paper: a["paper"]?.boolValue)
+        }
         return .result(McpToolResult(content: [.image(data: bytesToBase64(encodePng(img.width, img.height, img.data)), mimeType: "image/png"), .text("Preview \(img.width)×\(img.height)")]))
     }
     return h
