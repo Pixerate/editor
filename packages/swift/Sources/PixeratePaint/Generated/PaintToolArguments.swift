@@ -1173,12 +1173,15 @@ public struct RenderPreviewArguments: Sendable {
     public var layerIds: [String]?
     /// Include the paper (default true).
     public var paper: Bool?
+    /// Only this area, in document pixels inside the canvas (get_canvas_info gives its size).
+    public var rect: JSONValue?
 
     /// Reads arguments the registry has already validated against the tool's `inputSchema`.
     public init(_ args: JSONObject) throws {
         maxSide = try args.integer("maxSide")
         layerIds = try args.strings("layerIds")
         paper = try args.bool("paper")
+        rect = args.argument("rect")
     }
 }
 

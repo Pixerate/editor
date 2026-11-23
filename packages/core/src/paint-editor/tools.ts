@@ -1172,20 +1172,33 @@ export function createPaintEditorToolProvider(controller: PaintEditorController 
   add({
     name: 'render_preview',
     title: 'Render a preview',
-    description: 'Renders the painting (with its paper unless paper is false) or some layers as a PNG whose longest side is at most maxSide. Changes nothing. Look at it after each block of work.',
+    description: 'Renders the painting (with its paper unless paper is false), some layers, or one area of the canvas as a PNG whose longest side is at most maxSide. Use rect to look closely at the part you are working on. Changes nothing. Look at it after each block of work.',
     inputSchema: {
       type: 'object',
       properties: {
         maxSide: { type: 'integer', minimum: 16, maximum: 2048, description: 'Longest side in pixels (default 512).' },
         layerIds: { type: 'array', items: { type: 'string', description: 'Layer id.' }, description: 'Only these layers (default all).' },
         paper: { type: 'boolean', description: 'Include the paper (default true).' },
+        rect: {
+          type: 'object',
+          description: 'Only this area, in document pixels inside the canvas (get_canvas_info gives its size). Default the whole canvas.',
+          properties: {
+            x: { type: 'integer', description: 'Document x of the left edge, in pixels.' },
+            y: { type: 'integer', description: 'Document y of the top edge, in pixels.' },
+            width: { type: 'integer', minimum: 1, description: 'Width in pixels.' },
+            height: { type: 'integer', minimum: 1, description: 'Height in pixels.' },
+          },
+          required: ['x', 'y', 'width', 'height'],
+          additionalProperties: false,
+        },
       },
       additionalProperties: false,
     },
     annotations: { title: 'Render a preview', ...READ },
-    handler: ({ maxSide, layerIds, paper }) => {
+    coordinates: { in: ['rect'] },
+    handler: ({ maxSide, layerIds, paper, rect }) => {
       if (layerIds) for (const id of layerIds) if (!c.getLayer(id)) throw new Error(`Unknown layer "${id}". Call list_layers for the ids.`);
-      const p = c.previewPngBase64({ maxSide: maxSide ?? 512, layerIds, paper });
+      const p = c.previewPngBase64({ maxSide: maxSide ?? 512, layerIds, paper, rect });
       return { content: [{ type: 'image', data: p.data, mimeType: 'image/png' }, { type: 'text', text: `Preview ${p.width}×${p.height}` }] };
     },
   });

@@ -7121,15 +7121,32 @@ export class PaintEditorController {
     this.viewCompositor.compositeTiles(this.renderLayers({ paper: options.paper }, true), rect, this.sources(), onTile, { dirty, checkpointLayerId: multiChanging ? undefined : (this.live?.layerId ?? this.doc.activeLayerId) });
   }
 
-  /** The canvas as canvas-sized RGBA (paper included by default). */
-  compositePixels(options: RenderOptions = {}): PixelImage {
-    const { width, height } = this.doc.canvas;
-    const data = this.exportCompositor.composite(this.renderLayers({ ...options, wet: options.wet ?? 'dried' }), { x: 0, y: 0, width, height }, this.sources());
-    return { width, height, data };
+  /** The canvas as canvas-sized RGBA (paper included by default), or only `rect` of it. */
+  compositePixels(options: RenderOptions & { rect?: RasterRect } = {}): PixelImage {
+    const box = this.renderRect(options.rect);
+    const data = this.exportCompositor.composite(this.renderLayers({ ...options, wet: options.wet ?? 'dried' }), box, this.sources());
+    return { width: box.width, height: box.height, data };
   }
 
-  /** The canvas (or some layers), scaled so the longest side is at most `maxSide`. */
-  renderPreview(options: RenderOptions & { maxSide?: number } = {}): PixelImage {
+  /** The whole canvas, or `rect` after checking it is whole pixels inside the canvas. */
+  private renderRect(rect: RasterRect | undefined): RasterRect {
+    const { width, height } = this.doc.canvas;
+    if (!rect) return { x: 0, y: 0, width, height };
+    const { x, y, width: w, height: h } = rect;
+    if (![x, y, w, h].every(Number.isInteger) || w < 1 || h < 1 || x < 0 || y < 0 || x + w > width || y + h > height) {
+      throw new PaintEditorError(
+        `rect ${x},${y} ${w}×${h} is not inside the ${width}×${height} canvas; give whole pixels with x, y ≥ 0, width and height ≥ 1, x + width ≤ ${width} and y + height ≤ ${height}.`,
+      );
+    }
+    return { x, y, width: w, height: h };
+  }
+
+  /**
+   * The canvas (or some layers), scaled so the longest side is at most `maxSide`. With `rect`,
+   * only that part of the canvas (document pixels, inside the canvas), for a host framing the
+   * area being worked on rather than the whole page.
+   */
+  renderPreview(options: RenderOptions & { maxSide?: number; rect?: RasterRect } = {}): PixelImage {
     const full = this.compositePixels({ ...options, wet: options.wet ?? 'display' });
     const side = Math.max(1, Math.round(options.maxSide ?? 512));
     const k = Math.min(1, side / Math.max(full.width, full.height));
@@ -7876,7 +7893,7 @@ export class PaintEditorController {
   }
 
   /** `render_preview` as a base64 PNG. */
-  previewPngBase64(options: RenderOptions & { maxSide?: number } = {}): { data: string; width: number; height: number } {
+  previewPngBase64(options: RenderOptions & { maxSide?: number; rect?: RasterRect } = {}): { data: string; width: number; height: number } {
     const img = this.renderPreview(options);
     return { data: bytesToBase64(encodePng(img.width, img.height, img.data)), width: img.width, height: img.height };
   }
