@@ -17,6 +17,7 @@
     "test:watch": "vitest",
     "test:corpus": "pnpm --filter @pixerate/editor test:corpus",
     "typecheck": "pnpm --recursive run typecheck",
+    "lint": "eslint packages/core/src packages/react/src packages/svelte/src && node scripts/lint-swift.mjs",
     "check:packages": "node scripts/check-packages.mjs",
     "contracts": "node scripts/export-contracts.mjs",
     "conformance:record": "node scripts/record-conformance.mjs",
@@ -32,9 +33,11 @@
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
     "@types/node": "^26.6.6",
+    "eslint": "^9.39.5",
     "jsdom": "^30.1.3",
     "prettier": "^3.9.10",
     "typescript": "^5.7.3",
+    "typescript-eslint": "^8.74.0",
     "vitest": "^5.1.0"
   }
 }

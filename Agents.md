@@ -103,7 +103,7 @@ AI agents are users of this library in the same way that people at a keyboard ar
    - **Fail usefully.** Validate inputs against the current state (unknown ids, out-of-range positions, read-only targets) before changing anything. Throw errors that say what is wrong and how to fix it. They become `isError` tool results the model can act on. Never apply part of a change and then fail silently.
    - **One user action = one undo step.** Bulk tools (`set_range`, `replace_text`) apply as a single history entry. Side effects that cost money or can't be reversed take an idempotency key.
    - **Respect state.** Read-only or disabled surfaces still expose their read tools and hide or refuse their write tools, with the reason.
-3. **Keep the tool layer dependency-free**: `ToolRegistry`, `validateJsonSchema`, the static tool definitions and `createMcpServer` live in `packages/core/src/tools` and must not import TipTap, ProseMirror, dagre or any framework (`tests/entry-isolation.test.ts` enforces this). Providers that need those live next to their feature or in `src/agent`.
+3. **Keep the tool layer dependency-free**: `ToolRegistry`, `validateJsonSchema`, the static tool definitions and `createMcpServer` live in `packages/core/src/tools` and must not import TipTap, ProseMirror, dagre or any framework (`pnpm lint` via `eslint.config.mjs` and `tests/entry-isolation.test.ts` enforce this). Providers that need those live next to their feature or in `src/agent`.
 4. **Parity applies to agents too**: React and Svelte expose providers through `useAgentToolProvider`. The demo tab for a feature must register its providers so they show in its agent-tools panel.
 5. **Test it like a user would**: Every new tool needs tests that call it through `ToolRegistry.callTool` with valid and invalid arguments and check the result shape and error messages. Add new providers to the conformance test in `packages/core/tests/command-tools.test.ts`. It fails when a tool is missing a title, an annotation, or an argument description.
 6. **Keep the domain's agent skills current**: Each editor domain ships a **reference skill** at `packages/core/skills/<skill>/SKILL.md` (see [`packages/core/skills/README.md`](./packages/core/skills/README.md)) that tells a model when and how to use each of its tools and the best practice of the domain. Some jobs also have a **workflow skill** (`pixerate-<editor>-<job>`), which covers that job from start to finish on the reference skill's tools. A tool or workflow is not done until its skills are updated in the same change:
@@ -133,6 +133,9 @@ All agents and contributors must consult and maintain [`GOTCHAS.md`](./GOTCHAS.m
 
 Before pushing changes:
 ```bash
+# 0. Lint import boundaries and SwiftUI preview rules
+pnpm lint
+
 # 1. Typecheck and build all workspace packages
 pnpm build
 
@@ -157,8 +160,4 @@ swift test
 ```
 
 ## SwiftUI Dynamic Previews
-When adding or modifying SwiftUI `View`s, include Xcode dynamic previews per [Previews in Xcode](https://developer.apple.com/documentation/swiftui/previews-in-xcode):
-- Use the `#Preview` macro (not legacy `PreviewProvider`).
-- Use `@Previewable` with `@State` / `@Bindable` for interactive bindings instead of `.constant(...)` or custom wrapper structs.
-- Use `PreviewModifier` for shared preview environments/dependencies, and `#Preview(traits:)` or `#Preview(arguments:)` to cover key states and layout variants.
-- The Swift packages target macOS 14 / iOS 17, but `PreviewModifier` (and `.modifier(...)` traits) needs macOS 15 / iOS 18 and `#Preview(arguments:)` needs macOS 27 / iOS 26: mark such previews `@available(macOS 15, iOS 18, *)` (or `@available(macOS 27, iOS 26, *)`) so the package still builds for its deployment targets.
+When adding or modifying SwiftUI `View`s, include Xcode dynamic previews per [Previews in Xcode](https://developer.apple.com/documentation/swiftui/previews-in-xcode) (`pnpm lint` enforces `#Preview` over `PreviewProvider`, `@Previewable` instead of `.constant(...)`, and `@available` targets via `.swiftlint.yml` and `scripts/lint-swift.mjs`).

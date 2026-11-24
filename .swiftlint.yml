@@ -1,0 +1,18 @@
+included:
+  - packages/swift
+  - apps/swift-demo
+
+only_rules:
+  - custom_rules
+
+custom_rules:
+  no_preview_provider:
+    name: "No PreviewProvider"
+    regex: ':\s*PreviewProvider\b'
+    message: "Use the #Preview macro instead of legacy PreviewProvider."
+    severity: error
+  no_preview_constant_binding:
+    name: "No .constant(...) in Previews"
+    regex: '(\bBinding)?\.constant\s*\('
+    message: "Use @Previewable with @State / @Bindable instead of .constant(...) in #Preview blocks."
+    severity: error
