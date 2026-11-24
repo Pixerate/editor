@@ -157,6 +157,53 @@ public struct ChartUiComponent: Sendable {
         return chartSceneToSvg(d.scene, ChartSvgOptions(ariaLabel: d.ariaLabel, description: d.description))
     }
 
+    /// The same data as the type named in `descriptor.fallback` (a `table`): the
+    /// `{ implements, props }` the TypeScript `fallback(data)` gives, for where a drawing can't
+    /// be shown. Throws on invalid data, as `render` does.
+    public func fallback(_ data: JSONValue) throws -> JSONValue {
+        try checkData(data)
+        func caption(_ title: String?, _ unit: String?) -> String? {
+            let t = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let u = unit?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if u.isEmpty { return t.isEmpty ? nil : t }
+            return "\(t.isEmpty ? "Values" : t) (\(u))"
+        }
+        var columns: [String]
+        var rows: [[JSONValue]]
+        var title: String?
+        switch id {
+        case "sparkline":
+            let label = data["label"]?.stringValue ?? ""
+            title = label.isEmpty ? nil : label
+            columns = ["#", label.isEmpty ? "Value" : label]
+            rows = (data["values"]?.arrayValue ?? []).enumerated().map { i, v in [.number(Double(i + 1)), v] }
+        case "bar-chart", "line-chart":
+            let categories = data["categories"]?.arrayValue ?? []
+            let series = data["series"]?.arrayValue ?? []
+            for s in series {
+                let n = s["values"]?.arrayValue?.count ?? 0
+                if n != categories.count {
+                    throw ChartUiError("\(id): series \"\(s["name"]?.stringValue ?? "")\" has \(n) values for \(categories.count) categories; give one value per category.")
+                }
+            }
+            title = caption(data["title"]?.stringValue, data["unit"]?.stringValue)
+            columns = [""] + series.map { $0["name"]?.stringValue ?? "" }
+            rows = categories.enumerated().map { i, c in [c] + series.map { $0["values"]?.arrayValue?[i] ?? .null } }
+        case "donut-chart":
+            title = caption(data["title"]?.stringValue, data["unit"]?.stringValue)
+            columns = ["", "Value"]
+            rows = (data["slices"]?.arrayValue ?? []).map { [$0["label"] ?? "", $0["value"] ?? .null] }
+        default:
+            throw ChartUiError("\(id): no fallback in Swift.")
+        }
+        var props = JSONObject()
+        if let title { props["caption"] = .string(title) }
+        props["columns"] = .array(columns.map(JSONValue.string))
+        props["rows"] = .array(rows.map(JSONValue.array))
+        props["rowHeaders"] = true
+        return ["implements": "table", "props": .object(props)]
+    }
+
     private func chartDrawing(_ spec: ChartSpec, _ options: ChartUiRenderOptions, _ theme: ChartThemePatch, title: String?) -> ChartUiDrawing {
         let scene = layoutChart(spec, ChartLayoutOptions(width: options.width, height: options.height, theme: theme))
         let description = describeChart(spec)
@@ -164,11 +211,15 @@ public struct ChartUiComponent: Sendable {
         return ChartUiDrawing(scene: scene, ariaLabel: label, description: description)
     }
 
-    private func check(_ data: JSONValue, _ options: ChartUiRenderOptions) throws {
+    private func checkData(_ data: JSONValue) throws {
         let errors = validateJSONSchema(data, propsSchema)
         if !errors.isEmpty {
             throw ChartUiError("\(id): invalid data: \(errors.map { "\($0.path.isEmpty ? "/" : $0.path) \($0.message)" }.joined(separator: "; "))")
         }
+    }
+
+    private func check(_ data: JSONValue, _ options: ChartUiRenderOptions) throws {
+        try checkData(data)
         for (name, v) in [("width", options.width), ("height", options.height)] where !(v.isFinite && v >= 1 && v <= 4096) {
             throw ChartUiError("\(id): \(name) must be a number of CSS px from 1 to 4096 (got \(JSONValue.jsString(v))).")
         }

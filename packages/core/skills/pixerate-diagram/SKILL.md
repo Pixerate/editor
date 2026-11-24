@@ -156,7 +156,9 @@ in order unless `links` say otherwise), `timeline` (`{ title?, periods: [{ label
 `mindmap` (`{ root, branches: [{ label, children? }] }`, two levels of children at most), each with a
 `UiDescriptor` and a `render(data, { width, height, theme, colors })` that lays the data out the
 way this editor does and returns accessible SVG of that size. `toMermaid(data)` gives the source, so a
-host can open the same picture as an editable diagram. There is no agent tool for it: use the
+host can open the same picture as an editable diagram. `fallback(data)` gives the same data as a `table`
+(`descriptor.fallback`): a flow's steps and where each leads, a timeline's periods and events, a
+mind map's branches, topics and details. There is no agent tool for it: use the
 component when a page needs a fixed picture of a short process, a history or a topic map in the
 page's own colours; reach for the diagram tools when the user wants to edit, regroup or restyle it.
 Roles: `surface` the background, `surface-raised` the flow's boxes, `ink` labels and the mind

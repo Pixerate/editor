@@ -67,6 +67,24 @@ final class ChartUiComponentVectorTests: XCTestCase {
         }
     }
 
+    func testFallbacksMatchTypeScript() throws {
+        let byId = Dictionary(uniqueKeysWithValues: try chartUiComponents().map { ($0.id, $0) })
+        let items = Self.vectors["fallbacks"]!.arrayValue!
+        XCTAssertFalse(items.isEmpty)
+        for c in byId.values { XCTAssertEqual(c.descriptor["fallback"]?.stringValue, "table") }
+        for item in items {
+            let name = item["name"]!.stringValue!
+            let c = byId[item["id"]!.stringValue!]!
+            if let error = item["error"]?.stringValue {
+                XCTAssertThrowsError(try c.fallback(item["data"]!), name) { e in
+                    XCTAssertEqual((e as? ChartUiError)?.message, error, name)
+                }
+            } else {
+                XCTAssertEqual(try c.fallback(item["data"]!), item["fallback"]!, name)
+            }
+        }
+    }
+
     func testRefusesWithTheSameMessages() throws {
         let byId = Dictionary(uniqueKeysWithValues: try chartUiComponents().map { ($0.id, $0) })
         for item in Self.vectors["errors"]!.arrayValue! {

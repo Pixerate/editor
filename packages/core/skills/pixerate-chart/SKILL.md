@@ -329,6 +329,11 @@ the grid. Sparkline: `accent` is the line.
 The four chart types are drawn in Swift too (`chartUiComponents()` in PixerateChart,
 `ChartUiComponentView` in PixerateChartUI): their descriptors list `swiftui` and set `swiftReady`,
 and the same data and options give the same picture on both.
+Every type also falls back to a plain `table` (`descriptor.fallback: 'table'`): `fallback(data)`
+returns `{ implements: 'table', props: { caption?, columns, rows, rowHeaders? } }` (schemas
+`UiFallback` and `UiTableProps`) for where the drawing can't be shown. Charts become categories by
+series, with the unit in the caption ("Quarterly revenue (k)"); the data visuals list their items.
+Swift's `fallback(_:)` gives the same table for the four chart types.
 
 ## Data visuals as sandboxed pages
 

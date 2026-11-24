@@ -1,5 +1,5 @@
 {
-  "$comment": "Copied from @pixerate/schemas json-schema/genui/UiDescriptor.json (Pixerate/schemas#80). Refresh it when that schema changes; tests/chart-ui-components.test.ts validates descriptors against it.",
+  "$comment": "Copied from @pixerate/schemas json-schema/genui/UiDescriptor.json (Pixerate/schemas#80, fallback from #96, 2.6.0). Refresh it when that schema changes; tests/chart-ui-components.test.ts validates descriptors against it.",
   "$ref": "#/definitions/UiDescriptor",
   "definitions": {
     "JsonSchemaDocument": {
@@ -7,7 +7,7 @@
       "additionalProperties": {
         "$ref": "#/definitions/JsonValue"
       },
-      "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+      "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { \u2026 } }"
     },
     "JsonValue": {
       "anyOf": [
@@ -61,7 +61,7 @@
             "type": "string"
           },
           "default": {},
-          "description": "Key → what it does, e.g. { Space: 'toggle', Enter: 'toggle' }"
+          "description": "Key \u2192 what it does, e.g. { Space: 'toggle', Enter: 'toggle' }"
         },
         "labelFrom": {
           "type": "string",
@@ -77,7 +77,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "Progress (0–1) to show, still, under prefers-reduced-motion; 1 is the rest state"
+          "description": "Progress (0\u20131) to show, still, under prefers-reduced-motion; 1 is the rest state"
         }
       },
       "additionalProperties": false
@@ -170,6 +170,11 @@
           },
           "description": "Example props or data, for previews and checks"
         },
+        "fallback": {
+          "type": "string",
+          "minLength": 1,
+          "description": "For a data visual or paradigm: the baseline type its runtime's fallback(data) renders as (UiFallbackSchema)"
+        },
         "contentHash": {
           "type": "string",
           "description": "Changes whenever the item's output changes, so a sync can tell"
@@ -190,7 +195,7 @@
         },
         "payload": {
           "$ref": "#/definitions/JsonSchemaDocument",
-          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { \u2026 } }"
         },
         "description": {
           "type": "string"
@@ -240,7 +245,7 @@
         },
         "schema": {
           "$ref": "#/definitions/JsonSchemaDocument",
-          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { … } }"
+          "description": "A JSON Schema (draft 2020-12 or 7) as a JSON object, e.g. { type: 'object', properties: { \u2026 } }"
         },
         "event": {
           "type": "string",

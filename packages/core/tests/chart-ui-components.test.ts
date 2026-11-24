@@ -7,6 +7,8 @@ import { createLinkFocus } from '../src/interaction/linkFocus';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 
 const descriptorSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-descriptor.schema.json'), 'utf8')) as JsonSchema;
+const fallbackSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-fallback.schema.json'), 'utf8')) as JsonSchema;
+const tablePropsSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-table-props.schema.json'), 'utf8')) as JsonSchema;
 
 const byId = (id: string): ChartUiComponent => uiComponents().find((c) => c.id === id)!;
 
@@ -18,6 +20,44 @@ const parseSvg = (svg: string): SVGSVGElement => {
 };
 
 const colorsIn = (svg: string) => new Set([...svg.matchAll(/(?:fill|stroke)="([^"]+)"/g)].map((m) => m[1]!.toLowerCase()));
+
+describe('uiComponents fallbacks', () => {
+	it('names table as every fallback and gives table props that validate against @pixerate/schemas', () => {
+		for (const c of uiComponents()) {
+			expect(c.descriptor.fallback).toBe('table');
+			const out = c.fallback(c.descriptor.example);
+			expect(out.implements).toBe('table');
+			expect(validateJsonSchema(out, fallbackSchema)).toEqual([]);
+			expect(validateJsonSchema(out.props, tablePropsSchema)).toEqual([]);
+			const props = out.props as { columns: string[]; rows: unknown[][] };
+			for (const row of props.rows) expect(row).toHaveLength(props.columns.length);
+		}
+	});
+
+	it('lays charts out as categories by series, with the unit in the caption', () => {
+		expect(byId('bar-chart').fallback(byId('bar-chart').descriptor.example).props).toEqual({
+			caption: 'Quarterly revenue (k)',
+			columns: ['', '2025', '2026'],
+			rows: [['Q1', 120, 140], ['Q2', 135, 152], ['Q3', 128, 149], ['Q4', 160, 181]],
+			rowHeaders: true
+		});
+		expect(byId('line-chart').fallback({ categories: ['a', 'b'], series: [{ name: 'S', values: [1, 2] }] }).props).toEqual({ columns: ['', 'S'], rows: [['a', 1], ['b', 2]], rowHeaders: true });
+		expect(byId('donut-chart').fallback({ slices: [{ label: 'A', value: 3 }], unit: '%' }).props).toEqual({ caption: 'Values (%)', columns: ['', 'Value'], rows: [['A', 3]], rowHeaders: true });
+		expect(byId('sparkline').fallback({ values: [4, 5] }).props).toEqual({ columns: ['#', 'Value'], rows: [[1, 4], [2, 5]], rowHeaders: true });
+	});
+
+	it('lays the data visuals out as their items', () => {
+		expect(byId('lineage').fallback({ root: 'R', items: [{ label: 'a' }, { label: 'b' }] }).props).toEqual({ columns: ['R'], rows: [['a'], ['b']] });
+		expect(byId('braid').fallback({ root: '2026', strands: [{ name: 'A', value: 2 }, { name: 'B' }] }).props).toEqual({ caption: '2026', columns: ['Strand', 'Value'], rows: [['A', 2], ['B', null]], rowHeaders: true });
+		expect(byId('weave').fallback({ title: 'Projects', items: [{ label: 'x', tags: ['p', 'q'] }] }).props).toEqual({ caption: 'Projects', columns: ['Item', 'Tags'], rows: [['x', 'p, q']], rowHeaders: true });
+	});
+
+	it('refuses data the render would refuse', () => {
+		expect(() => byId('bar-chart').fallback({ categories: ['A', 'B'], series: [{ name: 'S', values: [1] }] })).toThrow(/bar-chart: series "S" has 1 values for 2 categories/);
+		expect(() => byId('sparkline').fallback({ label: 'x' })).toThrow(/sparkline: invalid data/);
+		expect(() => byId('weave').fallback({ items: [{ label: 'x', tags: Array.from({ length: 25 }, (_, i) => `t${i}`) }] })).toThrow(/invalid data|at most 24/);
+	});
+});
 
 describe('uiComponents', () => {
 	it('lists the chart types and the data visuals', () => {
@@ -142,13 +182,13 @@ describe('uiComponents', () => {
 		// does on purpose, update these (and bump CHART_UI_RENDER_VERSIONS if only the drawing moved).
 		expect(Object.fromEntries(uiComponents().map((c) => [c.id, c.descriptor.contentHash]))).toMatchInlineSnapshot(`
 			{
-			  "bar-chart": "h1-76ee0998eaac0913",
-			  "braid": "h1-32ab36e8632bd353",
-			  "donut-chart": "h1-50feaa770e686a53",
-			  "line-chart": "h1-7a9211007a63771b",
-			  "lineage": "h1-80fbdcdee156c4aa",
-			  "sparkline": "h1-f5415ff4a27028bf",
-			  "weave": "h1-6a819cc804a71672",
+			  "bar-chart": "h1-c4e3f64fe21a4485",
+			  "braid": "h1-13622e55a2571680",
+			  "donut-chart": "h1-14649ed5299c89e1",
+			  "line-chart": "h1-86cac20e4981874a",
+			  "lineage": "h1-dadcd86108f41741",
+			  "sparkline": "h1-ab15bc9b81e7a188",
+			  "weave": "h1-4264662135ae41dc",
 			}
 		`);
 		expect(CHART_UI_RENDER_VERSIONS).toEqual({ sparkline: 1, 'bar-chart': 1, 'line-chart': 1, 'donut-chart': 2, lineage: 1, braid: 2, weave: 1 });
