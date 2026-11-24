@@ -1,5 +1,6 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const ROOT = process.cwd();
 const TARGET_DIRS = ["packages/swift", "apps/swift-demo"];
@@ -210,7 +211,9 @@ export function lintSwiftSource(source, relPath) {
   return errors;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href;
+
+if (isMain) {
   const files = TARGET_DIRS.flatMap((dir) => collectSwiftFiles(join(ROOT, dir)));
   const allErrors = [];
   for (const file of files) {
@@ -225,4 +228,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     process.exit(1);
   }
+  console.log(`lint-swift: ${files.length} Swift files checked, no issues.`);
 }
