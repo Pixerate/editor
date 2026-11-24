@@ -12,7 +12,7 @@ import { parseColor } from '../color/parse.js';
 import { hashValue } from '../generation/hash.js';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema.js';
 import { layoutSparkline } from './sparkline.js';
-import { DEFAULT_CHART_PALETTE, DEFAULT_CHART_THEME, createChartSpec } from './spec.js';
+import { DEFAULT_CHART_PALETTE, DEFAULT_CHART_THEME, chartDataToTable, createChartSpec } from './spec.js';
 import { describeChart } from './summary.js';
 import { chartSceneToSvg, chartToSvg } from './svg.js';
 import type { ChartTheme } from './types.js';
@@ -112,8 +112,48 @@ export interface UiDescriptor {
 	swiftReady?: boolean;
 	/** Example props or data, for previews and checks. */
 	example?: Record<string, UiJsonValue>;
+	/** The baseline type `fallback(data)` renders as where this one can't run, e.g. `table`. */
+	fallback?: string;
 	/** Changes whenever the item's output changes, so a sync can tell. */
 	contentHash?: string;
+}
+
+/** The baseline `table` type's props (schemas `UiTableProps`): a caption, headings and rows. */
+export interface UiTableProps {
+	/** What the table shows; also its accessible name. */
+	caption?: string;
+	/** Column headings, in order. */
+	columns: string[];
+	/** One array of cells per row, one cell per column; null for a missing value. */
+	rows: (string | number | null)[][];
+	/** Whether each row's first cell heads the row. */
+	rowHeaders?: boolean;
+}
+
+/** What a provider makes from an item's data for its fallback type (schemas `UiFallback`). */
+export interface UiFallback {
+	/** The baseline type it renders as, e.g. `table`. */
+	implements: string;
+	/** That type's props, made from the item's data. */
+	props: Record<string, UiJsonValue>;
+}
+
+/** A table fallback (`implements: 'table'`) from table props. */
+export function tableFallback(props: UiTableProps): UiFallback {
+	const out: Record<string, UiJsonValue> = {};
+	if (props.caption) out.caption = props.caption;
+	out.columns = [...props.columns];
+	out.rows = props.rows.map((r) => [...r]);
+	if (props.rowHeaders) out.rowHeaders = true;
+	return { implements: 'table', props: out };
+}
+
+/** A caption from a title and a unit: "Revenue (k)", or the unit alone as "Values (%)". */
+function captionWithUnit(title: string | undefined, unit: string | undefined): string | undefined {
+	const t = title?.trim();
+	const u = unit?.trim();
+	if (!u) return t || undefined;
+	return `${t || 'Values'} (${u})`;
 }
 
 // --- Chart UI components ---
@@ -188,6 +228,12 @@ export interface ChartUiComponent {
 	 * hover, focus and keys, and pass its `focus` to `render`. Marks carry `data-link-focus`.
 	 */
 	interaction?(data: unknown): LinkFocusOptions;
+	/**
+	 * The same data as the type named in `descriptor.fallback` (a `table`), for where this one
+	 * can't run: no script or SVG, a screen reader's table view, or a host without the provider.
+	 * Throws on invalid data, as `render` does.
+	 */
+	fallback(data: unknown): UiFallback;
 }
 
 /**
@@ -279,6 +325,20 @@ function check(id: ChartUiComponentId, data: unknown, schema: JsonSchema, option
 	if (options.dim !== undefined && (typeof options.dim !== 'number' || !(options.dim >= 0 && options.dim <= 1))) throw new Error(`${id}: dim must be a number from 0 to 1 (got ${String(options.dim)}).`);
 }
 
+function checkData(id: string, data: unknown, schema: JsonSchema): void {
+	const errors = validateJsonSchema(data, schema);
+	if (errors.length) throw new Error(`${id}: invalid data: ${errors.map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
+}
+
+/** Categories down the side, one column per series (`chartDataToTable`). */
+function seriesTable(id: ChartUiComponentId, d: BarChartUiData): UiFallback {
+	for (const s of d.series) {
+		if (s.values.length !== d.categories.length) throw new Error(`${id}: series "${s.name}" has ${s.values.length} values for ${d.categories.length} categories; give one value per category.`);
+	}
+	const [head, ...rows] = chartDataToTable({ categories: d.categories, series: d.series.map((s, i) => ({ id: `s${i + 1}`, name: s.name, values: [...s.values] })) });
+	return tableFallback({ caption: captionWithUnit(d.title, d.unit), columns: head!.map((h) => String(h ?? '')), rows, rowHeaders: true });
+}
+
 function roleColors(roles: readonly UiColorRole[], defaults: ChartUiComponent['defaultColors'], options: ChartUiRenderOptions): Record<UiColorRole, string> {
 	const out = { ...defaults[options.theme ?? 'light'] };
 	for (const [role, color] of Object.entries(options.colors ?? {})) {
@@ -312,6 +372,11 @@ function sparklineComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract
 			const description = describeChart(createChartSpec({ type: 'line', title: d.label ?? '', categories: d.values.map((_, i) => String(i + 1)), series: [{ id: 's1', name: d.label || 'Values', values: [...d.values] }] }));
 			const scene = layoutSparkline(d.values, { kind: 'line', width: options.width, height: options.height, color: colors.accent });
 			return chartSceneToSvg(scene, { ariaLabel: d.label || description, description });
+		},
+		fallback(data: unknown): UiFallback {
+			checkData('sparkline', data, SPARKLINE_PROPS);
+			const d = data as SparklineUiData;
+			return tableFallback({ caption: d.label || undefined, columns: ['#', d.label || 'Value'], rows: d.values.map((v, i) => [i + 1, v]), rowHeaders: true });
 		}
 	};
 	return self;
@@ -363,6 +428,10 @@ function barChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract:
 			});
 			const theme: Partial<ChartTheme> = { background: c.surface!, surface: c.surface!, text: c.ink!, mutedText: c['ink-muted']!, axis: c['ink-muted']!, grid: c.border! };
 			return chartToSvg(spec, { width: options.width, height: options.height, theme, ariaLabel: d.title || describeChart(spec) });
+		},
+		fallback(data: unknown): UiFallback {
+			checkData('bar-chart', data, BAR_CHART_PROPS);
+			return seriesTable('bar-chart', data as BarChartUiData);
 		}
 	};
 	return self;
@@ -475,6 +544,10 @@ function lineChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contract
 				yAxis: { ...base.yAxis, format: d.unit ? { suffix: d.unit } : {} }
 			});
 			return chartToSvg(spec, { width: options.width, height: options.height, theme: chartTheme(c), ariaLabel: d.title || describeChart(spec) });
+		},
+		fallback(data: unknown): UiFallback {
+			checkData('line-chart', data, LINE_CHART_PROPS);
+			return seriesTable('line-chart', data as BarChartUiData);
 		}
 	};
 	return self;
@@ -521,6 +594,11 @@ function donutChartComponent(): Omit<ChartUiComponent, 'descriptor'> & { contrac
 			});
 			const theme: Partial<ChartTheme> = { background: c.surface!, surface: c.surface!, text: c.ink!, mutedText: c.ink!, axis: c.ink!, grid: c.ink! };
 			return chartToSvg(spec, { width: options.width, height: options.height, theme, ariaLabel: d.title || describeChart(spec) });
+		},
+		fallback(data: unknown): UiFallback {
+			checkData('donut-chart', data, DONUT_CHART_PROPS);
+			const d = data as DonutChartUiData;
+			return tableFallback({ caption: captionWithUnit(d.title, d.unit), columns: ['', 'Value'], rows: d.slices.map((s) => [s.label, s.value]), rowHeaders: true });
 		}
 	};
 	return self;
@@ -613,6 +691,7 @@ function visualComponent<D>(spec: {
 	validate?: (data: D) => void;
 	interaction: (data: D) => LinkFocusOptions;
 	draw: (data: D, input: UiVisualRenderInput) => string;
+	table: (data: D) => UiTableProps;
 }): VisualParts {
 	const contract: UiComponentContract = {
 		props: spec.props as Record<string, UiJsonValue>,
@@ -651,6 +730,11 @@ function visualComponent<D>(spec: {
 			const errors = validateJsonSchema(data, spec.props);
 			if (errors.length) throw new Error(`${spec.id}: invalid data: ${errors.map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
 			return spec.interaction(data as D);
+		},
+		fallback(data: unknown): UiFallback {
+			checkData(spec.id, data, spec.props);
+			spec.validate?.(data as D);
+			return tableFallback(spec.table(data as D));
 		}
 	};
 	return self;
@@ -667,7 +751,8 @@ function lineageComponent(): VisualParts {
 		roleUse: { surface: 'Background.', ink: 'Root and item labels.', 'ink-muted': 'Connectors.', accent: 'Root and item dots.' },
 		sizing: { mode: 'fill', minWidth: 240, minHeight: 160 },
 		interaction: lineageInteraction,
-		draw: renderLineage
+		draw: renderLineage,
+		table: (d) => ({ caption: d.title || undefined, columns: [d.root], rows: d.items.map((it) => [it.label]) })
 	});
 }
 
@@ -682,7 +767,8 @@ function braidComponent(): VisualParts {
 		roleUse: { surface: 'Background.', ink: 'The root, its label and the strand labels.', accent: 'The first strand; further strands take the next colours of the categorical chart palette.' },
 		sizing: { mode: 'fill', minWidth: 280, minHeight: 120 },
 		interaction: braidInteraction,
-		draw: (data, input) => renderBraid(data, input, chartPaletteWithAccent(input.colors.accent!, UI_VISUAL_PALETTE))
+		draw: (data, input) => renderBraid(data, input, chartPaletteWithAccent(input.colors.accent!, UI_VISUAL_PALETTE)),
+		table: (d) => ({ caption: d.title || d.root || undefined, columns: ['Strand', 'Value'], rows: d.strands.map((st) => [st.name, st.value ?? null]), rowHeaders: true })
 	});
 }
 
@@ -701,7 +787,8 @@ function weaveComponent(): VisualParts {
 			if (tags.size > 24) throw new Error(`weave: ${tags.size} different tags; at most 24 fit along the bottom.`);
 		},
 		interaction: weaveInteraction,
-		draw: renderWeave
+		draw: renderWeave,
+		table: (d) => ({ caption: d.title || undefined, columns: ['Item', 'Tags'], rows: d.items.map((it) => [it.label, it.tags.join(', ')]), rowHeaders: true })
 	});
 }
 
@@ -736,9 +823,12 @@ let cache: ChartUiComponent[] | null = null;
  * and role colours to SVG.
  *
  * `descriptor.contentHash` is `hashValue` (stable JSON, FNV-1a, `h1-…`) of the type's id, its
- * render version (`CHART_UI_RENDER_VERSIONS`), contract, platforms, example, and the SVG of the
- * example drawn in light and dark. So it changes when the contract or the drawing changes, and is
- * the same on every run and machine otherwise.
+ * render version (`CHART_UI_RENDER_VERSIONS`), contract, platforms, example, the SVG of the
+ * example drawn in light and dark, and the example's fallback. So it changes when the contract,
+ * the drawing or the fallback changes, and is the same on every run and machine otherwise.
+ *
+ * Every type falls back to a `table` (`descriptor.fallback`; `fallback(data)` gives its props):
+ * charts as categories by series, the data visuals as their items.
  */
 export function uiComponents(): ChartUiComponent[] {
 	if (!cache) {
@@ -747,7 +837,8 @@ export function uiComponents(): ChartUiComponent[] {
 			const platforms: UiPlatformTarget[] = swift ? ['html-page', 'swiftui'] : ['html-page'];
 			const size = EXAMPLE_SIZES[rest.id];
 			const renders = (['light', 'dark'] as const).map((theme) => rest.render(example, { ...size, theme }));
-			const contentHash = hashValue({ id: rest.id, renderVersion: CHART_UI_RENDER_VERSIONS[rest.id], contract, platforms, example, renders });
+			const fallback = rest.fallback(example);
+			const contentHash = hashValue({ id: rest.id, renderVersion: CHART_UI_RENDER_VERSIONS[rest.id], contract, platforms, example, renders, fallback });
 			const descriptor: UiDescriptor = {
 				implements: rest.id,
 				group: 'data-visual',
@@ -755,6 +846,7 @@ export function uiComponents(): ChartUiComponent[] {
 				platforms,
 				swiftReady: swift,
 				example: example as unknown as Record<string, UiJsonValue>,
+				fallback: fallback.implements,
 				contentHash
 			};
 			return { ...rest, descriptor };

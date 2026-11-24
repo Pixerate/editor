@@ -1,6 +1,6 @@
 // What the Swift chart package's UI components (`chartUiComponents()` in PixerateChart) must match
 // (#819): for each Swift-ready chart type, its SVG for a range of data, sizes, themes and role
-// colours, and the error message for data or sizes it refuses. The descriptor's contentHash covers
+// colours, the error message for data or sizes it refuses, and its table fallback for each data. The descriptor's contentHash covers
 // the example drawn in light and dark, so a Swift render equal to these is described by the same
 // hash. Set UPDATE_SWIFT_VECTORS=1 to regenerate the fixture.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -52,8 +52,21 @@ const errorCases: Case[] = [
 function buildVectors() {
 	const byId = new Map(uiComponents().map((c) => [c.id, c]));
 	const render = ({ id, data, options }: Case) => byId.get(id)!.render(data, options);
+	const seen = new Set<string>();
+	const fallbackCases = [...cases(), ...errorCases].filter((c) => {
+		const key = `${c.id} ${JSON.stringify(c.data)}`;
+		return !seen.has(key) && !!seen.add(key);
+	});
 	return {
 		renders: cases().map((c) => ({ ...c, svg: render(c) })),
+		// fallback(data) for each distinct data: the table props, or the refusal (size errors aside).
+		fallbacks: fallbackCases.map(({ name, id, data }) => {
+			try {
+				return { name, id, data, fallback: byId.get(id)!.fallback(data) };
+			} catch (e) {
+				return { name, id, data, error: (e as Error).message };
+			}
+		}),
 		errors: errorCases.map((c) => {
 			try {
 				render(c);

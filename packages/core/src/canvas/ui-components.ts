@@ -11,7 +11,7 @@ import { DEFAULT_CHART_PALETTE } from '../chart/spec.js';
 import { contrastRatio } from '../color/contrast.js';
 import { formatHex } from '../color/format.js';
 import { parseColor } from '../color/parse.js';
-import { chartPaletteWithAccent, type ChartUiRenderOptions, type ChartUiThemeMode, type UiColorRole, type UiComponentContract, type UiDescriptor, type UiJsonValue, type UiPlatformTarget } from '../chart/ui-components.js';
+import { chartPaletteWithAccent, tableFallback, type ChartUiRenderOptions, type ChartUiThemeMode, type UiColorRole, type UiComponentContract, type UiDescriptor, type UiFallback, type UiJsonValue, type UiPlatformTarget, type UiTableProps } from '../chart/ui-components.js';
 import { parseMermaid } from '../diagram/document.js';
 import { hashValue } from '../generation/hash.js';
 import { validateJsonSchema, type JsonSchema } from '../tools/schema.js';
@@ -56,6 +56,8 @@ export interface DiagramUiComponent {
 	render(data: unknown, options: ChartUiRenderOptions): string;
 	/** The Mermaid source `data` is drawn from, for hosts that want to edit it as a diagram. */
 	toMermaid(data: unknown): string;
+	/** The same data as a `table` (`descriptor.fallback`), for where the drawing can't run. */
+	fallback(data: unknown): UiFallback;
 }
 
 /** Per-type render versions (as `CHART_UI_RENDER_VERSIONS`): bump when the drawing changes unseen. */
@@ -145,19 +147,49 @@ const quoted = (text: string) => `"${text.replace(/\s+/g, ' ').trim().replace(/"
 /** Timeline text cannot hold the `:` that separates events, or line breaks. */
 const timelineText = (text: string) => text.replace(/\s+/g, ' ').trim().replace(/:/g, '∶');
 
-function flowMermaid(d: FlowUiData): string {
+/** The flow's links as step indexes (default: each step to the next); throws on an unknown id. */
+function flowLinks(d: FlowUiData): { from: number; to: number; label?: string }[] {
 	const ids = d.steps.map((s, i) => s.id ?? String(i + 1));
-	const key = new Map(ids.map((id, i) => [id, `s${i}`]));
+	const index = new Map(ids.map((id, i) => [id, i]));
+	const links: { from: string; to: string; label?: string }[] = d.links ?? ids.slice(1).map((id, i) => ({ from: ids[i]!, to: id }));
+	return links.map((l) => {
+		const from = index.get(l.from);
+		const to = index.get(l.to);
+		if (from === undefined || to === undefined) throw new Error(`flow: link ${l.from} → ${l.to} names a step that does not exist; step ids are ${ids.join(', ')}.`);
+		return { from, to, ...(l.label ? { label: l.label } : {}) };
+	});
+}
+
+function flowMermaid(d: FlowUiData): string {
 	const lines = [`flowchart ${d.direction ?? 'LR'}`];
 	d.steps.forEach((s, i) => lines.push(`  s${i}[${quoted(s.label)}]`));
-	const links: { from: string; to: string; label?: string }[] = d.links ?? ids.slice(1).map((id, i) => ({ from: ids[i]!, to: id }));
-	for (const l of links) {
-		const from = key.get(l.from);
-		const to = key.get(l.to);
-		if (!from || !to) throw new Error(`flow: link ${l.from} → ${l.to} names a step that does not exist; step ids are ${ids.join(', ')}.`);
-		lines.push(`  ${from} -->${l.label ? `|${quoted(l.label)}|` : ''} ${to}`);
-	}
+	for (const l of flowLinks(d)) lines.push(`  s${l.from} -->${l.label ? `|${quoted(l.label)}|` : ''} s${l.to}`);
 	return lines.join('\n');
+}
+
+/** One row per step: the step, then where it leads ("Next (label)", comma-separated). */
+function flowTable(d: FlowUiData): UiTableProps {
+	const links = flowLinks(d);
+	const next = (i: number) => links.filter((l) => l.from === i).map((l) => (l.label ? `${d.steps[l.to]!.label} (${l.label})` : d.steps[l.to]!.label)).join(', ');
+	return { caption: d.title || undefined, columns: ['Step', 'Leads to'], rows: d.steps.map((s, i) => [s.label, next(i)]), rowHeaders: true };
+}
+
+/** One row per period, its events joined with semicolons. */
+function timelineTable(d: TimelineUiData): UiTableProps {
+	return { caption: d.title || undefined, columns: ['Period', 'Events'], rows: d.periods.map((p) => [p.label, p.events.join('; ')]), rowHeaders: true };
+}
+
+/** One row per path from a branch to its deepest child; the root is the caption (or the title). */
+function mindmapTable(d: MindmapUiData): UiTableProps {
+	const rows: (string | null)[][] = [];
+	for (const b of d.branches) {
+		if (!b.children?.length) rows.push([b.label, null, null]);
+		for (const c of b.children ?? []) {
+			if (!c.children?.length) rows.push([b.label, c.label, null]);
+			for (const g of c.children ?? []) rows.push([b.label, c.label, g.label]);
+		}
+	}
+	return { caption: d.title || d.root, columns: ['Branch', 'Topic', 'Detail'], rows, rowHeaders: true };
 }
 
 function timelineMermaid(d: TimelineUiData): string {
@@ -245,6 +277,7 @@ interface Spec<D> {
 	sizing: UiComponentContract['sizing'];
 	mermaid: (data: D) => string;
 	label: (data: D) => string;
+	table: (data: D) => UiTableProps;
 }
 
 function component<D>(spec: Spec<D>): Omit<DiagramUiComponent, 'descriptor'> & { contract: UiComponentContract; example: D } {
@@ -270,6 +303,11 @@ function component<D>(spec: Spec<D>): Omit<DiagramUiComponent, 'descriptor'> & {
 			if (errors.length) throw new Error(`${spec.id}: invalid data: ${errors.map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
 			return spec.mermaid(data as D);
 		},
+		fallback(data: unknown) {
+			const errors = validateJsonSchema(data, spec.props);
+			if (errors.length) throw new Error(`${spec.id}: invalid data: ${errors.map((e) => `${e.path || '/'} ${e.message}`).join('; ')}`);
+			return tableFallback(spec.table(data as D));
+		},
 		render(data: unknown, options: ChartUiRenderOptions) {
 			check(spec.id, data, spec.props, options);
 			return draw(spec.id, spec.mermaid(data as D), spec.label(data as D), options);
@@ -284,7 +322,9 @@ let cache: DiagramUiComponent[] | null = null;
 /**
  * The diagram families offered as UI components (group `data-visual`): `flow`, `timeline` and
  * `mindmap`, each with a `UiDescriptor` (data JSON Schema, colour roles, accessibility, sizing,
- * example, `contentHash`), a `render` to SVG at a size, theme and role colours, and `toMermaid`.
+ * example, `contentHash`), a `render` to SVG at a size, theme and role colours, `toMermaid`, and
+ * `fallback` to a `table` (flow: step and where it leads; timeline: period and events; mind map:
+ * branch, topic and detail).
  * `contentHash` is computed as for `uiComponents()` in `/chart`.
  */
 export function diagramUiComponents(): DiagramUiComponent[] {
@@ -298,6 +338,7 @@ export function diagramUiComponents(): DiagramUiComponent[] {
 				example: FLOW_EXAMPLE,
 				sizing: { mode: 'fill', minWidth: 240, minHeight: 80 },
 				mermaid: flowMermaid,
+				table: flowTable,
 				label: (d) => d.title || `Flow: ${d.steps.map((s) => s.label).join(' → ')}`
 			}),
 			component<TimelineUiData>({
@@ -308,6 +349,7 @@ export function diagramUiComponents(): DiagramUiComponent[] {
 				example: TIMELINE_EXAMPLE,
 				sizing: { mode: 'fill', minWidth: 280, minHeight: 200 },
 				mermaid: timelineMermaid,
+				table: timelineTable,
 				label: (d) => d.title || `Timeline of ${d.periods.length} periods: ${d.periods.map((p) => p.label).join(', ')}`
 			}),
 			component<MindmapUiData>({
@@ -318,6 +360,7 @@ export function diagramUiComponents(): DiagramUiComponent[] {
 				example: MINDMAP_EXAMPLE,
 				sizing: { mode: 'fill', minWidth: 280, minHeight: 220 },
 				mermaid: mindmapMermaid,
+				table: mindmapTable,
 				label: (d) => d.title || `Mind map of ${d.root}: ${d.branches.map((b) => b.label).join(', ')}`
 			})
 		] as (Omit<DiagramUiComponent, 'descriptor'> & { contract: UiComponentContract; example: unknown })[];
@@ -325,8 +368,9 @@ export function diagramUiComponents(): DiagramUiComponent[] {
 			const platforms: UiPlatformTarget[] = ['html-page'];
 			const size = EXAMPLE_SIZES[rest.id];
 			const renders = (['light', 'dark'] as const).map((theme) => rest.render(example, { ...size, theme }));
-			const contentHash = hashValue({ id: rest.id, renderVersion: DIAGRAM_UI_RENDER_VERSIONS[rest.id], contract, platforms, example, renders });
-			return { ...rest, descriptor: { implements: rest.id, group: 'data-visual', contract, platforms, swiftReady: false, example: example as Record<string, UiJsonValue>, contentHash } };
+			const fallback = rest.fallback(example);
+			const contentHash = hashValue({ id: rest.id, renderVersion: DIAGRAM_UI_RENDER_VERSIONS[rest.id], contract, platforms, example, renders, fallback });
+			return { ...rest, descriptor: { implements: rest.id, group: 'data-visual', contract, platforms, swiftReady: false, example: example as Record<string, UiJsonValue>, fallback: fallback.implements, contentHash } };
 		});
 	}
 	const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;

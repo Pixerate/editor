@@ -855,6 +855,866 @@
       "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"280\" height=\"200\" viewBox=\"0 0 280 200\" role=\"img\" aria-label=\"A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).\" aria-labelledby=\"chart-title chart-desc\"><title id=\"chart-title\">A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).</title><desc id=\"chart-desc\">A donut chart of Values across 1 categories, totalling 1. The largest is All at 1 (100%); the smallest is All at 1 (100%).</desc><rect x=\"0\" y=\"0\" width=\"280\" height=\"200\" fill=\"#0f172a\" data-role=\"background\"/><rect x=\"219.51999999999998\" y=\"95\" width=\"10\" height=\"10\" rx=\"2\" fill=\"#97bbf5\" data-role=\"legend-swatch\"/><text x=\"235.51999999999998\" y=\"100\" text-anchor=\"start\" dominant-baseline=\"central\" font-size=\"11\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"legend-label\">All</text><path d=\"M111.76,16A84,84 0 1 1 111.75,16L111.76,53.8A46.2,46.2 0 1 0 111.76,53.8Z\" fill=\"#97bbf5\" stroke=\"#0f172a\" stroke-width=\"1\" stroke-linejoin=\"round\" stroke-linecap=\"round\" data-role=\"slice\"/><text x=\"111.75999999999999\" y=\"100\" text-anchor=\"middle\" dominant-baseline=\"central\" font-size=\"19\" font-weight=\"600\" font-family=\"system-ui, -apple-system, &quot;Segoe UI&quot;, sans-serif\" fill=\"#e2e8f0\" data-role=\"data-label\">1</text></svg>"
     }
   ],
+  "fallbacks": [
+    {
+      "name": "sparkline example light",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          12,
+          15,
+          14,
+          18,
+          22,
+          21,
+          26,
+          24,
+          29,
+          33
+        ],
+        "label": "Weekly sign-ups"
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Weekly sign-ups",
+          "columns": [
+            "#",
+            "Weekly sign-ups"
+          ],
+          "rows": [
+            [
+              1,
+              12
+            ],
+            [
+              2,
+              15
+            ],
+            [
+              3,
+              14
+            ],
+            [
+              4,
+              18
+            ],
+            [
+              5,
+              22
+            ],
+            [
+              6,
+              21
+            ],
+            [
+              7,
+              26
+            ],
+            [
+              8,
+              24
+            ],
+            [
+              9,
+              29
+            ],
+            [
+              10,
+              33
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "bar-chart example light",
+      "id": "bar-chart",
+      "data": {
+        "title": "Quarterly revenue",
+        "unit": "k",
+        "categories": [
+          "Q1",
+          "Q2",
+          "Q3",
+          "Q4"
+        ],
+        "series": [
+          {
+            "name": "2025",
+            "values": [
+              120,
+              135,
+              128,
+              160
+            ]
+          },
+          {
+            "name": "2026",
+            "values": [
+              140,
+              152,
+              149,
+              181
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Quarterly revenue (k)",
+          "columns": [
+            "",
+            "2025",
+            "2026"
+          ],
+          "rows": [
+            [
+              "Q1",
+              120,
+              140
+            ],
+            [
+              "Q2",
+              135,
+              152
+            ],
+            [
+              "Q3",
+              128,
+              149
+            ],
+            [
+              "Q4",
+              160,
+              181
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "line-chart example light",
+      "id": "line-chart",
+      "data": {
+        "title": "Active users",
+        "unit": "k",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun"
+        ],
+        "series": [
+          {
+            "name": "Web",
+            "values": [
+              42,
+              45,
+              51,
+              49,
+              58,
+              63
+            ]
+          },
+          {
+            "name": "Mobile",
+            "values": [
+              30,
+              34,
+              33,
+              41,
+              46,
+              52
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Active users (k)",
+          "columns": [
+            "",
+            "Web",
+            "Mobile"
+          ],
+          "rows": [
+            [
+              "Jan",
+              42,
+              30
+            ],
+            [
+              "Feb",
+              45,
+              34
+            ],
+            [
+              "Mar",
+              51,
+              33
+            ],
+            [
+              "Apr",
+              49,
+              41
+            ],
+            [
+              "May",
+              58,
+              46
+            ],
+            [
+              "Jun",
+              63,
+              52
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "donut-chart example light",
+      "id": "donut-chart",
+      "data": {
+        "title": "Traffic by channel",
+        "unit": "%",
+        "slices": [
+          {
+            "label": "Search",
+            "value": 46
+          },
+          {
+            "label": "Direct",
+            "value": 27
+          },
+          {
+            "label": "Social",
+            "value": 17
+          },
+          {
+            "label": "Email",
+            "value": 10
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Traffic by channel (%)",
+          "columns": [
+            "",
+            "Value"
+          ],
+          "rows": [
+            [
+              "Search",
+              46
+            ],
+            [
+              "Direct",
+              27
+            ],
+            [
+              "Social",
+              17
+            ],
+            [
+              "Email",
+              10
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "sparkline no label, negatives",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          3,
+          -2,
+          5,
+          0,
+          -4,
+          6,
+          1
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "#",
+            "Value"
+          ],
+          "rows": [
+            [
+              1,
+              3
+            ],
+            [
+              2,
+              -2
+            ],
+            [
+              3,
+              5
+            ],
+            [
+              4,
+              0
+            ],
+            [
+              5,
+              -4
+            ],
+            [
+              6,
+              6
+            ],
+            [
+              7,
+              1
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "sparkline flat run, wide",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          7,
+          7,
+          7,
+          7
+        ],
+        "label": "Flat & \"steady\""
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Flat & \"steady\"",
+          "columns": [
+            "#",
+            "Flat & \"steady\""
+          ],
+          "rows": [
+            [
+              1,
+              7
+            ],
+            [
+              2,
+              7
+            ],
+            [
+              3,
+              7
+            ],
+            [
+              4,
+              7
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "bar-chart one series, no unit or title",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "North",
+          "South",
+          "East"
+        ],
+        "series": [
+          {
+            "name": "Units",
+            "values": [
+              12,
+              30,
+              21
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "",
+            "Units"
+          ],
+          "rows": [
+            [
+              "North",
+              12
+            ],
+            [
+              "South",
+              30
+            ],
+            [
+              "East",
+              21
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "bar-chart four series, small",
+      "id": "bar-chart",
+      "data": {
+        "title": "Mix",
+        "unit": "%",
+        "categories": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "S1",
+            "values": [
+              5,
+              7
+            ]
+          },
+          {
+            "name": "S2",
+            "values": [
+              10,
+              14
+            ]
+          },
+          {
+            "name": "S3",
+            "values": [
+              15,
+              21
+            ]
+          },
+          {
+            "name": "S4",
+            "values": [
+              20,
+              28
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Mix (%)",
+          "columns": [
+            "",
+            "S1",
+            "S2",
+            "S3",
+            "S4"
+          ],
+          "rows": [
+            [
+              "A",
+              5,
+              10,
+              15,
+              20
+            ],
+            [
+              "B",
+              7,
+              14,
+              21,
+              28
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "line-chart three series",
+      "id": "line-chart",
+      "data": {
+        "title": "Latency",
+        "unit": " ms",
+        "categories": [
+          "Mon",
+          "Tue",
+          "Wed",
+          "Thu",
+          "Fri"
+        ],
+        "series": [
+          {
+            "name": "p50",
+            "values": [
+              120,
+              118,
+              131,
+              125,
+              119
+            ]
+          },
+          {
+            "name": "p90",
+            "values": [
+              210,
+              205,
+              240,
+              228,
+              214
+            ]
+          },
+          {
+            "name": "p99",
+            "values": [
+              480,
+              455,
+              610,
+              520,
+              498
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Latency (ms)",
+          "columns": [
+            "",
+            "p50",
+            "p90",
+            "p99"
+          ],
+          "rows": [
+            [
+              "Mon",
+              120,
+              210,
+              480
+            ],
+            [
+              "Tue",
+              118,
+              205,
+              455
+            ],
+            [
+              "Wed",
+              131,
+              240,
+              610
+            ],
+            [
+              "Thu",
+              125,
+              228,
+              520
+            ],
+            [
+              "Fri",
+              119,
+              214,
+              498
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "line-chart one series, no title",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "1",
+          "2",
+          "3"
+        ],
+        "series": [
+          {
+            "name": "Only",
+            "values": [
+              0.5,
+              0.25,
+              0.75
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "",
+            "Only"
+          ],
+          "rows": [
+            [
+              "1",
+              0.5
+            ],
+            [
+              "2",
+              0.25
+            ],
+            [
+              "3",
+              0.75
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "donut-chart narrow, legend below",
+      "id": "donut-chart",
+      "data": {
+        "title": "Plan mix",
+        "slices": [
+          {
+            "label": "Free",
+            "value": 60
+          },
+          {
+            "label": "Pro",
+            "value": 30
+          },
+          {
+            "label": "Team",
+            "value": 10
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "caption": "Plan mix",
+          "columns": [
+            "",
+            "Value"
+          ],
+          "rows": [
+            [
+              "Free",
+              60
+            ],
+            [
+              "Pro",
+              30
+            ],
+            [
+              "Team",
+              10
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "donut-chart one slice, no title",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "All",
+            "value": 1
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "",
+            "Value"
+          ],
+          "rows": [
+            [
+              "All",
+              1
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "sparkline missing values",
+      "id": "sparkline",
+      "data": {
+        "label": "x"
+      },
+      "error": "sparkline: invalid data: /values Missing required property \"values\"."
+    },
+    {
+      "name": "sparkline extra property",
+      "id": "sparkline",
+      "data": {
+        "values": [
+          1,
+          2
+        ],
+        "colour": "red"
+      },
+      "error": "sparkline: invalid data: /colour Unknown property \"colour\". Allowed: values, label."
+    },
+    {
+      "name": "bar-chart value count",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "error": "bar-chart: series \"S\" has 1 values for 2 categories; give one value per category."
+    },
+    {
+      "name": "line-chart value count",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "A",
+          "B",
+          "C"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1,
+              2,
+              3,
+              4
+            ]
+          }
+        ]
+      },
+      "error": "line-chart: series \"S\" has 4 values for 3 categories; give one value per category."
+    },
+    {
+      "name": "line-chart one category",
+      "id": "line-chart",
+      "data": {
+        "categories": [
+          "A"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "error": "line-chart: invalid data: /categories Must have at least 2 items."
+    },
+    {
+      "name": "donut-chart negative slice",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "A",
+            "value": -1
+          }
+        ]
+      },
+      "error": "donut-chart: invalid data: /slices/0/value Must be >= 0."
+    },
+    {
+      "name": "donut-chart width 0",
+      "id": "donut-chart",
+      "data": {
+        "slices": [
+          {
+            "label": "A",
+            "value": 1
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "",
+            "Value"
+          ],
+          "rows": [
+            [
+              "A",
+              1
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    },
+    {
+      "name": "bar-chart height too large",
+      "id": "bar-chart",
+      "data": {
+        "categories": [
+          "A"
+        ],
+        "series": [
+          {
+            "name": "S",
+            "values": [
+              1
+            ]
+          }
+        ]
+      },
+      "fallback": {
+        "implements": "table",
+        "props": {
+          "columns": [
+            "",
+            "S"
+          ],
+          "rows": [
+            [
+              "A",
+              1
+            ]
+          ],
+          "rowHeaders": true
+        }
+      }
+    }
+  ],
   "errors": [
     {
       "name": "sparkline missing values",

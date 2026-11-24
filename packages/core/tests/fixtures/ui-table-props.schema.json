@@ -1,0 +1,47 @@
+{
+  "$comment": "Copied from @pixerate/schemas json-schema/genui/UiTableProps.json (2.6.0, Pixerate/schemas#96). Refresh it when that schema changes.",
+  "$ref": "#/definitions/UiTableProps",
+  "definitions": {
+    "UiTableProps": {
+      "type": "object",
+      "properties": {
+        "caption": {
+          "type": "string",
+          "description": "What the table shows; also its accessible name"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Column headings, in order"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "number",
+                "null"
+              ]
+            }
+          },
+          "description": "Rows of cells, one per column; null for an empty cell"
+        },
+        "rowHeaders": {
+          "type": "boolean",
+          "description": "The first cell of each row names the row (a row header)"
+        }
+      },
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

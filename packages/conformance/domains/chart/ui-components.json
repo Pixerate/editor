@@ -69,7 +69,8 @@
           ],
           "label": "Weekly sign-ups"
         },
-        "contentHash": "h1-f5415ff4a27028bf"
+        "fallback": "table",
+        "contentHash": "h1-ab15bc9b81e7a188"
       },
       "colorRoleUse": {
         "accent": "The line."
@@ -206,7 +207,8 @@
             }
           ]
         },
-        "contentHash": "h1-76ee0998eaac0913"
+        "fallback": "table",
+        "contentHash": "h1-c4e3f64fe21a4485"
       },
       "colorRoleUse": {
         "surface": "Background behind the chart (theme background and surface).",
@@ -361,7 +363,8 @@
             }
           ]
         },
-        "contentHash": "h1-7a9211007a63771b"
+        "fallback": "table",
+        "contentHash": "h1-86cac20e4981874a"
       },
       "colorRoleUse": {
         "surface": "Background behind the chart (theme background and surface).",
@@ -488,7 +491,8 @@
             }
           ]
         },
-        "contentHash": "h1-50feaa770e686a53"
+        "fallback": "table",
+        "contentHash": "h1-14649ed5299c89e1"
       },
       "colorRoleUse": {
         "surface": "Background behind the chart (theme background and surface).",

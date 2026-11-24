@@ -10,6 +10,8 @@ import { parseMermaid } from '../src/diagram/document';
 import { validateJsonSchema, type JsonSchema } from '../src/tools/schema';
 
 const descriptorSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-descriptor.schema.json'), 'utf8')) as JsonSchema;
+const fallbackSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-fallback.schema.json'), 'utf8')) as JsonSchema;
+const tablePropsSchema = JSON.parse(readFileSync(join(__dirname, 'fixtures/ui-table-props.schema.json'), 'utf8')) as JsonSchema;
 const byId = (id: string): DiagramUiComponent => diagramUiComponents().find((c) => c.id === id)!;
 
 const parseSvg = (svg: string): SVGSVGElement => {
@@ -135,6 +137,40 @@ describe('diagramUiComponents', () => {
 		expect(() => flow.render(flow.descriptor.example, { width: 0, height: 100 })).toThrow(/width must be/);
 		expect(() => byId('mindmap').render({ root: 'R', branches: [{ label: 'a', children: [{ label: 'b', children: [{ label: 'c', children: [] }] }] }] }, { width: 300, height: 200 })).toThrow(/invalid data/);
 		expect(() => byId('timeline').toMermaid({ periods: [{ label: '2020' }] })).toThrow(/timeline: invalid data/);
+	});
+
+	it('falls back to a table that validates against @pixerate/schemas', () => {
+		for (const c of diagramUiComponents()) {
+			expect(c.descriptor.fallback).toBe('table');
+			const out = c.fallback(c.descriptor.example);
+			expect(validateJsonSchema(out, fallbackSchema)).toEqual([]);
+			expect(validateJsonSchema(out.props, tablePropsSchema)).toEqual([]);
+		}
+		expect(byId('flow').fallback(byId('flow').descriptor.example).props).toEqual({
+			columns: ['Step', 'Leads to'],
+			rows: [['Sign up', 'Verify email'], ['Verify email', 'Pick a plan'], ['Pick a plan', 'Start trial'], ['Start trial', '']],
+			rowHeaders: true
+		});
+		expect(byId('flow').fallback({ title: 'Review', steps: [{ id: 'a', label: 'Draft' }, { id: 'b', label: 'Ship' }, { id: 'c', label: 'Fix' }], links: [{ from: 'a', to: 'b', label: 'ok' }, { from: 'a', to: 'c', label: 'no' }, { from: 'c', to: 'a' }] }).props).toEqual({
+			caption: 'Review',
+			columns: ['Step', 'Leads to'],
+			rows: [['Draft', 'Ship (ok), Fix (no)'], ['Ship', ''], ['Fix', 'Draft']],
+			rowHeaders: true
+		});
+		expect(byId('timeline').fallback(byId('timeline').descriptor.example).props).toEqual({
+			caption: 'Product history',
+			columns: ['Period', 'Events'],
+			rows: [['2021', 'Prototype; First customer'], ['2022', 'Series A'], ['2023', 'Mobile app; 1M users']],
+			rowHeaders: true
+		});
+		expect(byId('mindmap').fallback({ root: 'R', branches: [{ label: 'a', children: [{ label: 'b', children: [{ label: 'c' }] }, { label: 'd' }] }, { label: 'e' }] }).props).toEqual({
+			caption: 'R',
+			columns: ['Branch', 'Topic', 'Detail'],
+			rows: [['a', 'b', 'c'], ['a', 'd', null], ['e', null, null]],
+			rowHeaders: true
+		});
+		expect(() => byId('flow').fallback({ steps: [{ label: 'A' }], links: [{ from: '1', to: '9' }] })).toThrow(/names a step that does not exist/);
+		expect(() => byId('timeline').fallback({ periods: [] })).toThrow(/timeline: invalid data/);
 	});
 
 	it('keeps content hashes stable and returns copies', () => {
