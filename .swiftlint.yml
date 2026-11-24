@@ -1,0 +1,15 @@
+included:
+  - packages/swift
+  - apps/swift-demo
+
+only_rules:
+  - custom_rules
+
+# .constant(...) is only banned inside #Preview blocks, which a regex cannot scope;
+# scripts/lint-swift.mjs enforces that rule.
+custom_rules:
+  no_preview_provider:
+    name: "No PreviewProvider"
+    regex: ':\s*PreviewProvider\b'
+    message: "Use the #Preview macro instead of legacy PreviewProvider."
+    severity: error
