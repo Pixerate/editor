@@ -21,8 +21,8 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import { createInterface } from 'node:readline';
 import { TOOL_BRIDGE_DEFAULT_PORT, TOOL_BRIDGE_PROTOCOL, type ToolBridgeEditorMessage, type ToolBridgeServerMessage } from '../tools/bridge-client.js';
 import { createMcpServer, type JsonRpcNotification, type JsonRpcResponse, type McpServer } from '../tools/mcp-server.js';
-import { ToolRegistry, type AgentTool, type McpToolDefinition, type McpToolResult } from '../tools/registry.js';
-import type { JsonSchema } from '../tools/schema.js';
+import { ToolRegistry, type McpToolDefinition, type McpToolResult } from '../tools/registry.js';
+import { createRemoteToolProvider, type RemoteToolEditorInfo } from '../tools/remote-tools.js';
 import type { SkillFiles } from '../tools/skills.js';
 import { loadSkillFiles } from './skills.js';
 import { acceptWebSocket, rejectUpgrade, wrapWebSocket, type BridgeSocket } from './websocket.js';
@@ -65,14 +65,7 @@ export interface ToolBridgeOptions {
 }
 
 /** An editor as `list_editors` reports it. */
-export interface ToolBridgeEditorInfo {
-	id: string;
-	name: string;
-	kind?: string;
-	tools: number;
-	/** Seconds since the editor last connected or answered a call. */
-	idleSeconds: number;
-}
+export type ToolBridgeEditorInfo = RemoteToolEditorInfo;
 
 export interface ToolBridge {
 	/** The WebSocket port editors connect to. */
@@ -115,11 +108,6 @@ export function isLocalOrigin(origin: string): boolean {
 	}
 }
 
-const EDITOR_ARG: JsonSchema = {
-	type: 'string',
-	description: 'Editor id (e.g. "e1") or part of its name, from list_editors. Default: the most recently active editor that has this tool.'
-};
-
 const BRIDGE_INSTRUCTIONS =
 	'Tools come from editors open in a browser. Call list_editors to see them; when several are open, pass `editor` (an id or part of a name) to pick one, otherwise the most recently active editor that has the tool answers. If no editor is connected, ask the user to open the app and connect it to the bridge. Tool names are `<toolset>__<tool>`; when an editor offers list_toolsets and search_tools, use them to find tools that are not listed yet.';
 
@@ -152,25 +140,6 @@ export async function createToolBridge(options: ToolBridgeOptions): Promise<Tool
 	const toolsChanged = () => listeners.forEach((l) => l());
 
 	// ---------------------------------------------------------------- routing
-	const describeEditors = () => [...editors.values()].map((e) => `${e.id} (${e.name})`).join(', ');
-	function pickEditor(tool: string, ref: unknown): Editor {
-		if (listenError) throw new Error(listenError);
-		const all = [...editors.values()];
-		if (!all.length) throw new Error(`No editor is connected to ws://127.0.0.1:${actualPort()}. Ask the user to open the app and connect it to the bridge.`);
-		const having = all.filter((e) => e.tools.some((t) => t.name === tool));
-		if (typeof ref === 'string' && ref) {
-			const byId = editors.get(ref);
-			const matches = byId ? [byId] : all.filter((e) => e.name.toLowerCase().includes(ref.toLowerCase()));
-			if (matches.length !== 1) throw new Error(`No single editor matches "${ref}". Connected: ${describeEditors()}.`);
-			const editor = matches[0]!;
-			if (!editor.tools.some((t) => t.name === tool))
-				throw new Error(`${editor.id} (${editor.name}) has no tool "${tool}"${having.length ? `; ${having.map((e) => e.id).join(', ')} do` : ''}.`);
-			return editor;
-		}
-		if (!having.length) throw new Error(`No connected editor has the tool "${tool}". Connected: ${describeEditors()}.`);
-		return having.sort((a, b) => b.activeSeq - a.activeSeq)[0]!;
-	}
-
 	function call(editor: Editor, name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<McpToolResult> {
 		const id = `c${++callCounter}`;
 		return new Promise((resolve, reject) => {
@@ -187,52 +156,25 @@ export async function createToolBridge(options: ToolBridgeOptions): Promise<Tool
 		});
 	}
 
-	const listEditors: AgentTool = {
-		name: 'list_editors',
-		title: 'List connected editors',
-		description:
-			'Lists the editors open in a browser and connected to this bridge: id, name, kind, how many tools each has and how long since it was last active. Pass an id or part of a name as `editor` to other tools to pick one.',
-		inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-		annotations: { title: 'List connected editors', readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-		handler: () => {
-			if (listenError) throw new Error(listenError);
-			return { editors: infos() };
-		}
-	};
-
-	/** One tool per name across editors; the first editor's definition wins, with `editor` added. */
-	const forwardedTools = (): AgentTool[] => {
-		const seen = new Map<string, McpToolDefinition>();
-		for (const editor of editors.values()) for (const tool of editor.tools) if (!seen.has(tool.name) && tool.name !== 'list_editors') seen.set(tool.name, tool);
-		return [...seen.values()].map((tool) => {
-			const schema = tool.inputSchema as JsonSchema & { properties?: Record<string, JsonSchema> };
-			return {
-				...tool,
-				title: tool.title ?? tool.annotations?.title ?? tool.name,
-				description: tool.description ?? tool.name,
-				inputSchema: { ...schema, type: 'object', properties: { editor: EDITOR_ARG, ...(schema.properties ?? {}) } },
-				handler: async (args: Record<string, any>, context: { signal?: AbortSignal }) => {
-					const { editor: ref, ...rest } = args;
-					const editor = pickEditor(tool.name, ref);
-					const result = await call(editor, tool.name, rest, context.signal);
-					editor.activeAt = Date.now();
-					editor.activeSeq = ++activity;
-					return result;
-				}
-			} as AgentTool;
-		});
-	};
-
-	registry.register({
-		id: 'bridge',
-		// Forwarded tools keep the names their pages gave them.
-		namespace: '',
-		tools: () => [listEditors, ...forwardedTools()],
-		subscribe: (notify) => {
-			listeners.add(notify);
-			return () => listeners.delete(notify);
-		}
-	});
+	registry.register(
+		createRemoteToolProvider({
+			editors: () => [...editors.values()].map((e) => ({ id: e.id, name: e.name, ...(e.kind ? { kind: e.kind } : {}), tools: e.tools, activeAt: e.activeAt, activity: e.activeSeq })),
+			call: async (remote, request, context) => {
+				const editor = editors.get(remote.id);
+				if (!editor) throw new Error(`${remote.id} (${remote.name}) disconnected.`);
+				const result = await call(editor, request.name, request.arguments ?? {}, context.signal);
+				editor.activeAt = Date.now();
+				editor.activeSeq = ++activity;
+				return result;
+			},
+			unavailable: () => listenError,
+			noEditorsMessage: () => `No editor is connected to ws://127.0.0.1:${actualPort()}. Ask the user to open the app and connect it to the bridge.`,
+			subscribe: (notify) => {
+				listeners.add(notify);
+				return () => listeners.delete(notify);
+			}
+		})
+	);
 
 	const infos = (): ToolBridgeEditorInfo[] =>
 		[...editors.values()].map((e) => ({ id: e.id, name: e.name, ...(e.kind ? { kind: e.kind } : {}), tools: e.tools.length, idleSeconds: Math.round((Date.now() - e.activeAt) / 1000) }));

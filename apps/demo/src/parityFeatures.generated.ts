@@ -2620,6 +2620,13 @@ export const PARITY_AREAS: ParityArea[] = [
         "swift": "`ToolBridgeClient`"
       },
       {
+        "feature": "Tool Bridge Over Any Transport (the editor half `serveToolSource`: announce tools, answer and cancel calls; the bridge half `createRemoteToolProvider`: forward editors' tools with `editor` routing and `list_editors`; e.g. a server reaching a browser tab through a database relay)",
+        "core": "`serveToolSource` & `createRemoteToolProvider` (`/tools`)",
+        "react": "Via core",
+        "svelte": "Via core",
+        "swift": "Planned (#533)"
+      },
+      {
         "feature": "Agent Tool Discovery & Scoped Views (`registry.view()` shows an agent only some toolsets or only read tools, refusing the rest with the reason; with `discovery` it lists `list_toolsets`, `search_tools`, `enable_tools`, `disable_tools` and `get_skill` until the agent enables what it needs; agent skills served as MCP resources and prompts; `toolsetInstructions` for the MCP `initialize` result)",
         "core": "`ToolRegistryView`, `searchTools`, `createMcpServer({ skills })`, `loadSkillFiles` (`/bridge`)",
         "react": "`useToolRegistryView`",
