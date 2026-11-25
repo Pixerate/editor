@@ -1,5 +1,11 @@
 # @pixerate/editor
 
+## 0.348.1
+
+### Patch Changes
+
+- adea80e: Canvas proposal ghosts now carry the `pixerate-proposal` class in Svelte Flow too. `createCanvasProposals().withGhosts` (and so `createCanvasProposalState().view`) sets both `className` (React Flow) and `class` (Svelte Flow) on ghost nodes and edges, merged with any existing value of each. React behaviour is unchanged.
+
 ## 0.348.0
 
 ### Minor Changes
