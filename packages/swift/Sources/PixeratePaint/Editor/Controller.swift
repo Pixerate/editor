@@ -170,13 +170,16 @@ public struct PaintStrokeInit {
 
 final class HistoryEntry {
     let label: String
+    /// Who made the step: `user`, or `agent:<id>` (see `withOrigin`).
+    let origin: String
     var before: PaintDocumentState
     var after: PaintDocumentState
     var guides: (before: PaintGuides, after: PaintGuides)?
     /// Wet steps: the wet simulation before and after (`lost` once dropped for memory: undo then leaves the paint dry).
     var wet: (before: WetSnapshot?, after: WetSnapshot?, lost: Bool)?
-    init(label: String, before: PaintDocumentState, after: PaintDocumentState) {
+    init(label: String, origin: String = "user", before: PaintDocumentState, after: PaintDocumentState) {
         self.label = label
+        self.origin = origin
         self.before = before
         self.after = after
     }
@@ -308,6 +311,13 @@ public final class PaintEditorController {
     private var library: LibraryCancellable?
     /// Change listeners (`subscribe`) and how many changes there have been.
     var listeners: [UUID: () -> Void] = [:]
+    /// History listeners (`onCommit`), in the order they subscribed.
+    var commitListeners: [(id: UUID, fn: (PaintCommitEvent) -> Void)] = []
+    /// Origins set by `withOrigin`, innermost last.
+    var origins: [String] = []
+    /// While above 0, `emit` waits: the change is announced once, after its commit event (`holdingEmits`).
+    var emitHold = 0
+    var emitHeld = false
     /// Listeners for the document being replaced (`onDocumentReplaced`).
     var documentListeners: [UUID: () -> Void] = [:]
     public internal(set) var version = 0
@@ -516,7 +526,7 @@ public final class PaintEditorController {
             doc = next
             return
         }
-        let entry = HistoryEntry(label: label, before: before, after: next)
+        let entry = HistoryEntry(label: label, origin: currentOrigin, before: before, after: next)
         if let op = wetOp {
             entry.wet = (op.before, wet.snapshot(), false)
             wetOp = nil
@@ -525,8 +535,11 @@ public final class PaintEditorController {
         if undoStack.count > historyLimit { undoStack.removeFirst() }
         redoStack = []
         documentRevision += 1
-        doc = next
+        setDocSilently(next)
         trimWetHistory()
+        // Commit listeners first, so a change feed hearing `emit` knows who made the step.
+        notifyCommit(PaintCommitEvent(kind: .execute, label: label, origin: entry.origin))
+        emit()
     }
 
     public func undo() -> String? {
@@ -536,6 +549,15 @@ public final class PaintEditorController {
         clearBlastAnimation()
         guard let e = undoStack.popLast() else { return nil }
         redoStack.append(e)
+        holdingEmits {
+            undoStep(e)
+        }
+        notifyCommit(PaintCommitEvent(kind: .undo, label: e.label, origin: currentOrigin))
+        emit()
+        return e.label
+    }
+
+    private func undoStep(_ e: HistoryEntry) {
         let paper = doc.paper
         documentRevision += 1
         doc = e.before
@@ -549,7 +571,6 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        return e.label
     }
 
     public func redo() -> String? {
@@ -558,6 +579,15 @@ public final class PaintEditorController {
         clearBlastAnimation()
         guard let e = redoStack.popLast() else { return nil }
         undoStack.append(e)
+        holdingEmits {
+            redoStep(e)
+        }
+        notifyCommit(PaintCommitEvent(kind: .redo, label: e.label, origin: currentOrigin))
+        emit()
+        return e.label
+    }
+
+    private func redoStep(_ e: HistoryEntry) {
         let paper = doc.paper
         documentRevision += 1
         doc = e.after
@@ -568,7 +598,6 @@ public final class PaintEditorController {
             if paper != doc.paper { wet.paperChanged() }
         }
         reconcileMutationsAfterUndo()
-        return e.label
     }
 
     /// The document with a paint event appended (for replays).

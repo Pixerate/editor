@@ -255,6 +255,10 @@ extension PaintEditorController {
     /// `dirty`: where the rendered canvas changed (document pixels), or nil for anywhere.
     func emit(_ dirty: [RasterRect]? = nil) {
         if previewing || grouping != nil { return }
+        if emitHold > 0 {
+            emitHeld = true
+            return
+        }
         version += 1
         dirtyLog.append((version, dirty))
         if dirtyLog.count > MAX_DIRTY_LOG { dirtyLog.removeFirst(dirtyLog.count - MAX_DIRTY_LOG) }

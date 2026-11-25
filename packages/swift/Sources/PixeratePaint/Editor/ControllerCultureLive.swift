@@ -150,7 +150,9 @@ extension PaintEditorController {
         if undoStack.count > historyLimit { undoStack.removeFirst() }
         redoStack = []
         documentRevision += 1
-        doc = d
+        setDocSilently(d)
+        notifyCommit(PaintCommitEvent(kind: .execute, label: "Culture growth", origin: "user"))
+        emit()
     }
 
     /**
