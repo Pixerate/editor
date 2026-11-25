@@ -66,6 +66,9 @@ describe('useCanvasProposals', () => {
 		});
 		expect(out.handle!.proposals.map((p) => p.id)).toEqual([proposalId]);
 		expect(out.handle!.view.nodes.map((n) => n.id)).toEqual(['a', 'b']);
+		// React Flow styles ghosts through `className`.
+		expect(out.handle!.view.nodes[1]!.className).toBe('pixerate-proposal');
+		expect(out.handle!.view.edges[0]!.className).toBe('pixerate-proposal');
 		expect(out.nodes).toHaveLength(1);
 		expect(heard).toHaveLength(0);
 
