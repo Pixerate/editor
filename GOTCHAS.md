@@ -460,6 +460,12 @@ All contributors and AI assistants should check this file before starting work a
 - **Root Cause**: The component measured only on window `scroll` / `resize` and target `scroll`. A target widened by a CSS variable written in an animation frame after the scroll event changes size after the last measurement, and no further event arrives.
 - **Solution / Workaround**: A `ResizeObserver` on `targetElement` calls `updateMetrics`. It lives in an `$effect` rather than `onMount` so it follows the prop. It reports size changes only, so a target that moves without resizing still waits for the next scroll or resize event.
 
+### [core/canvas] Proposal Ghosts Get No Class in Svelte Flow
+
+- **Issue / Symptom**: Ghosts from `createCanvasProposalState().view` rendered in Svelte Flow without the `pixerate-proposal` class, so they looked like ordinary nodes and edges.
+- **Root Cause**: `withGhosts` set only `className`, which is React Flow's prop. Svelte Flow reads `class` on nodes and edges and ignores `className`.
+- **Solution / Workaround**: `withGhosts` sets both `className` and `class`, each merged with the item's own value. Style ghosts with `.react-flow__node.pixerate-proposal` and `.svelte-flow__node.pixerate-proposal` (edges likewise). Anything else that hands nodes to both flow libraries should set both props.
+
 ### [core/canvas] Proposal Ghosts Stay Hidden in React Flow Unless They Carry a Size
 
 - **Issue / Symptom**: Ghost nodes from `useCanvasProposals().view` were in the DOM with their label but never showed (`visibility: hidden`), and their edges did not draw.

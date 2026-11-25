@@ -109,7 +109,10 @@ export interface CanvasProposals<TNode extends CanvasNode = CanvasNode, TEdge ex
 	withGhosts(nodes: readonly TNode[], edges: readonly TEdge[]): { nodes: TNode[]; edges: TEdge[] };
 }
 
-/** Class name of ghost nodes and edges (`withGhosts`), for styling. */
+/**
+ * Class name of ghost nodes and edges (`withGhosts`), for styling. It is set on both `className`
+ * (React Flow) and `class` (Svelte Flow), merged with any existing value of each.
+ */
 export const CANVAS_PROPOSAL_CLASS = 'pixerate-proposal';
 
 const toSide = (side: CanvasProposalNodeInput['side']): Side =>
@@ -118,6 +121,12 @@ const toSide = (side: CanvasProposalNodeInput['side']): Side =>
 const randomId = (kind: string) => `${kind}-${Math.random().toString(36).slice(2, 9)}`;
 
 const joinClass = (a: unknown, b: string) => (typeof a === 'string' && a ? `${a} ${b}` : b);
+
+/** React Flow reads `className`, Svelte Flow reads `class`: mark ghosts on both. */
+const ghostClasses = (item: { className?: unknown; class?: unknown }) => ({
+	className: joinClass(item.className, CANVAS_PROPOSAL_CLASS),
+	class: joinClass(item.class, CANVAS_PROPOSAL_CLASS)
+});
 
 /** A store of agent-suggested canvas additions (see the module comment). */
 export function createCanvasProposals<TNode extends CanvasNode = CanvasNode, TEdge extends CanvasEdgeLike = CanvasEdge>(
@@ -318,7 +327,7 @@ export function createCanvasProposals<TNode extends CanvasNode = CanvasNode, TEd
 					selectable: false,
 					connectable: false,
 					deletable: false,
-					className: joinClass(n.className, CANVAS_PROPOSAL_CLASS),
+					...ghostClasses(n),
 					data: { ...n.data, proposal: meta }
 				});
 			}
@@ -326,7 +335,7 @@ export function createCanvasProposals<TNode extends CanvasNode = CanvasNode, TEd
 		for (const p of state.proposals) {
 			for (const e of p.edges) {
 				if (!present.has(e.source) || !present.has(e.target)) continue;
-				ghostEdges.push({ ...e, selectable: false, deletable: false, animated: true, className: joinClass((e as { className?: unknown }).className, CANVAS_PROPOSAL_CLASS) } as TEdge);
+				ghostEdges.push({ ...e, selectable: false, deletable: false, animated: true, ...ghostClasses(e as { className?: unknown; class?: unknown }) } as TEdge);
 			}
 		}
 		return { nodes: [...nodes, ...ghostNodes], edges: [...edges, ...ghostEdges] };

@@ -3,6 +3,7 @@ import { flushSync } from 'svelte';
 import { HistoryManager } from '@pixerate/editor/history';
 import { ToolRegistry } from '@pixerate/editor/tools';
 import {
+	CANVAS_PROPOSAL_CLASS,
 	createCanvasChangeWatcher,
 	createCanvasProposalState,
 	createCanvasProposalToolProvider,
@@ -39,6 +40,22 @@ describe('createCanvasProposalState (Svelte)', () => {
 			expect(c.getNodes().map((n) => n.id)).toEqual(['a', 'b']);
 			expect(state.view.nodes).toHaveLength(2);
 			expect(history.getEntries()[0]).toMatchObject({ label: 'Caption', origin: 'agent:pixie' });
+		});
+		cleanup();
+	});
+
+	it('gives Svelte Flow the proposal class on ghost nodes and edges', () => {
+		const c = canvas();
+		const cleanup = $effect.root(() => {
+			const state = createCanvasProposalState(c);
+			state.propose({ title: 'Caption', nodes: [{ id: 'b', nearNodeId: 'a' }] });
+			flushSync();
+			const ghost = state.view.nodes.find((n) => n.id === 'b')!;
+			// Svelte Flow reads `class`; `className` stays for React Flow.
+			expect(ghost.class).toBe(CANVAS_PROPOSAL_CLASS);
+			expect(ghost.className).toBe(CANVAS_PROPOSAL_CLASS);
+			expect(state.view.edges[0]).toMatchObject({ source: 'a', target: 'b', class: CANVAS_PROPOSAL_CLASS });
+			expect(state.view.nodes.find((n) => n.id === 'a')!.class).toBeUndefined();
 		});
 		cleanup();
 	});

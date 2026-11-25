@@ -116,6 +116,33 @@ describe('createCanvasProposals', () => {
 		expect(proposals.withGhosts(canvas.nodes, canvas.edges).nodes).toHaveLength(1);
 	});
 
+	it('marks ghosts with the proposal class for React Flow (className) and Svelte Flow (class)', () => {
+		const { canvas, proposals } = setup();
+		proposals.propose({ title: 'G', nodes: [{ id: 'g', nearNodeId: 'a' }] });
+		const h = proposals.propose({ title: 'H', nodes: [{ id: 'h', nearNodeId: 'a' }] });
+		// A host-typed node or edge may already carry classes of its own: they are kept.
+		Object.assign(h.nodes[0]!, { className: 'card', class: 'tile' });
+		Object.assign(h.edges[0]!, { className: 'link', class: 'wire' });
+		const view = proposals.withGhosts(canvas.nodes, canvas.edges);
+		const g = view.nodes.find((n) => n.id === 'g')!;
+		expect(g.className).toBe(CANVAS_PROPOSAL_CLASS);
+		expect(g.class).toBe(CANVAS_PROPOSAL_CLASS);
+		const edge = view.edges.find((e) => e.target === 'g')! as { className?: string; class?: string };
+		expect(edge.className).toBe(CANVAS_PROPOSAL_CLASS);
+		expect(edge.class).toBe(CANVAS_PROPOSAL_CLASS);
+		const hNode = view.nodes.find((n) => n.id === 'h')!;
+		expect(hNode.className).toBe(`card ${CANVAS_PROPOSAL_CLASS}`);
+		expect(hNode.class).toBe(`tile ${CANVAS_PROPOSAL_CLASS}`);
+		const hEdge = view.edges.find((e) => e.target === 'h')! as { className?: string; class?: string };
+		expect(hEdge.className).toBe(`link ${CANVAS_PROPOSAL_CLASS}`);
+		expect(hEdge.class).toBe(`wire ${CANVAS_PROPOSAL_CLASS}`);
+		// The proposal itself and the host's own nodes are left alone.
+		expect(h.nodes[0]!.className).toBe('card');
+		const a = view.nodes.find((n) => n.id === 'a')!;
+		expect(a.className).toBeUndefined();
+		expect(a.class).toBeUndefined();
+	});
+
 	it('clears only one origin when asked', () => {
 		const { proposals } = setup();
 		proposals.propose({ title: 'A', nodes: [{}], origin: 'agent:a' });

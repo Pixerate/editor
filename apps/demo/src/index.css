@@ -107,6 +107,7 @@
 .pixerate-find-match { background: rgb(250 204 21 / 0.3); border-radius: 2px; }
 .pixerate-find-match-current { background: rgb(249 115 22 / 0.6); outline: 1px solid rgb(249 115 22); }
 
-/* Agent proposals (useCanvasProposals): ghost nodes and edges the user has not accepted yet. */
-.react-flow__node.pixerate-proposal { opacity: 0.55; outline: 2px dashed #a78bfa; outline-offset: 4px; border-radius: 8px; }
-.react-flow__edge.pixerate-proposal path { stroke: #a78bfa; stroke-dasharray: 6 4; }
+/* Agent proposals (useCanvasProposals / createCanvasProposalState): ghost nodes and edges the user has not accepted yet.
+   Ghosts carry `className` (React Flow) and `class` (Svelte Flow), so the same rule covers both. */
+.react-flow__node.pixerate-proposal, .svelte-flow__node.pixerate-proposal { opacity: 0.55; outline: 2px dashed #a78bfa; outline-offset: 4px; border-radius: 8px; }
+.react-flow__edge.pixerate-proposal path, .svelte-flow__edge.pixerate-proposal path { stroke: #a78bfa; stroke-dasharray: 6 4; }
