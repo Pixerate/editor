@@ -2,25 +2,12 @@
 // connects its ToolRegistry to a local MCP bridge process over a WebSocket, and the bridge's MCP
 // client can then list and call the page's tools. No imports beyond the registry types, so it
 // runs in browsers, workers and Node alike.
-import type { McpToolDefinition, McpToolResult, ToolSource } from './registry.js';
+import type { ToolSource } from './registry.js';
+import { TOOL_BRIDGE_DEFAULT_PORT, type ToolBridgeEditorMessage, type ToolBridgeServerMessage } from './bridge-protocol.js';
+import { serveToolSource } from './tool-host.js';
 
-/** Protocol version spoken between `connectToolBridge` and `createToolBridge`. */
-export const TOOL_BRIDGE_PROTOCOL = 1;
-
-/** Default port the bridge listens on (127.0.0.1 only). */
-export const TOOL_BRIDGE_DEFAULT_PORT = 4477;
-
-/** Editor → bridge messages. */
-export type ToolBridgeEditorMessage =
-	| { t: 'hello'; v: number; name: string; kind?: string; tools: McpToolDefinition[] }
-	| { t: 'tools'; tools: McpToolDefinition[] }
-	| { t: 'result'; id: string; result: McpToolResult };
-
-/** Bridge → editor messages. */
-export type ToolBridgeServerMessage =
-	| { t: 'welcome'; v: number; id: string }
-	| { t: 'call'; id: string; name: string; arguments: Record<string, unknown> }
-	| { t: 'cancel'; id: string; reason?: string };
+export { TOOL_BRIDGE_PROTOCOL, TOOL_BRIDGE_DEFAULT_PORT } from './bridge-protocol.js';
+export type { ToolBridgeEditorMessage, ToolBridgeServerMessage } from './bridge-protocol.js';
 
 export type ToolBridgeStatus = 'connecting' | 'connected' | 'disconnected' | 'closed';
 
@@ -84,7 +71,8 @@ export function connectToolBridge(registry: ToolSource, options: ConnectToolBrid
 	const send = (message: ToolBridgeEditorMessage) => {
 		if (socket && socket.readyState === 1) socket.send(JSON.stringify(message));
 	};
-	const unsubscribe = registry.onListChanged((tools) => send({ t: 'tools', tools }));
+	const served = serveToolSource(registry, { name: options.name, ...(options.kind ? { kind: options.kind } : {}) });
+	const unsubscribe = served.onInfoChange((info) => send({ t: 'tools', tools: info.tools }));
 
 	const open = () => {
 		if (closed) return;
@@ -93,7 +81,7 @@ export function connectToolBridge(registry: ToolSource, options: ConnectToolBrid
 		socket = ws;
 		ws.addEventListener('open', () => {
 			delay = 500;
-			send({ t: 'hello', v: TOOL_BRIDGE_PROTOCOL, name: options.name, ...(options.kind ? { kind: options.kind } : {}), tools: registry.listTools().tools });
+			send({ t: 'hello', ...served.info() });
 		});
 		ws.addEventListener('message', (event: { data: unknown }) => {
 			let message: ToolBridgeServerMessage;
@@ -108,7 +96,7 @@ export function connectToolBridge(registry: ToolSource, options: ConnectToolBrid
 			} else if (message.t === 'call') {
 				const controller = new AbortController();
 				running.set(message.id, controller);
-				void registry.callTool(message.name, message.arguments ?? {}, { signal: controller.signal }).then((result) => {
+				void served.handle({ name: message.name, arguments: message.arguments ?? {} }, { signal: controller.signal }).then((result) => {
 					running.delete(message.id);
 					if (!controller.signal.aborted) send({ t: 'result', id: message.id, result });
 				});

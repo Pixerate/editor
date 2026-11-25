@@ -57,6 +57,33 @@ The page sends its tool list on connect and whenever it changes. The bridge then
 - Any page on this machine could otherwise connect, so pass a token.
 - Clients that are not browsers (scripts) send no origin and only need the token.
 
+## Other transports
+
+The protocol doesn't need a WebSocket. Its two halves work with any carrier, for example a relay through a database that lets a server reach a tab (`@pixerate/realtime`'s `createRelayHost` / `createRelayClient`):
+
+```ts
+import { serveToolSource, createRemoteToolProvider, ToolRegistry } from '@pixerate/editor/tools';
+
+// In the page: what to announce, and how to answer.
+const served = serveToolSource(registry.view(), { name: 'Canvas — Moodboard', kind: 'canvas' });
+const host = createRelayHost({ store, room, ownerId, info: served.info(), handle: (request, { signal }) => served.handle(request, { signal }) });
+served.onInfoChange((info) => host.setInfo(info));
+
+// On the server: the pages' tools, forwarded with an `editor` argument, plus `list_editors`.
+const hosts = await relay.hosts<ToolHostInfo>();
+const bridge = new ToolRegistry();
+bridge.register(
+  createRemoteToolProvider({
+    editors: () => hosts.map((h) => ({ id: h.id, name: h.info.name, kind: h.info.kind, tools: h.info.tools, activeAt: h.heartbeatAt })),
+    call: (editor, request, { signal }) => relay.call(editor.id, request, { signal })
+  })
+);
+```
+
+- **`serveToolSource(source, { name, kind })`** is the editor half. `info()` is the `hello` message, `onInfoChange` sends `tools`, and `handle(request, { signal })` answers a `call`, with the signal aborted on `cancel`. It never rejects: failures are `isError` results.
+- **`createRemoteToolProvider({ editors, call })`** is the bridge half. It forwards each tool once with an `editor` argument and adds `list_editors`. Calls go to the named editor, or to the most recently active one that has the tool (`activity`, else `activeAt`). A rejected `call` becomes an `isError` result. `unavailable()` and `noEditorsMessage` say why nothing can answer.
+- `connectToolBridge` and `createToolBridge` are built on these halves.
+
 ## Native editors (Swift)
 
 The Swift editors (`packages/swift`, #533) connect the same way with `ToolBridgeClient` from `PixerateCore`:

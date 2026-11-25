@@ -14,7 +14,7 @@ import { JSDOM } from 'jsdom';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Editor } from '@tiptap/core';
-import { TOOL_DISCOVERY_TOOLS, createAgentPlayback, createPlaybackToolProvider, createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
+import { TOOL_DISCOVERY_TOOLS, createAgentPlayback, createPlaybackToolProvider, createRemoteToolProvider, createStyleResolver, createStyleToolProvider, memoryStyleStore } from '../src/tools';
 import {
 	ToolRegistry,
 	baseToolName,
@@ -127,8 +127,9 @@ function expectedBySkill(): Record<string, string[]> {
 	const result: Record<string, string[]> = {
 		'pixerate-agent-tools': [
 			...toolNames(createCommandToolProvider(new CommandRegistry())),
-			// Served by the MCP bridge (`createToolBridge`), which needs a socket server to list.
-			'list_editors',
+			// The bridge half of the tool bridge (`createToolBridge`, relays); forwarded tools keep
+			// their editors' names, so with no editors it lists only `list_editors`.
+			...toolNames(createRemoteToolProvider({ editors: () => [], call: async () => ({ content: [] }) })),
 			// Added by discovery views (`registry.view({ discovery })`), not by a provider.
 			...TOOL_DISCOVERY_TOOLS,
 			...commandIds(createHistoryCommands(stub)),
@@ -288,6 +289,7 @@ const FACTORIES: Record<string, string> = {
 	createCommandToolProvider: 'pixerate-agent-tools',
 	createHistoryCommands: 'pixerate-agent-tools',
 	createPlaybackToolProvider: 'pixerate-agent-tools',
+	createRemoteToolProvider: 'pixerate-agent-tools',
 	createRichTextToolProvider: 'pixerate-rich-text',
 	createReviewToolProvider: 'pixerate-rich-text',
 	createEditorMcpToolProvider: 'pixerate-rich-text, pixerate-canvas',
