@@ -36,12 +36,29 @@ public final class PaintProposals {
     private let maxPoints: Int
     private var seq = 0
     public private(set) var proposals: [PaintProposal] = []
+    private var listeners: [(id: UUID, fn: ([PaintProposal]) -> Void)] = []
 
     public init(controller: PaintEditorController, origin: String? = nil, maxPoints: Int = 4000) {
         self.controller = controller
         self.origin = origin
         self.maxPoints = maxPoints
         controller.attachProposals(self)
+    }
+
+    /**
+     * Calls `listener` with the pending proposals each time they change: proposed, accepted,
+     * rejected or cleared. On accept it hears after the paint step has committed (and the
+     * controller's listeners have heard it). Returns the handle that stops it.
+     */
+    public func subscribe(_ listener: @escaping ([PaintProposal]) -> Void) -> Cancellable {
+        let id = UUID()
+        listeners.append((id, listener))
+        return Cancellable { [weak self] in self?.listeners.removeAll { $0.id == id } }
+    }
+
+    private func set(_ next: [PaintProposal]) {
+        proposals = next
+        for l in listeners { l.fn(proposals) }
     }
 
     public func get(_ id: String) -> PaintProposal? {
@@ -169,7 +186,7 @@ public final class PaintProposals {
             rationale: input["rationale"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }, origin: input["origin"]?.stringValue ?? origin ?? "agent:anonymous",
             ops: ops, placement: placement, bounds: preview.bounds, ghost: preview.composite, anchors: anchors, createdAt: Date(), strokeGenome: strokeGenome
         )
-        proposals.append(p)
+        set(proposals + [p])
         return p
     }
 
@@ -193,21 +210,32 @@ public final class PaintProposals {
             throw PaintEditorError("Paint proposal \"\(p.title)\" goes above layer \"\(above ?? "")\", which is gone; dismiss it or propose it again.")
         }
         let active = controller.doc.activeLayerId
-        let result = try controller.group(p.title) { () throws -> (String, [String]) in
-            let layer = try controller.addLayer(name: p.placement["layerName"]?.stringValue ?? p.title, aboveId: place == "above" ? above : place == "top" ? topLayerId() : nil)
-            if place == "bottom" { _ = try controller.moveLayer(layer.id, 0, parentId: .some(nil)) }
-            return (layer.id, try paint(p.ops, layer.id, p.strokeGenome))
+        // One undo step, recorded as the proposer's and named after the proposal.
+        let result = try controller.withOrigin(p.origin) {
+            try controller.group(p.title) { () throws -> (String, [String]) in
+                let layer = try controller.addLayer(name: p.placement["layerName"]?.stringValue ?? p.title, aboveId: place == "above" ? above : place == "top" ? topLayerId() : nil)
+                if place == "bottom" { _ = try controller.moveLayer(layer.id, 0, parentId: .some(nil)) }
+                return (layer.id, try paint(p.ops, layer.id, p.strokeGenome))
+            }
         }
         // The suggestion's layer is the agent's; keep the user on the layer they were painting.
         if let active, controller.listLayers().contains(where: { $0.id == active }) { try controller.setActiveLayer(active) }
-        proposals.removeAll { $0.id == id }
+        set(proposals.filter { $0.id != id })
         return ["proposalId": .string(id), "layerId": .string(result.0), "strokeIds": .array(result.1.map { .string($0) }), "label": .string(p.title)]
     }
 
     public func reject(_ id: String) throws -> PaintProposal {
         let p = try find(id)
-        proposals.removeAll { $0.id == id }
+        set(proposals.filter { $0.id != id })
         return p
+    }
+
+    /// Drops every pending proposal (or those of one origin). Returns the ids dropped.
+    @discardableResult
+    public func clear(origin: String? = nil) -> [String] {
+        let dropped = proposals.filter { origin == nil || $0.origin == origin }.map(\.id)
+        if !dropped.isEmpty { set(proposals.filter { !dropped.contains($0.id) }) }
+        return dropped
     }
 }
 

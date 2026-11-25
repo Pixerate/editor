@@ -17,6 +17,7 @@ extension PaintEditorController {
     public func group<T>(_ label: String, _ fn: () throws -> T) throws -> T {
         if grouping != nil { return try fn() }
         let before = doc
+        let origin = currentOrigin
         grouping = (label, before, false)
         let result: T
         do {
@@ -35,7 +36,7 @@ extension PaintEditorController {
         let g = grouping!
         grouping = nil
         if (g.changed && doc !== before) || wetOp != nil {
-            let entry = HistoryEntry(label: label, before: before, after: doc)
+            let entry = HistoryEntry(label: label, origin: origin, before: before, after: doc)
             if let op = wetOp {
                 entry.wet = (op.before, wet.snapshot(), false)
                 wetOp = nil
@@ -44,6 +45,7 @@ extension PaintEditorController {
             if undoStack.count > historyLimit { undoStack.removeFirst() }
             redoStack = []
             trimWetHistory()
+            notifyCommit(PaintCommitEvent(kind: .execute, label: label, origin: origin))
         }
         // Listeners hear the group once, at its end.
         emit()

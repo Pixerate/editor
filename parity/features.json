@@ -926,14 +926,14 @@
           "core": "`createPaintProposals`, `previewPaint`, `createPaintProposalToolProvider`",
           "react": "`usePaintProposals`, `<PaintCanvas proposals>`",
           "svelte": "`createPaintProposalState`, `<PaintCanvas proposals>`",
-          "swift": "`PaintProposals`, `createPaintProposalToolProvider`"
+          "swift": "`PaintProposals` (with `subscribe`), `createPaintProposalToolProvider`"
         },
         {
           "feature": "Paint Change Feed: strokes, fills and layers added / removed / changed and each stroke's start and end, with who made it; paint history records origins (`withOrigin`, `onCommit`) and groups steps (`group`)",
           "core": "`createPaintChangeFeed`, `PaintEditorController.withOrigin` / `onCommit` / `group`",
           "react": "`usePaintChangeFeed`",
           "svelte": "`createPaintChangeWatcher`",
-          "swift": "Planned (#533)"
+          "swift": "`PaintChangeFeed`, `PaintEditorController.withOrigin` / `onCommit` / `group` / `stroking`"
         },
         {
           "feature": "Live Paint Strokes: the user's stroke streamed as it is painted (`onStrokeSample`, `getLiveStroke`, tool `get_live_stroke`), and an agent's companion strokes drawn live over the canvas until they are painted",
