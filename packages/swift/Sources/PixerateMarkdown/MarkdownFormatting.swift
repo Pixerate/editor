@@ -51,6 +51,7 @@ public struct MarkdownFormatting {
     /// Values derived from the document on first use (the struct itself is immutable).
     private final class Derived {
         var codeBlockRanges: [NSRange]?
+        var thematicBreakRanges: [NSRange]?
     }
     private let derived = Derived()
 
@@ -102,14 +103,21 @@ public struct MarkdownFormatting {
         return result
     }
 
+    private func codeBlockExtent(_ node: MarkdownNode, fenced: Bool) -> NSRange {
+        let start = fenced
+            ? node.range.location
+            : ns.lineRange(for: NSRange(location: min(node.range.location, ns.length), length: 0)).location
+        let unclosed = fenced && node.markers.count == 1
+        let end = unclosed ? ns.length : NSMaxRange(node.range)
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
     /// The code block (fenced or indented) containing `range`, if any.
     public func codeBlock(containing range: NSRange) -> MarkdownNode? {
         var found: MarkdownNode? = nil
         document.root.walk { node in
             guard found == nil, case .codeBlock(let fenced, _) = node.kind else { return }
-            // An unclosed fence (opening marker only) runs to the end of the document
-            let unclosed = fenced && node.markers.count == 1
-            let extent = unclosed ? NSRange(location: node.range.location, length: ns.length - node.range.location) : node.range
+            let extent = codeBlockExtent(node, fenced: fenced)
             if contains(extent, range) || (range.length == 0 && range.location == NSMaxRange(extent)) {
                 found = node
             }
@@ -414,11 +422,42 @@ public struct MarkdownFormatting {
         if let cached = derived.codeBlockRanges { return cached }
         var ranges: [NSRange] = []
         document.root.walk { node in
-            if case .codeBlock = node.kind { ranges.append(node.range) }
+            if case .codeBlock(let fenced, _) = node.kind { ranges.append(codeBlockExtent(node, fenced: fenced)) }
         }
         ranges.sort { $0.location < $1.location }
         derived.codeBlockRanges = ranges
         return ranges
+    }
+
+    private var thematicBreakRanges: [NSRange] {
+        if let cached = derived.thematicBreakRanges { return cached }
+        var ranges: [NSRange] = []
+        document.root.walk { node in
+            if case .thematicBreak = node.kind { ranges.append(node.range) }
+        }
+        derived.thematicBreakRanges = ranges
+        return ranges
+    }
+
+    private func enclosingListItemFormat(for range: NSRange) -> MarkdownBlockFormat? {
+        var found: MarkdownBlockFormat? = nil
+        for node in document.nodePath(containing: range) {
+            switch node.kind {
+            case .listItem(let task):
+                if task != nil {
+                    found = .taskList
+                } else if case .list(let ordered, _, _, _, _) = node.parent?.kind {
+                    found = ordered ? .numberedList : .bulletList
+                } else {
+                    found = nil
+                }
+            case .blockQuote, .alert, .table, .heading, .codeBlock:
+                found = nil
+            default:
+                break
+            }
+        }
+        return found
     }
     
     /// Lines inside fenced or indented code are never rewritten by block formats. A binary search
@@ -445,6 +484,50 @@ public struct MarkdownFormatting {
         let formats = lines.map { Self.structure(of: ns.substring(with: $0)).format }
         if formats.allSatisfy({ $0 == formats[0] }) { return formats[0] }
         return nil
+    }
+
+    /// The list format (`.bulletList`, `.numberedList`, or `.taskList`) shared by every non-blank
+    /// selected line, including empty list items (`- `, `1. `, `- [ ] `) and continuation lines.
+    public func activeListFormat(selection: NSRange) -> MarkdownBlockFormat? {
+        guard selection.location != NSNotFound else { return nil }
+        let clampedLocation = min(max(0, selection.location), ns.length)
+        let clampedLength = min(max(0, selection.length), ns.length - clampedLocation)
+        let clamped = NSRange(location: clampedLocation, length: clampedLength)
+
+        let lines = selectedLines(clamped).filter { !ns.substring(with: $0).trimmingCharacters(in: .whitespaces).isEmpty }
+        guard !lines.isEmpty else { return nil }
+
+        var shared: MarkdownBlockFormat? = nil
+        for line in lines {
+            if isCodeLine(line) { return nil }
+            var start = line.location
+            var end = NSMaxRange(line)
+            while start < end && isWhitespace(ns.character(at: start)) { start += 1 }
+            while end > start && isWhitespace(ns.character(at: end - 1)) { end -= 1 }
+            let trimmedRange = NSRange(location: start, length: end - start)
+            if trimmedRange.length > 0,
+               thematicBreakRanges.contains(where: { contains($0, trimmedRange) && contains(line, $0) }) {
+                return nil
+            }
+
+            var format = Self.structure(of: ns.substring(with: line)).format
+            if format == .paragraph, trimmedRange.length > 0,
+               let enclosing = enclosingListItemFormat(for: trimmedRange) {
+                format = enclosing
+            }
+
+            switch format {
+            case .bulletList, .numberedList, .taskList:
+                if let existing = shared {
+                    if existing != format { return nil }
+                } else {
+                    shared = format
+                }
+            default:
+                return nil
+            }
+        }
+        return shared
     }
 
     /// True when every non-blank selected line is inside a blockquote.

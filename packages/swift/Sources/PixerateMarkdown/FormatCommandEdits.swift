@@ -52,6 +52,193 @@ public enum FormatCommandEdits: Sendable {
         return destination
     }
 
+    /// Active inline formats (`.bold`, `.italic`, `.code`, `.strikethrough`) and list types
+    /// (`.bulletList`, `.numberedList`, `.checkList`) at a UTF-16 caret `offset` in `text`.
+    public static func activeFormats(at offset: Int, in text: String) -> Set<FormatCommand> {
+        activeFormats(at: offset, in: MarkdownFormatting(text: text))
+    }
+
+    /// Active inline formats and list types for a UTF-16 `selection` range in `text`.
+    public static func activeFormats(at selection: NSRange, in text: String) -> Set<FormatCommand> {
+        activeFormats(at: selection, in: MarkdownFormatting(text: text))
+    }
+
+    /// Active inline formats and list types at a UTF-16 caret `offset`, reusing an existing parse.
+    public static func activeFormats(at offset: Int, in formatting: MarkdownFormatting) -> Set<FormatCommand> {
+        guard offset != NSNotFound else { return [] }
+        return activeFormats(at: NSRange(location: offset, length: 0), in: formatting)
+    }
+
+    /// Active inline formats and list types for a UTF-16 `selection` range, reusing an existing parse.
+    public static func activeFormats(at selection: NSRange, in formatting: MarkdownFormatting) -> Set<FormatCommand> {
+        let ns = formatting.text as NSString
+        guard selection.location != NSNotFound else { return [] }
+        let clampedLocation = min(max(0, selection.location), ns.length)
+        let clampedLength = min(max(0, selection.length), ns.length - clampedLocation)
+        let clamped = NSRange(location: clampedLocation, length: clampedLength)
+
+        if let block = formatting.codeBlock(containing: clamped) {
+            // A standalone `~~~~` line is parsed as an unclosed tilde fence, so only allow it when
+            // the caret sits right in the middle of an empty `~~‸~~` strikethrough pair.
+            let isEmptyTildePair = clamped.length == 0
+                && block.kind == .codeBlock(fenced: true, info: "")
+                && block.markers.count == 1
+                && block.markers[0].length == 4
+                && clamped.location == block.markers[0].location + 2
+                && block.markers[0].location + 4 <= ns.length
+                && ns.substring(with: block.markers[0]) == "~~~~"
+            guard isEmptyTildePair else { return [] }
+        }
+
+        var inlineNodes: [MarkdownNode] = []
+        var inlineMarkers: [NSRange] = []
+        var isInsideOpaqueInline = false
+
+        formatting.document.root.walk { node in
+            guard !node.kind.isBlock else { return }
+            inlineMarkers.append(contentsOf: node.markers)
+            switch node.kind {
+            case .strong, .emphasis, .strikethrough, .code:
+                inlineNodes.append(node)
+                if case .code = node.kind, clamped.length == 0,
+                   clamped.location > node.range.location, clamped.location < NSMaxRange(node.range) {
+                    isInsideOpaqueInline = true
+                }
+            case .math, .htmlInline:
+                if clamped.length == 0,
+                   clamped.location > node.range.location, clamped.location < NSMaxRange(node.range) {
+                    isInsideOpaqueInline = true
+                }
+            default:
+                break
+            }
+        }
+
+        var active: Set<FormatCommand> = []
+
+        if clamped.length == 0 {
+            let loc = clamped.location
+            for node in inlineNodes {
+                let isActiveAtCaret: Bool
+                if node.markers.count >= 2 {
+                    let inner = innerRange(of: node, in: ns)
+                    isActiveAtCaret = inner.location <= loc && loc <= NSMaxRange(inner)
+                } else {
+                    isActiveAtCaret = node.range.location < loc && loc < NSMaxRange(node.range)
+                }
+                if isActiveAtCaret, let command = inlineCommand(for: node.kind) {
+                    active.insert(command)
+                }
+            }
+
+            if !isInsideOpaqueInline {
+                let delimiters: [unichar] = [0x2A, 0x5F, 0x7E, 0x60] // *, _, ~, `
+                for ch in delimiters {
+                    var leftStart = loc
+                    while leftStart > 0 && ns.character(at: leftStart - 1) == ch {
+                        leftStart -= 1
+                    }
+                    if leftStart < loc && leftStart > 0 {
+                        var backslashes = 0
+                        while leftStart - 1 - backslashes >= 0 && ns.character(at: leftStart - 1 - backslashes) == 0x5C {
+                            backslashes += 1
+                        }
+                        if backslashes % 2 == 1 {
+                            leftStart += 1
+                        }
+                    }
+                    let leftCount = loc - leftStart
+                    guard leftCount > 0 else { continue }
+
+                    var rightEnd = loc
+                    while rightEnd < ns.length && ns.character(at: rightEnd) == ch {
+                        rightEnd += 1
+                    }
+                    let rightCount = rightEnd - loc
+                    guard leftCount == rightCount else { continue }
+
+                    let pairRange = NSRange(location: leftStart, length: leftCount + rightCount)
+                    guard !inlineMarkers.contains(where: { NSIntersectionRange($0, pairRange).length > 0 }) else {
+                        continue
+                    }
+
+                    switch (ch, leftCount) {
+                    case (0x2A, 1), (0x5F, 1): active.insert(.italic)
+                    case (0x2A, 2), (0x5F, 2): active.insert(.bold)
+                    case (0x2A, 3), (0x5F, 3): active.formUnion([.bold, .italic])
+                    case (0x7E, 2): active.insert(.strikethrough)
+                    case (0x60, 1): active.insert(.code)
+                    default: break
+                    }
+                }
+            }
+        } else {
+            let segs = formatting.segments(in: clamped)
+            for (inlineFormat, command) in [
+                (MarkdownInlineFormat.strong, FormatCommand.bold),
+                (.emphasis, .italic),
+                (.strikethrough, .strikethrough),
+                (.code, .code),
+            ] {
+                let matching = inlineNodes.filter { inlineFormat.matches($0.kind) }
+                if !segs.isEmpty {
+                    let allCovered = segs.allSatisfy { seg in
+                        matching.contains { node in
+                            let covers = node.range.location <= seg.location && NSMaxRange(seg) <= NSMaxRange(node.range)
+                            guard covers else { return false }
+                            return NSIntersectionRange(innerRange(of: node, in: ns), seg).length > 0
+                        }
+                    }
+                    if allCovered { active.insert(command) }
+                } else {
+                    let containsWhitespace = matching.contains { node in
+                        let inner = innerRange(of: node, in: ns)
+                        return inner.location <= clamped.location && NSMaxRange(clamped) <= NSMaxRange(inner)
+                    }
+                    if containsWhitespace { active.insert(command) }
+                }
+            }
+        }
+
+        switch formatting.activeListFormat(selection: clamped) {
+        case .bulletList?: active.insert(.bulletList)
+        case .numberedList?: active.insert(.numberedList)
+        case .taskList?: active.insert(.checkList)
+        default: break
+        }
+
+        return active
+    }
+
+    private static func inlineCommand(for kind: MarkdownNode.Kind) -> FormatCommand? {
+        switch kind {
+        case .strong: return .bold
+        case .emphasis: return .italic
+        case .strikethrough: return .strikethrough
+        case .code: return .code
+        default: return nil
+        }
+    }
+
+    private static func innerRange(of node: MarkdownNode, in ns: NSString) -> NSRange {
+        guard node.markers.count >= 2 else { return node.range }
+        let open = node.markers[0]
+        let close = node.markers[node.markers.count - 1]
+        var start = NSMaxRange(open)
+        var end = close.location
+        if case .code = node.kind {
+            // Code spans with multi-backtick fences absorb one space of padding into each marker;
+            // restore that padding to the inner range so carets inside the padding stay `.code`.
+            if open.length > 1 && start > 0 && start <= ns.length && ns.character(at: start - 1) == 0x20 {
+                start -= 1
+            }
+            if close.length > 1 && end < ns.length && ns.character(at: end) == 0x20 {
+                end += 1
+            }
+        }
+        return NSRange(location: start, length: max(0, end - start))
+    }
+
     /// Makes the selection a fenced code block with `language` (nil for no info string). Inside
     /// a fenced block, only the info string changes.
     public static func codeBlock(language: String?, text: String, selection: NSRange) -> MarkdownEdit? {

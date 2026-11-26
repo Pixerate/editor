@@ -4,7 +4,9 @@
 
 import Foundation
 
-public enum FormatCommand: Equatable, Sendable {
+public enum FormatCommand: Hashable, Sendable {
+    public static let checkList: FormatCommand = .taskList
+
     case bold, italic, strikethrough, code, link
     case heading(Int), paragraph
     case bulletList, numberedList, taskList, quote, codeBlock
