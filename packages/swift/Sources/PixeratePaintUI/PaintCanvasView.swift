@@ -11,12 +11,15 @@ import UIKit
 /**
  * The painting (`PaintCanvas`): the controller's composite drawn with the view's zoom, pan,
  * rotation and mirroring (pixels are never resampled into the document), the guides, the picked
- * stroke's box and the predicted tail of a stroke over it. The composite is one image per tile
+ * stroke's box, the predicted tail of a stroke and pending paint proposals' ghosts (`showProposals`) over it. The composite is one image per tile
  * (`PaintCanvasPresenter`), drawn as Core Animation layers (`PaintTilesView`) so only the tiles
  * that changed are rebuilt and uploaded; stills (`interactive: false`) draw them through SwiftUI. Input goes through `PaintGesture`: the mouse, trackpad and
  * tablet pens on macOS (scroll pans, pinch zooms, rotate turns the view); touch and Apple Pencil
  * on iOS, with force, altitude, azimuth, roll and coalesced and predicted touches.
  */
+/// The dashed edge of a proposal's ghost (`#a78bfa`, as on the web).
+private let PROPOSAL_EDGE = Color(red: 0xa7 / 255, green: 0x8b / 255, blue: 0xfa / 255)
+
 public struct PaintCanvasView: View {
     private let model: PaintEditorModel
     @State private var presenter: PaintCanvasPresenter
@@ -45,6 +48,7 @@ public struct PaintCanvasView: View {
         let color = model.color
         let tipSize = model.brush.tip.size
         let water = waterImages(model.waterOverlayTiles)
+        let ghosts = model.proposalGhosts
         GeometryReader { geo in
             // On screen only the tiles in view are composited (#515); a still takes the whole canvas.
             let tiles = interactive ? presenter.tiles(visible: visibleDocumentRect(view, canvas, viewport: geo.size.width, geo.size.height, margin: VIEW_MARGIN)) : presenter.tiles()
@@ -70,6 +74,15 @@ public struct PaintCanvasView: View {
                         c.concatenate(t)
                         for (rect, img) in water { c.draw(Image(decorative: img, scale: 1).interpolation(.none), in: rect) }
                     }
+                    // Pending proposals (`showProposals`): each ghost where its paint would go, translucent with a dashed edge.
+                    for g in ghosts {
+                        var c = ctx
+                        c.concatenate(t)
+                        c.opacity = 0.7
+                        c.draw(Image(decorative: g.image, scale: 1).interpolation(smooth ? .medium : .none), in: g.rect)
+                        let pad = 2 / Swift.max(view.zoom, 0.01)
+                        ctx.stroke(Path(g.rect.insetBy(dx: -pad, dy: -pad)).applying(t), with: .color(PROPOSAL_EDGE), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                    }
                     for line in lines {
                         var p = Path()
                         p.move(to: CGPoint(x: line.from.x, y: line.from.y).applying(t))
@@ -86,6 +99,7 @@ public struct PaintCanvasView: View {
                     }
                 }
                 .accessibilityLabel("Painting")
+                .accessibilityValue(ghosts.map(\.accessibilityLabel).joined(separator: ", "))
                 if interactive { PaintInputView(model: model) }
             }
             .onAppear {

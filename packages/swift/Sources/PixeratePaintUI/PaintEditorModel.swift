@@ -116,6 +116,11 @@ public final class PaintEditorModel {
     @ObservationIgnored public var viewport: (width: Double, height: Double) = (800, 600)
     @ObservationIgnored public private(set) var gesture: PaintGesture!
     @ObservationIgnored private var subscriptions: [Cancellable] = []
+    /// The proposal store whose ghosts the canvas draws (`showProposals`), its subscription and its tools.
+    @ObservationIgnored var proposalStore: PaintProposals?
+    @ObservationIgnored var proposalSubscriptions: [Cancellable] = []
+    /// Pending paint proposals as images, for `PaintCanvasView` to draw as ghosts (`showProposals`).
+    public internal(set) var proposalGhosts: [PaintProposalGhost] = []
     @ObservationIgnored private var fitted: String?
     #if canImport(CoreMotion) && os(iOS)
     @ObservationIgnored private var motionManager: CMMotionManager?

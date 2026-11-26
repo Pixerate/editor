@@ -936,7 +936,7 @@ export const PARITY_AREAS: ParityArea[] = [
         "core": "`createPaintProposals`, `previewPaint`, `createPaintProposalToolProvider`",
         "react": "`usePaintProposals`, `<PaintCanvas proposals>`",
         "svelte": "`createPaintProposalState`, `<PaintCanvas proposals>`",
-        "swift": "`PaintProposals` (with `subscribe`), `createPaintProposalToolProvider`"
+        "swift": "`PaintProposals` (with `subscribe`), `createPaintProposalToolProvider`, ghosts on `PaintCanvasView` (`PaintEditorModel.showProposals`, `proposalGhosts`)"
       },
       {
         "feature": "Paint Change Feed: strokes, fills and layers added / removed / changed and each stroke's start and end, with who made it; paint history records origins (`withOrigin`, `onCommit`) and groups steps (`group`)",
