@@ -192,7 +192,7 @@
     "@pixerate/editor": "workspace:*"
   },
   "peerDependencies": {
-    "@dagrejs/dagre": "^1.1.4",
+    "@dagrejs/dagre": "^3.1.4",
     "@tiptap/core": "^3.35.0",
     "@tiptap/extension-bubble-menu": "^3.35.0",
     "@tiptap/pm": "^3.35.0",
@@ -221,7 +221,7 @@
     }
   },
   "devDependencies": {
-    "@dagrejs/dagre": "^1.1.4",
+    "@dagrejs/dagre": "^3.1.4",
     "@sveltejs/package": "^3.0.2",
     "@sveltejs/vite-plugin-svelte": "^5.0.3",
     "@tiptap/core": "^3.35.0",
