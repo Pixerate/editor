@@ -1,5 +1,11 @@
 # @pixerate/swift
 
+## 0.89.0
+
+### Minor Changes
+
+- 0af256f: PixerateMarkdown: conform `FormatCommand` to `Hashable` with a `.checkList` alias and add `FormatCommandEdits.activeFormats(at:in:)` for inspecting active inline formats and list types at any caret or selection.
+
 ## 0.88.0
 
 ### Minor Changes
