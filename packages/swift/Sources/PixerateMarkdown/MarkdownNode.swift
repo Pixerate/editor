@@ -11,7 +11,7 @@ public enum TableAlignment: String, Codable, Equatable, CaseIterable, Sendable {
     case defaultAlignment
 }
 
-public enum AlertType: String, Codable, Equatable, CaseIterable, Sendable {
+public enum AlertType: String, Codable, Hashable, CaseIterable, Sendable {
     case note
     case tip
     case important
