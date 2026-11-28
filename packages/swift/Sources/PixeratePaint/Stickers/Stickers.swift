@@ -548,10 +548,12 @@ public final class EditorStickers: StickerProvider, @unchecked Sendable {
 
     public func stickerSummary(_ k: String) -> StickerSummary {
         let m = META[k]!
-        if thumbs[k] == nil { thumbs[k] = pngDataUrl(48, 48, stampPixels(k, 48, m.colour)) }
+        // Cached as a real PNG only: a deferred encode (`PngDeferral`) is a placeholder for one save.
+        let thumbnail = thumbs[k] ?? pngDataUrl(48, 48, stampPixels(k, 48, m.colour))
+        if thumbs[k] == nil, !PngDeferral.isDeferring { thumbs[k] = thumbnail }
         return StickerSummary(
             id: k, name: m.name, category: m.category, tags: m.tags, description: m.description,
-            width: BOX, height: BOX, thumbnail: thumbs[k]!, formats: ["svg", "png"],
+            width: BOX, height: BOX, thumbnail: thumbnail, formats: ["svg", "png"],
             licence: StickerLicence(spdx: "MIT", name: "MIT", commercial: true), tintable: true
         )
     }
