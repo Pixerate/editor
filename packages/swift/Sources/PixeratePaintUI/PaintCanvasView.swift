@@ -40,7 +40,7 @@ public struct PaintCanvasView: View {
 
     public var body: some View {
         // Reading `revision` redraws the canvas after every change.
-        let _ = model.revision
+        let revision = model.revision
         let view = model.view
         let canvas = model.canvas
         let lines = showGuides ? guideLines() : []
@@ -50,6 +50,9 @@ public struct PaintCanvasView: View {
         let water = waterImages(model.waterOverlayTiles)
         let ghosts = model.proposalGhosts
         GeometryReader { geo in
+            // SwiftUI re-runs this content only when what it captures changes, so it must use `revision` too, or a
+            // change that is not a stroke (a new canvas, a hidden layer, undo) leaves the tiles stale until the next touch.
+            let _ = revision
             // On screen only the tiles in view are composited (#515); a still takes the whole canvas.
             let tiles = interactive ? presenter.tiles(visible: visibleDocumentRect(view, canvas, viewport: geo.size.width, geo.size.height, margin: VIEW_MARGIN)) : presenter.tiles()
             let m = paintViewMatrix(view, canvas, viewport: geo.size.width, geo.size.height)
