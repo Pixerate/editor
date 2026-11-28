@@ -40,9 +40,12 @@ func encodeSurface(_ surface: TiledSurface) -> (url: String, x: Int, y: Int)? {
         let data = readRegion(surface, b)
         out = (pngDataUrl(b.width, b.height, data, surface.channels), b.x, b.y)
     }
-    encodedCache.with { cache in
-        if cache.count > 256 { cache.removeAll() }
-        cache[surface.id] = .some(out)
+    // A deferred encode (`PngDeferral`) is a placeholder for one save, never a PNG to reuse.
+    if !PngDeferral.isDeferring {
+        encodedCache.with { cache in
+            if cache.count > 256 { cache.removeAll() }
+            cache[surface.id] = .some(out)
+        }
     }
     return out
 }

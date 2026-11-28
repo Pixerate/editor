@@ -1,4 +1,5 @@
 import Foundation
+import PixerateCore
 
 /**
  * Dependency-free, synchronous PNG encode / decode for layer pixels and masks, plus base64 and
@@ -335,5 +336,91 @@ public func parseDataUrl(_ url: String) -> (mime: String, bytes: [UInt8])? {
 }
 
 public func pngDataUrl(_ width: Int, _ height: Int, _ data: [UInt8], _ channels: Int = 4) -> String {
-    "data:image/png;base64,\(bytesToBase64(encodePng(width, height, data, channels)))"
+    if let deferral = PngDeferral.current { return deferral.record(width, height, data, channels) }
+    return "data:image/png;base64,\(bytesToBase64(encodePng(width, height, data, channels)))"
+}
+
+/// A PNG encode `pngDataUrl` recorded instead of running (`PngDeferral`): the pixels, copied on write.
+public struct PendingPng: Sendable, Equatable {
+    public var width: Int
+    public var height: Int
+    public var data: [UInt8]
+    public var channels: Int
+
+    /// The data URL `pngDataUrl` would have returned.
+    public func dataUrl() -> String {
+        "data:image/png;base64,\(bytesToBase64(encodePng(width, height, data, channels)))"
+    }
+}
+
+/**
+ * Defers PNG encoding (#swift-save-off-main): while `run` runs, `pngDataUrl` on that task or thread
+ * records the pixels and returns a placeholder instead of deflating them. A save can then take its
+ * snapshot where the document lives (the main thread) and do the slow part anywhere with
+ * `resolve`. The pixels are arrays, so recording them copies nothing until someone writes to them.
+ */
+public final class PngDeferral: @unchecked Sendable {
+    @TaskLocal static var current: PngDeferral?
+
+    private let prefix = "data:image/png;pending-\(UUID().uuidString),"
+    private let pending = Locked([PendingPng]())
+
+    private init() {}
+
+    /// Runs `body` with PNG encodes deferred; returns its result and the encodes it put off.
+    public static func run<T>(_ body: () throws -> T) rethrows -> (result: T, encodes: PendingEncodes) {
+        let deferral = PngDeferral()
+        let result = try $current.withValue(deferral) { try body() }
+        return (result, PendingEncodes(prefix: deferral.prefix, pngs: deferral.pending.with { $0 }))
+    }
+
+    /// Whether encodes are being deferred here (so a placeholder must not be cached as a PNG).
+    public static var isDeferring: Bool { current != nil }
+
+    fileprivate func record(_ width: Int, _ height: Int, _ data: [UInt8], _ channels: Int) -> String {
+        let index = pending.with { list in
+            list.append(PendingPng(width: width, height: height, data: data, channels: channels))
+            return list.count - 1
+        }
+        return "\(prefix)\(index)"
+    }
+}
+
+/// The PNG encodes a `PngDeferral` put off, and the placeholders that stand for them.
+public struct PendingEncodes: Sendable {
+    let prefix: String
+    public let pngs: [PendingPng]
+
+    /// Encodes every PNG, in parallel, as data URLs in recording order.
+    public func dataUrls() -> [String] {
+        let urls = Locked([String](repeating: "", count: pngs.count))
+        DispatchQueue.concurrentPerform(iterations: pngs.count) { i in
+            let url = pngs[i].dataUrl()
+            urls.with { $0[i] = url }
+        }
+        return urls.with { $0 }
+    }
+
+    /// `json` with each placeholder replaced by its PNG data URL (`dataUrls`).
+    public func resolve(_ json: JSONObject) -> JSONObject {
+        if pngs.isEmpty { return json }
+        let urls = dataUrls()
+        return Self.replace(.object(json), prefix, urls).objectValue ?? json
+    }
+
+    private static func replace(_ value: JSONValue, _ prefix: String, _ urls: [String]) -> JSONValue {
+        switch value {
+        case .string(let s):
+            guard s.hasPrefix(prefix), let i = Int(s.dropFirst(prefix.count)), urls.indices.contains(i) else { return value }
+            return .string(urls[i])
+        case .array(let a):
+            return .array(a.map { replace($0, prefix, urls) })
+        case .object(let o):
+            var out = JSONObject()
+            for (k, v) in o { out[k] = replace(v, prefix, urls) }
+            return .object(out)
+        default:
+            return value
+        }
+    }
 }
