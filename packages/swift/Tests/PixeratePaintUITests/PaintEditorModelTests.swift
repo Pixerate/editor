@@ -1,4 +1,8 @@
 import CoreGraphics
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+#endif
+import SwiftUI
 import Foundation
 import PixerateCore
 import PixeratePaint
@@ -267,11 +271,77 @@ final class PaintEditorModelTests: XCTestCase {
         XCTAssertTrue(zip(view.tileLayers, presenter.tiles()).allSatisfy { ($0.contents as AnyObject?) === $1.image })
     }
 
+    /// Each tile image's bytes, to compare what two renders show.
+    private func pixels(_ images: [CGImage?]) -> [Data] {
+        images.map { ($0?.dataProvider?.data as Data?) ?? Data() }
+    }
+
+    func testTilesInViewClearAfterANewCanvasOrAHiddenLayer() throws {
+        let model = try makeModel(width: 600, height: 300)
+        let presenter = PaintCanvasPresenter(controller: model.controller)
+        let visible = try XCTUnwrap(visibleDocumentRect(model.view, model.controller.doc.canvas, viewport: 600, 300, margin: VIEW_MARGIN))
+        let blank = pixels(presenter.tiles(visible: visible).map(\.image))
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: [PenPoint(x: 300, y: 100), PenPoint(x: 400, y: 150)])
+        let stroke = pixels(presenter.tiles(visible: visible).map(\.image))
+        XCTAssertNotEqual(stroke, blank)
+        // Hiding the layer is not a stroke, but its tiles still redraw: the bare sheet.
+        let layer = try XCTUnwrap(model.activeLayer)
+        model.updateLayer(layer.id, ["visible": .bool(false)])
+        XCTAssertEqual(pixels(presenter.tiles(visible: visible).map(\.image)), blank)
+        model.undo()
+        XCTAssertEqual(pixels(presenter.tiles(visible: visible).map(\.image)), stroke, "undo shows it again")
+        // So does a new canvas.
+        _ = try model.controller.newCanvas(width: nil, height: nil, dpi: nil, paper: nil)
+        XCTAssertEqual(pixels(presenter.tiles(visible: visible).map(\.image)), blank)
+    }
+
+    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+    /// The hosted canvas's tile layers redraw after changes that are not strokes, with no view change in between
+    /// (a `GeometryReader` re-runs only when what it captures changes, so it must capture `revision`).
+    func testTheHostedCanvasRedrawsAfterANewCanvasWithoutAViewChange() throws {
+        let model = try makeModel(width: 600, height: 300)
+        let host = NSHostingView(rootView: PaintCanvasView(model: model))
+        host.frame = CGRect(x: 0, y: 0, width: 600, height: 300)
+        func settle() {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            host.layoutSubtreeIfNeeded()
+        }
+        func tilesView(_ v: NSView) -> PaintTilesLayerView? {
+            if let t = v as? PaintTilesLayerView { return t }
+            for s in v.subviews { if let t = tilesView(s) { return t } }
+            return nil
+        }
+        func shown() throws -> [Data] {
+            // swiftlint:disable:next force_cast
+            pixels(try XCTUnwrap(tilesView(host)).tileLayers.map { $0.contents.map { $0 as! CGImage } })
+        }
+        settle()
+        let blank = try shown()
+        XCTAssertFalse(blank.isEmpty)
+        _ = try model.controller.paintStroke(PaintStrokeInit(seed: 3), points: [PenPoint(x: 300, y: 100), PenPoint(x: 400, y: 150)])
+        settle()
+        let stroke = try shown()
+        XCTAssertNotEqual(stroke, blank, "the stroke is drawn")
+        let view = model.view
+        let layer = try XCTUnwrap(model.activeLayer)
+        model.updateLayer(layer.id, ["visible": .bool(false)])
+        settle()
+        XCTAssertEqual(try shown(), blank, "the hidden layer is gone at once, not at the next touch")
+        model.undo()
+        settle()
+        XCTAssertEqual(try shown(), stroke)
+        _ = try model.controller.newCanvas(width: nil, height: nil, dpi: nil, paper: nil)
+        settle()
+        XCTAssertEqual(model.view, view, "the view did not change")
+        XCTAssertEqual(try shown(), blank, "the new canvas is drawn blank at once")
+    }
+    #endif
+
     func testRefusalsShowAsErrorsAndOtherToolsDoNotPaint() throws {
         let model = try makeModel()
         let c = model.controller
         let id = try XCTUnwrap(c.doc.activeLayerId)
-        model.updateLayer(id, ["visible": false])
+        model.updateLayer(id, ["visible": .bool(false)])
         XCTAssertFalse(model.pointerDown(mouse(10, 10)))
         XCTAssertEqual(model.error, "Layer \"Layer 1\" is hidden; show it (update_layer visible true) to paint on it.")
         model.updateLayer(id, ["visible": true])
